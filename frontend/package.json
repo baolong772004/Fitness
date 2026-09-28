@@ -9,15 +9,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "lucide-react": "^1.48.0",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
-    "typescript": "latest",
-    "vite": "latest",
-    "@vitejs/plugin-react": "latest",
     "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "latest",
+    "vite": "latest"
   }
 }

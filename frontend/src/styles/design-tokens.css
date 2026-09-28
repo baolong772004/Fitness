@@ -1,0 +1,86 @@
+/* ==========================================================================
+   AURA FITNESS DESIGN SYSTEM TOKENS
+   Strictly matched with DESIGN.md (Freeletics Athletic Tokens)
+   ========================================================================== */
+
+:root {
+  /* Color Palette */
+  --color-primary: #FE7413;
+  --color-primary-hover: #E06008;
+  --color-primary-light: rgba(254, 116, 19, 0.12);
+  --color-primary-glow: rgba(254, 116, 19, 0.35);
+
+  --color-secondary: #37474F;
+  --color-secondary-hover: #263238;
+  --color-secondary-light: rgba(55, 71, 79, 0.1);
+
+  --color-tertiary: #0000EE;
+  --color-tertiary-hover: #0000B8;
+
+  --color-surface: #CFD8DC;
+  --color-surface-subtle: #ECEFF1;
+  --color-on-surface: #161E21;
+
+  /* Athletic Dark Theme Grounds */
+  --bg-app: #0D1619;
+  --bg-panel: #142024;
+  --bg-card: #1B292E;
+  --bg-card-hover: #22343B;
+  --bg-input: #101B1E;
+
+  /* Typography Colors */
+  --text-white: #FFFFFF;
+  --text-primary: #F7FAF9;
+  --text-muted: #90A4AE;
+  --text-dim: #607D8B;
+
+  /* Semantic Feedback */
+  --color-success: #00C853;
+  --color-success-bg: rgba(0, 200, 83, 0.14);
+  --color-danger: #FF3D00;
+  --color-danger-bg: rgba(255, 61, 0, 0.14);
+  --color-warning: #FFAB00;
+  --color-warning-bg: rgba(255, 171, 0, 0.14);
+  --color-info: #00B0FF;
+  --color-info-bg: rgba(0, 176, 255, 0.14);
+
+  /* Spacing Scale (8px base) */
+  --space-xs: 2.5px;
+  --space-sm: 8px;
+  --space-md: 10px;
+  --space-lg: 12px;
+  --space-xl: 16px;
+  --space-xxl: 16.8px;
+  --space-xxxl: 24px;
+  --space-xxxxl: 32px;
+  --space-5xl: 48px;
+  --space-6xl: 64px;
+
+  /* Corner Radius (Shapes) */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 27.5px;
+  --radius-lg: 36.7px;
+  --radius-xl: 43.3px;
+  --radius-full: 9999px; /* Athletic Pill Button */
+
+  /* Typography Stacks */
+  --font-display: 'Outfit', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Athletic Shadows */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(254, 116, 19, 0.35);
+
+  /* Borders */
+  --border-subtle: 1px solid rgba(207, 216, 220, 0.12);
+  --border-card: 1px solid rgba(207, 216, 220, 0.18);
+  --border-highlight: 1px solid rgba(254, 116, 19, 0.5);
+
+  /* Layout */
+  --header-height: 72px;
+  --max-content-width: 1440px;
+}
