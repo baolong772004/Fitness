@@ -1,0 +1,13 @@
+{
+  "name": "fitness-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["frontend", "backend", "ai-module"],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:ai": "npm run dev --workspace=ai-module",
+    "build": "npm run build --workspace=frontend"
+  }
+}
+

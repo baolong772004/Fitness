@@ -1,0 +1,15 @@
+:root { font-family: Inter, system-ui, sans-serif; color: #f7faf9; background: #10251e; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+main { max-width: 760px; margin: 0 auto; padding: 10rem 1.5rem; }
+.hero { padding: 3rem; border-radius: 28px; background: linear-gradient(135deg, #1b513d, #10251e); }
+.eyebrow, .card span { color: #9be27b; font-size: .8rem; font-weight: 800; letter-spacing: .12em; }
+h1 { font-size: clamp(3rem, 10vw, 5.5rem); margin: .2rem 0 1rem; letter-spacing: -.06em; }
+p { color: #c9d7d0; font-size: 1.1rem; }
+.controls { display: flex; gap: .8rem; margin-top: 2rem; }
+select, button { border: 0; border-radius: 10px; padding: .9rem 1rem; font: inherit; }
+select { flex: 1; } button { color: #10251e; background: #9be27b; font-weight: 800; cursor: pointer; }
+.card { margin-top: 1rem; padding: 2rem 3rem; border-radius: 20px; background: #fff; color: #10251e; }
+.card h2 { margin: .4rem 0 1rem; } .card ul { padding-left: 1.2rem; line-height: 1.8; }
+@media (max-width: 480px) { main { padding-top: 3rem; } .hero, .card { padding: 2rem; } .controls { flex-direction: column; } }
+
