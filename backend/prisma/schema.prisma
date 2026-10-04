@@ -1,0 +1,347 @@
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// 1. NGƯỜI DÙNG & PHÂN QUYỀN (USER & ROLES)
+// ==========================================
+
+model User {
+  id          Int        @id @default(autoincrement())
+  email       String     @unique
+  password    String
+  fullName    String
+  phone       String?
+  avatar      String?
+  gender      String?
+  dateOfBirth DateTime?
+  height      Float?     
+  weight      Float?
+  role        String     @default("MEMBER")
+  status      String     @default("PENDING")
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  memberships       Membership[]
+  checkIns          CheckIn[]          @relation("MemberCheckIns")
+  memberBookings    Booking[]          @relation("MemberBookings")
+  workoutPlans      WorkoutPlan[]      @relation("MemberWorkoutPlans")
+  progressLogs      ProgressLog[]
+  payments          Payment[]
+  givenReviews      Review[]           @relation("MemberReviews")
+  supportRequests   SupportRequest[]   @relation("MemberSupport")
+
+  coachProfile      CoachProfile?
+  coachBookings     Booking[]          @relation("CoachBookings")
+  groupClasses      GroupClass[]       @relation("CoachClasses")
+  createdPlans      WorkoutPlan[]      @relation("CoachCreatedPlans")
+
+  actionLogs        ActionLog[]
+  processedSupports SupportRequest[]   @relation("StaffSupport")
+  handledCheckIns   CheckIn[]          @relation("StaffCheckIns")
+}
+
+model CoachProfile {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  bio            String?  @db.NVarChar(Max)
+  specialization String?  
+  experience     Int?     
+  certifications String?
+  rating         Float    @default(5.0)
+
+  pricing        CoachPricing[]
+  schedules      CoachSchedule[]
+  reviews        Review[]
+}
+
+model CoachPricing {
+  id             Int          @id @default(autoincrement())
+  coachProfileId Int
+  coachProfile   CoachProfile @relation(fields: [coachProfileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sessionCount   Int          
+  price          Decimal      @db.Decimal(18, 2)
+  createdAt      DateTime     @default(now())
+}
+
+model CoachSchedule {
+  id             Int          @id @default(autoincrement())
+  coachProfileId Int
+  coachProfile   CoachProfile @relation(fields: [coachProfileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  dayOfWeek      Int          
+  startTime      String       
+  endTime        String       
+  isAvailable    Boolean      @default(true)
+}
+
+// ==========================================
+// 2. GÓI TẬP & THÀNH VIÊN (PACKAGES & MEMBERSHIPS)
+// ==========================================
+
+model Package {
+  id              Int          @id @default(autoincrement())
+  name            String
+  type            String       @default("MEMBERSHIP") // "MEMBERSHIP" hoặc "PT"
+  description     String?      @db.NVarChar(Max)
+  price           Decimal      @db.Decimal(18, 2)
+  durationDays    Int          // Số ngày sử dụng (ví dụ 30 ngày)
+  trialPtSessions Int          @default(0) // Số buổi tập PT tặng kèm (Dành cho gói MEMBERSHIP)
+  totalPtSessions Int?         // Tổng số buổi PT mua riêng (Dành cho gói PT)
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  memberships  Membership[]
+}
+
+model Membership {
+  id                Int        @id @default(autoincrement())
+  userId            Int
+  user              User       @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  packageId         Int
+  package           Package    @relation(fields: [packageId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  startDate         DateTime
+  endDate           DateTime
+  remainingSessions Int?       
+  status            String     @default("ACTIVE")
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  payments          Payment[]
+  bookings          Booking[]
+  checkIns          CheckIn[]
+}
+
+// ==========================================
+// 3. PHÒNG TẬP & THIẾT BỊ (ROOMS & EQUIPMENT)
+// ==========================================
+
+model Room {
+  id          Int          @id @default(autoincrement())
+  name        String       
+  type        String       
+  capacity    Int
+  isActive    Boolean      @default(true)
+
+  equipments  Equipment[]
+  classes     GroupClass[]
+  checkIns    CheckIn[]
+}
+
+model Equipment {
+  id        Int             @id @default(autoincrement())
+  name      String
+  code      String          @unique
+  roomId    Int
+  room      Room            @relation(fields: [roomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status    String          @default("AVAILABLE")
+  note      String?
+}
+
+// ==========================================
+// 4. LỚP HỌC NHÓM (GROUP CLASSES)
+// ==========================================
+
+model GroupClass {
+  id           Int         @id @default(autoincrement())
+  name         String
+  coachId      Int
+  coach        User        @relation("CoachClasses", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  roomId       Int
+  room         Room        @relation(fields: [roomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  startTime    DateTime
+  endTime      DateTime
+  maxCapacity  Int
+  currentSlots Int         @default(0)
+  status       String      @default("SCHEDULED")
+  createdAt    DateTime    @default(now())
+
+  bookings     Booking[]
+}
+
+// ==========================================
+// 5. ĐẶT LỊCH, HỌC BÙ & BUỔI TẬP (BOOKING & MAKE-UP)
+// ==========================================
+
+model Booking {
+  id            Int           @id @default(autoincrement())
+  type          String
+  memberId      Int
+  member        User          @relation("MemberBookings", fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  coachId       Int?
+  coach         User?         @relation("CoachBookings", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  membershipId  Int?
+  membership    Membership?   @relation(fields: [membershipId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  groupClassId  Int?
+  groupClass    GroupClass?   @relation(fields: [groupClassId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  startTime     DateTime
+  endTime       DateTime
+  status        String        @default("UPCOMING")
+  
+  reportedAbsence Boolean     @default(false)
+  absenceReason   String?
+  absenceReportedAt DateTime?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  makeUpRequests     MakeUpRequest[] @relation("OriginalBooking")
+  createdFromMakeUp  MakeUpRequest[] @relation("NewBooking")
+  sessionResult      SessionResult?
+  review             Review?
+}
+
+model MakeUpRequest {
+  id                Int          @id @default(autoincrement())
+  originalBookingId Int
+  originalBooking   Booking      @relation("OriginalBooking", fields: [originalBookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  newBookingId      Int?
+  newBooking        Booking?     @relation("NewBooking", fields: [newBookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  
+  status            String       @default("PENDING")
+  expiresAt         DateTime     
+  rejectReason      String?
+  createdAt         DateTime     @default(now())
+}
+
+model SessionResult {
+  id          Int      @id @default(autoincrement())
+  bookingId   Int      @unique
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  notes       String?  @db.NVarChar(Max)
+  calories    Int?
+  durationMin Int?
+  createdAt   DateTime @default(now())
+
+  exercises   SessionExercise[]
+}
+
+model SessionExercise {
+  id              Int           @id @default(autoincrement())
+  sessionResultId Int
+  sessionResult   SessionResult @relation(fields: [sessionResultId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  exerciseName    String
+  sets            Int
+  reps            Int
+  weightKg        Float?
+}
+
+// ==========================================
+// 6. CHECK-IN VÀO PHÒNG TẬP (Luồng 3 & 20)
+// ==========================================
+
+model CheckIn {
+  id             Int           @id @default(autoincrement())
+  memberId       Int
+  member         User          @relation("MemberCheckIns", fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  membershipId   Int?
+  membership     Membership?   @relation(fields: [membershipId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  roomId         Int?
+  room           Room?         @relation(fields: [roomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staffId        Int?          
+  staff          User?         @relation("StaffCheckIns", fields: [staffId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  
+  checkInTime    DateTime      @default(now())
+  method         String        @default("QR_CODE") // QR_CODE / MANUAL
+  status         String        @default("SUCCESS")
+  rejectReason   String?
+}
+
+// ==========================================
+// 7. THANH TOÁN & GIAO DỊCH (PAYMENTS)
+// ==========================================
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  userId        Int
+  user          User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  membershipId  Int?
+  membership    Membership?   @relation(fields: [membershipId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  amount        Decimal       @db.Decimal(18, 2)
+  method        String
+  status        String        @default("PENDING")
+  orderCode     BigInt?       @unique
+  transactionNo String?       @unique
+  createdAt     DateTime      @default(now())
+}
+
+// ==========================================
+// 8. GIÁO ÁN & TIẾN ĐỘ TẬP LUYỆN (WORKOUT & PROGRESS)
+// ==========================================
+
+model WorkoutPlan {
+  id          Int      @id @default(autoincrement())
+  memberId    Int
+  member      User     @relation("MemberWorkoutPlans", fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  coachId     Int
+  coach       User     @relation("CoachCreatedPlans", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+}
+
+model ProgressLog {
+  id          Int      @id @default(autoincrement())
+  memberId    Int
+  member      User     @relation(fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  weight      Float
+  bodyFat     Float?
+  muscleMass  Float?
+  loggedAt    DateTime @default(now())
+}
+
+// ==========================================
+// 9. ĐÁNH GIÁ, THÔNG BÁO & HỖ TRỢ (REVIEWS, NOTIFS, SUPPORT)
+// ==========================================
+
+model Review {
+  id             Int          @id @default(autoincrement())
+  bookingId      Int          @unique
+  booking        Booking      @relation(fields: [bookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  memberId       Int
+  member         User         @relation("MemberReviews", fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  coachProfileId Int
+  coachProfile   CoachProfile @relation(fields: [coachProfileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rating         Int          
+  comment        String?
+  createdAt      DateTime     @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     
+  title     String
+  message   String   @db.NVarChar(Max)
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model SupportRequest {
+  id          Int      @id @default(autoincrement())
+  memberId    Int
+  member      User     @relation("MemberSupport", fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staffId     Int?
+  staff       User?    @relation("StaffSupport", fields: [staffId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject     String
+  message     String   @db.NVarChar(Max)
+  reply       String?  @db.NVarChar(Max)
+  status      String   @default("OPEN") 
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ActionLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  action    String
+  details   String?  @db.NVarChar(Max)
+  createdAt DateTime @default(now())
+}
