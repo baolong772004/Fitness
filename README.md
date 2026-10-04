@@ -5,6 +5,7 @@ Starter monorepo for a fitness application.
 ## Components
 
 - `frontend`: React + TypeScript + Vite dashboard.
+- `mobile`: independent Flutter/Dart member app for Android and iOS (see `mobile/README.md`).
 - `backend`: Node.js + Express REST API.
 - `ai-module`: Node.js + Express service that suggests workouts.
 
@@ -29,4 +30,3 @@ The frontend is served at `http://localhost:5173`, backend at `http://localhost:
 - `GET /api/health` — backend health check
 - `GET /api/workouts` — sample workout list
 - `POST /api/suggestions` — AI module. JSON body: `{ "goal": "strength", "level": "beginner" }`
-
