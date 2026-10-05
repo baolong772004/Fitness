@@ -201,4 +201,59 @@ router.post('/booking/start-session', authenticateToken, PtController.startSessi
  */
 router.post('/booking/:id/complete-session', authenticateToken, PtController.completeSession);
 
+/**
+ * @swagger
+ * /pt/booking/{id}/mark-absent:
+ *   post:
+ *     summary: Báo vắng/hủy lịch học (Hội viên/PT)
+ *     tags: [PersonalTrainer]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Báo vắng thành công
+ */
+router.post('/booking/:id/mark-absent', authenticateToken, PtController.markAbsent);
+
+/**
+ * @swagger
+ * /pt/booking/schedule-makeup:
+ *   post:
+ *     summary: Đặt lại lịch học bù cho buổi đã vắng có phép
+ *     tags: [PersonalTrainer]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               originalBookingId:
+ *                 type: integer
+ *               newBookingDate:
+ *                 type: string
+ *                 description: YYYY-MM-DDTHH:mm:ss.000Z
+ *     responses:
+ *       201:
+ *         description: Đặt lịch bù thành công
+ */
+router.post('/booking/schedule-makeup', authenticateToken, PtController.scheduleMakeup);
+
 export default router;

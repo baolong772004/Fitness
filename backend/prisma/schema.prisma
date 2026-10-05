@@ -38,7 +38,8 @@ model User {
 
   coachProfile      CoachProfile?
   coachBookings     Booking[]          @relation("CoachBookings")
-  groupClasses      GroupClass[]       @relation("CoachClasses")
+  groupClasses      GroupClassSchedule[] @relation("CoachClasses")
+  groupClassBookings GroupClassBooking[]
   createdPlans      WorkoutPlan[]      @relation("CoachCreatedPlans")
   trainerMemberships Membership[]      @relation("TrainerMemberships")
 
@@ -56,6 +57,9 @@ model CoachProfile {
   experience     Int?     
   certifications String?
   rating         Float    @default(5.0)
+  hourlyRate     Decimal  @default(0) @db.Decimal(18, 2)
+  status         String   @default("ACTIVE") // ACTIVE | BLOCKED | INACTIVE
+  createdAt      DateTime @default(now())
 
   pricing        CoachPricing[]
   schedules      CoachSchedule[]
@@ -110,6 +114,8 @@ model Membership {
   startDate         DateTime
   endDate           DateTime
   remainingSessions Int?       
+  maxMakeupAllowed  Int        @default(3)
+  usedMakeupCount   Int        @default(0)
   status            String     @default("ACTIVE")
   coachId           Int?
   coach             User?      @relation("TrainerMemberships", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -133,8 +139,8 @@ model Room {
   isActive    Boolean      @default(true)
 
   equipments  Equipment[]
-  classes     GroupClass[]
   checkIns    CheckIn[]
+  schedules   GroupClassSchedule[]
 }
 
 model Equipment {
@@ -152,20 +158,48 @@ model Equipment {
 // ==========================================
 
 model GroupClass {
-  id           Int         @id @default(autoincrement())
-  name         String
-  coachId      Int
-  coach        User        @relation("CoachClasses", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  roomId       Int
-  room         Room        @relation(fields: [roomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  startTime    DateTime
-  endTime      DateTime
-  maxCapacity  Int
-  currentSlots Int         @default(0)
-  status       String      @default("SCHEDULED")
-  createdAt    DateTime    @default(now())
+  id          Int                 @id @default(autoincrement())
+  name        String              @db.NVarChar(100)
+  description String?             @db.NVarChar(500)
+  imageUrl    String?             @db.VarChar(255)
+  durationMin Int                 @default(60) // Thời lượng buổi học (phút)
+  schedules   GroupClassSchedule[]
+  createdAt   DateTime            @default(now())
+}
 
-  bookings     Booking[]
+model GroupClassSchedule {
+  id          Int                     @id @default(autoincrement())
+  classId     Int
+  trainerId   Int                     // HLV đứng lớp
+  roomId      Int?                    // Trỏ về Room trong DB
+  startTime   DateTime
+  endTime     DateTime
+  capacity    Int                     @default(20) // Sức chứa tối đa (VD: 20 người)
+  bookedCount Int                     @default(0)  // Số lượng đã đăng ký hiện tại
+  status      String                  @default("OPEN") // OPEN | FULL | CANCELLED | COMPLETED
+  
+  // Relations
+  groupClass  GroupClass              @relation(fields: [classId], references: [id])
+  trainer     User                    @relation("CoachClasses", fields: [trainerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  room        Room?                   @relation(fields: [roomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bookings    GroupClassBooking[]
+
+  @@index([startTime])
+  @@index([classId])
+}
+
+model GroupClassBooking {
+  id          Int                @id @default(autoincrement())
+  scheduleId  Int
+  userId      Int
+  status      String             @default("BOOKED") // BOOKED | CHECKED_IN | CANCELLED
+  createdAt   DateTime           @default(now())
+
+  // Relations
+  schedule    GroupClassSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  user        User               @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([scheduleId, userId]) // Một Member chỉ đăng ký 1 lần cho 1 lịch học
 }
 
 // ==========================================
@@ -181,8 +215,6 @@ model Booking {
   coach         User?         @relation("CoachBookings", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   membershipId  Int?
   membership    Membership?   @relation(fields: [membershipId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  groupClassId  Int?
-  groupClass    GroupClass?   @relation(fields: [groupClassId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   startTime     DateTime
   endTime       DateTime
@@ -192,6 +224,9 @@ model Booking {
   reportedAbsence Boolean     @default(false)
   absenceReason   String?
   absenceReportedAt DateTime?
+  cancelledBy     String?
+  isMakeup        Boolean       @default(false)
+  makeupFromId    Int?
 
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt

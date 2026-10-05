@@ -128,4 +128,36 @@ router.put('/:id', authenticateToken, UserController.updateUser);
  */
 router.patch('/:id/role', authenticateToken, authorizeRoles('ADMIN'), UserController.updateUserRole);
 
+/**
+ * @swagger
+ * /users/{id}/status:
+ *   patch:
+ *     summary: Khóa/Mở khóa hoặc Vô hiệu hóa tài khoản (Chỉ ADMIN)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [ACTIVE, INACTIVE, BANNED]
+ *     responses:
+ *       200:
+ *         description: Cập nhật thành công
+ *       403:
+ *         description: Không có quyền hoặc tự khóa chính mình
+ */
+router.patch('/:id/status', authenticateToken, authorizeRoles('ADMIN'), UserController.updateUserStatus);
+
 export default router;

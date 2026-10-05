@@ -181,4 +181,44 @@ export class UserController {
       next(error);
     }
   }
+  static async updateUserStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
+
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).json({ success: false, message: 'Status is required' });
+      }
+
+      const validStatuses = ['ACTIVE', 'INACTIVE', 'BANNED'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ success: false, message: 'Invalid status' });
+      }
+
+      const userExists = await prisma.user.findUnique({ where: { id } });
+      if (!userExists) return res.status(404).json({ success: false, message: 'User not found' });
+
+      // Không cho phép Admin tự khóa chính mình
+      if (req.user?.userId === id && status !== 'ACTIVE') {
+         return res.status(403).json({ success: false, message: 'Bạn không thể tự khóa tài khoản của chính mình' });
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: { status },
+        select: {
+          id: true,
+          email: true,
+          fullName: true,
+          status: true,
+          updatedAt: true
+        }
+      });
+
+      res.status(200).json({ success: true, message: `User status updated to ${status}`, data: updatedUser });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

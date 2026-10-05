@@ -504,4 +504,250 @@ export class PtController {
       return res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
     }
   }
+
+  /**
+   * 9. BÁO VẮNG / HỦY LỊCH (MEMBER XIN NGHỈ)
+   * @route POST /api/pt/booking/:id/mark-absent
+   */
+  static async markAbsent(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user?.userId;
+      const role = req.user?.role;
+      const bookingId = Number(req.params.id);
+      const { reason } = req.body;
+
+      if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+      const booking = await prisma.booking.findUnique({
+        where: { id: bookingId },
+        include: { membership: true }
+      });
+
+      if (!booking) {
+        return res.status(404).json({ success: false, message: 'Lịch tập không tồn tại' });
+      }
+
+      // Check quyền
+      if (role === 'MEMBER' && booking.memberId !== userId) {
+        return res.status(403).json({ success: false, message: 'Không có quyền thao tác trên lịch hẹn này' });
+      }
+      if (role === 'COACH' && booking.coachId !== userId) {
+        return res.status(403).json({ success: false, message: 'Không có quyền thao tác trên lịch hẹn này' });
+      }
+
+      if (booking.status !== 'UPCOMING' && booking.status !== 'CONFIRMED') {
+        return res.status(400).json({ success: false, message: 'Chỉ có thể báo vắng lịch hẹn sắp diễn ra' });
+      }
+
+      if (booking.isMakeup) {
+         // Không cho vắng có phép nếu đang là buổi học bù -> Mất buổi
+         const updated = await prisma.$transaction(async (tx) => {
+           const b = await tx.booking.update({
+             where: { id: bookingId },
+             data: { 
+               status: 'ABSENT_NO_REFUND', 
+               absenceReason: reason || 'Vắng buổi học bù',
+               absenceReportedAt: new Date(),
+               cancelledBy: role
+             }
+           });
+           
+           if (booking.membershipId && booking.membership && booking.membership.remainingSessions !== null) {
+              const newRemaining = booking.membership.remainingSessions - 1;
+              await tx.membership.update({
+                where: { id: booking.membershipId },
+                data: {
+                  remainingSessions: newRemaining,
+                  status: newRemaining <= 0 ? 'COMPLETED' : 'ACTIVE',
+                }
+              });
+           }
+           return b;
+         });
+         return res.status(200).json({ success: true, message: 'Vắng buổi học bù. Đã trừ buổi tập.', data: updated });
+      }
+
+      const now = new Date();
+      const bookingTime = new Date(booking.startTime);
+      const diffMs = bookingTime.getTime() - now.getTime();
+      const diffHours = diffMs / (1000 * 60 * 60);
+
+      // Điều kiện > 2h và còn lượt bù, chưa hết hạn
+      const membership = booking.membership;
+      if (!membership || membership.status !== 'ACTIVE' || membership.endDate < now) {
+         // Hết hạn hoặc k có gói -> ABSENT_NO_REFUND
+         const updated = await prisma.$transaction(async (tx) => {
+           const b = await tx.booking.update({
+             where: { id: bookingId },
+             data: { status: 'ABSENT_NO_REFUND', absenceReason: reason, absenceReportedAt: now, cancelledBy: role }
+           });
+           if (membership && membership.remainingSessions !== null) {
+              const newRemaining = membership.remainingSessions - 1;
+              await tx.membership.update({
+                where: { id: membership.id },
+                data: { remainingSessions: newRemaining, status: newRemaining <= 0 ? 'COMPLETED' : 'ACTIVE' }
+              });
+           }
+           return b;
+         });
+         return res.status(200).json({ success: true, message: 'Gói tập không hợp lệ (hết hạn). Đã trừ buổi.', data: updated });
+      }
+
+      // Check thời gian và lượt bù
+      const isEligible = (diffHours >= 2) && (membership.usedMakeupCount < membership.maxMakeupAllowed);
+
+      if (isEligible) {
+        // Cho phép bù
+        const updated = await prisma.$transaction(async (tx) => {
+          const b = await tx.booking.update({
+            where: { id: bookingId },
+            data: { status: 'ABSENT_ELIGIBLE', absenceReason: reason, absenceReportedAt: now, cancelledBy: role }
+          });
+          
+          await tx.membership.update({
+             where: { id: membership.id },
+             data: { usedMakeupCount: membership.usedMakeupCount + 1 }
+          });
+          
+          // Cấp MakeUpRequest
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 7);
+          
+          await tx.makeUpRequest.create({
+            data: {
+              originalBookingId: bookingId,
+              status: 'PENDING',
+              expiresAt
+            }
+          });
+          
+          return b;
+        });
+        return res.status(200).json({ success: true, message: 'Xác nhận vắng hợp lệ. Đã cấp lượt đặt lịch học bù (hạn 7 ngày).', data: updated });
+      } else {
+        // Không hợp lệ (Trễ hoặc hết lượt bù)
+        const message = diffHours < 2 ? 'Báo vắng quá trễ (<2 tiếng)' : 'Đã hết lượt học bù tối đa của gói';
+        
+        const updated = await prisma.$transaction(async (tx) => {
+           const b = await tx.booking.update({
+             where: { id: bookingId },
+             data: { status: 'ABSENT_NO_REFUND', absenceReason: reason || message, absenceReportedAt: now, cancelledBy: role }
+           });
+           
+           if (membership && membership.remainingSessions !== null) {
+              const newRemaining = membership.remainingSessions - 1;
+              await tx.membership.update({
+                where: { id: membership.id },
+                data: {
+                  remainingSessions: newRemaining,
+                  status: newRemaining <= 0 ? 'COMPLETED' : 'ACTIVE',
+                }
+              });
+           }
+           return b;
+        });
+        return res.status(200).json({ success: true, message: `${message}. Đã trừ 1 buổi tập.`, data: updated });
+      }
+    } catch (error: any) {
+      console.error('Lỗi mark absent PT:', error);
+      return res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+    }
+  }
+
+  /**
+   * 10. ĐẶT LỊCH HỌC BÙ
+   * @route POST /api/pt/booking/schedule-makeup
+   */
+  static async scheduleMakeup(req: AuthRequest, res: Response) {
+     try {
+       const userId = req.user?.userId;
+       const { originalBookingId, newBookingDate } = req.body;
+       
+       if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+       if (!originalBookingId || !newBookingDate) {
+          return res.status(400).json({ success: false, message: 'Vui lòng cung cấp originalBookingId và newBookingDate' });
+       }
+       
+       const targetDate = new Date(newBookingDate);
+       if (targetDate <= new Date()) {
+         return res.status(400).json({ success: false, message: 'Không thể đặt lịch học bù trong quá khứ' });
+       }
+
+       // 1. Kiểm tra quyền và MakeUpRequest
+       const makeUpReq = await prisma.makeUpRequest.findFirst({
+         where: { originalBookingId: Number(originalBookingId), status: 'PENDING' },
+         include: { originalBooking: true }
+       });
+       
+       if (!makeUpReq || makeUpReq.originalBooking.memberId !== userId) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy lượt học bù khả dụng cho buổi học này' });
+       }
+       
+       if (new Date() > makeUpReq.expiresAt) {
+         return res.status(400).json({ success: false, message: 'Lượt học bù đã hết hạn (quá 7 ngày kể từ lúc vắng)' });
+       }
+       
+       // 2. Kiểm tra trùng lịch PT
+       const coachId = makeUpReq.originalBooking.coachId;
+       if (!coachId) return res.status(400).json({ success: false, message: 'Không xác định được HLV của buổi học này' });
+       
+       const startTimeWindow = new Date(targetDate.getTime() - 50 * 60 * 1000);
+       const endTimeWindow = new Date(targetDate.getTime() + 50 * 60 * 1000);
+
+       const existingBooking = await prisma.booking.findFirst({
+         where: {
+           coachId: coachId,
+           status: { in: ['UPCOMING', 'CONFIRMED'] },
+           startTime: {
+             gte: startTimeWindow,
+             lte: endTimeWindow,
+           },
+         },
+       });
+
+       if (existingBooking) {
+         return res.status(409).json({ success: false, message: 'Huấn luyện viên đã có lịch vào khung giờ này, vui lòng chọn giờ khác!' });
+       }
+       
+       // 3. Tiến hành tạo Booking mới & update trạng thái
+       const result = await prisma.$transaction(async (tx) => {
+         const endDate = new Date(targetDate.getTime() + 60 * 60 * 1000);
+         
+         const newBooking = await tx.booking.create({
+           data: {
+             type: 'PT',
+             memberId: userId,
+             coachId: coachId,
+             membershipId: makeUpReq.originalBooking.membershipId,
+             startTime: targetDate,
+             endTime: endDate,
+             status: 'UPCOMING',
+             isMakeup: true,
+             makeupFromId: Number(originalBookingId)
+           }
+         });
+         
+         await tx.makeUpRequest.update({
+           where: { id: makeUpReq.id },
+           data: {
+             status: 'APPROVED',
+             newBookingId: newBooking.id
+           }
+         });
+         
+         await tx.booking.update({
+           where: { id: Number(originalBookingId) },
+           data: { status: 'MAKEUP_BOOKED' }
+         });
+         
+         return newBooking;
+       });
+       
+       return res.status(201).json({ success: true, message: 'Đặt lịch học bù thành công!', data: result });
+       
+     } catch (error: any) {
+       console.error('Lỗi schedule makeup:', error);
+       return res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+     }
+  }
 }
