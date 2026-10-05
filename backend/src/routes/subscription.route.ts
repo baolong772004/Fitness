@@ -112,4 +112,32 @@ router.get('/', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), Subscriptio
  */
 router.patch('/:id/status', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), SubscriptionController.updateSubscriptionStatus);
 
+/**
+ * @swagger
+ * /subscriptions/renew:
+ *   post:
+ *     summary: Gia hạn gói tập hiện tại (Member)
+ *     tags: [Subscriptions]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               subscriptionId:
+ *                 type: integer
+ *               packageId:
+ *                 type: integer
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [VNPAY, MOMO, CREDIT_CARD]
+ *     responses:
+ *       200:
+ *         description: Gia hạn thành công
+ */
+router.post('/renew', authenticateToken, SubscriptionController.renewSubscription);
+
 export default router;

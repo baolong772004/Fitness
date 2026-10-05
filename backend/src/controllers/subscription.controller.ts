@@ -181,4 +181,86 @@ export class SubscriptionController {
       next(error);
     }
   }
+
+  static async renewSubscription(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      const { subscriptionId, packageId, paymentMethod } = req.body; 
+
+      if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+      if (!subscriptionId || !packageId) {
+        return res.status(400).json({ success: false, message: 'Thiếu thông tin gia hạn' });
+      }
+
+      // 1. Kiểm tra gói tập hiện tại của Member
+      const currentSub = await prisma.membership.findFirst({
+        where: { id: Number(subscriptionId), userId: Number(userId) },
+      });
+
+      if (!currentSub) {
+        return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin gói tập' });
+      }
+
+      // 2. Lấy thông tin gói cước gia hạn (để biết số ngày và giá)
+      const gymPackage = await prisma.package.findUnique({
+        where: { id: Number(packageId) },
+      });
+
+      if (!gymPackage) {
+        return res.status(404).json({ success: false, message: 'Gói cước không hợp lệ' });
+      }
+
+      // 3. Tính toán ngày hết hạn mới (endDate)
+      const now = new Date();
+      let baseDate = new Date(currentSub.endDate);
+
+      // Nếu gói cũ đã hết hạn thì tính từ thời điểm hiện tại
+      if (baseDate < now) {
+        baseDate = now;
+      }
+
+      // Cộng thêm số ngày gia hạn (Sử dụng durationDays theo Schema hiện tại)
+      const newEndDate = new Date(baseDate);
+      newEndDate.setDate(newEndDate.getDate() + gymPackage.durationDays);
+
+      // 4. Thực hiện Transaction: Cập nhật hạn gói + Tạo bản ghi Thanh toán
+      const result = await prisma.$transaction(async (tx) => {
+        const updatedSub = await tx.membership.update({
+          where: { id: currentSub.id },
+          data: {
+            endDate: newEndDate,
+            status: 'ACTIVE',
+          },
+        });
+
+        // Schema hiện tại của Payment: method, transactionNo, membershipId
+        const payment = await tx.payment.create({
+          data: {
+            userId: Number(userId),
+            membershipId: currentSub.id,
+            amount: gymPackage.price,
+            method: paymentMethod || 'VNPAY',
+            status: 'SUCCESS',
+            transactionNo: `RENEW_${Date.now()}`,
+          },
+        });
+
+        return { updatedSub, payment };
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Gia hạn gói tập thành công!',
+        data: {
+          subscriptionId: result.updatedSub.id,
+          oldEndDate: currentSub.endDate,
+          newEndDate: result.updatedSub.endDate,
+          amountPaid: gymPackage.price,
+        },
+      });
+    } catch (error: any) {
+      console.error('Lỗi renewSubscription:', error);
+      next(error);
+    }
+  }
 }
