@@ -105,12 +105,79 @@ export class PaymentController {
       return res.status(200).json({
         message: 'Tạo đơn thanh toán thành công',
         subscriptionId: result.subscription.id,
+        orderCode: orderCodeNum,
         checkoutUrl: payOsResponse.checkoutUrl,
         qrCode: payOsResponse.qrCode,
       });
     } catch (error: any) {
       console.error('Checkout error:', error);
       return res.status(500).json({ message: 'Lỗi khởi tạo thanh toán', error: error.message });
+    }
+  }
+
+  static async checkPaymentStatus(req: Request, res: Response) {
+    try {
+      const orderCode = req.params.orderCode;
+      if (typeof orderCode !== 'string' || !/^\d+$/.test(orderCode)) {
+        return res.status(400).json({ message: 'orderCode không hợp lệ' });
+      }
+
+      const orderCodeNumber = Number(orderCode);
+      if (!Number.isSafeInteger(orderCodeNumber) || orderCodeNumber <= 0) {
+        return res.status(400).json({ message: 'orderCode không hợp lệ' });
+      }
+
+      const payos = getPayOS();
+      if (!payos) {
+        return res.status(500).json({ message: 'Cổng thanh toán chưa được cấu hình' });
+      }
+
+      const orderCodeBigInt = BigInt(orderCode);
+      const payment = await prisma.payment.findUnique({
+        where: { orderCode: orderCodeBigInt },
+      });
+
+      if (!payment) {
+        return res.status(404).json({ message: 'Không tìm thấy đơn thanh toán' });
+      }
+
+      const paymentLinkInfo = await payos.getPaymentLinkInformation(orderCodeNumber);
+
+      if (paymentLinkInfo.status === 'PAID') {
+        if (payment.status === 'PENDING') {
+          await prisma.$transaction(async (tx) => {
+            const updateResult = await tx.payment.updateMany({
+              where: { id: payment.id, status: 'PENDING' },
+              data: { status: 'PAID' },
+            });
+
+            if (updateResult.count > 0 && payment.membershipId !== null) {
+              await tx.membership.update({
+                where: { id: payment.membershipId },
+                data: { status: 'ACTIVE' },
+              });
+            }
+          });
+        }
+
+        return res.status(200).json({
+          success: true,
+          status: 'PAID',
+          message: 'Thanh toán thành công',
+        });
+      }
+
+      return res.status(200).json({
+        success: false,
+        status: paymentLinkInfo.status,
+        message: 'Đơn hàng chưa được thanh toán',
+      });
+    } catch (error: any) {
+      console.error('Check payment status error:', error);
+      return res.status(500).json({
+        message: 'Lỗi kiểm tra thanh toán',
+        error: error.message,
+      });
     }
   }
 

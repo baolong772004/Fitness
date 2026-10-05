@@ -29,6 +29,26 @@ router.post('/checkout', authenticateToken, PaymentController.createCheckoutSess
 
 /**
  * @swagger
+ * /payments/check-status/{orderCode}:
+ *   get:
+ *     summary: Kiểm tra trạng thái thanh toán PayOS
+ *     tags: [Payments]
+ *     parameters:
+ *       - in: path
+ *         name: orderCode
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Trạng thái thanh toán hiện tại
+ *       404:
+ *         description: Không tìm thấy đơn thanh toán
+ */
+router.get('/check-status/:orderCode', PaymentController.checkPaymentStatus);
+
+/**
+ * @swagger
  * /payments/webhook:
  *   post:
  *     summary: Webhook nhận phản hồi từ PayOS (Không dùng cho Frontend)
