@@ -5,6 +5,7 @@ import packageRoutes from './package.route.js';
 import subscriptionRoutes from './subscription.route.js';
 import paymentRoutes from './payment.route.js';
 import checkinRoutes from './checkin.route.js';
+import ptRoutes from './pt.route.js';
 
 const router = express.Router();
 
@@ -18,5 +19,6 @@ router.use('/packages', packageRoutes);
 router.use('/subscriptions', subscriptionRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/checkin', checkinRoutes);
+router.use('/pt', ptRoutes);
 
 export default router;

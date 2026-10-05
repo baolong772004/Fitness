@@ -40,6 +40,7 @@ model User {
   coachBookings     Booking[]          @relation("CoachBookings")
   groupClasses      GroupClass[]       @relation("CoachClasses")
   createdPlans      WorkoutPlan[]      @relation("CoachCreatedPlans")
+  trainerMemberships Membership[]      @relation("TrainerMemberships")
 
   actionLogs        ActionLog[]
   processedSupports SupportRequest[]   @relation("StaffSupport")
@@ -110,6 +111,8 @@ model Membership {
   endDate           DateTime
   remainingSessions Int?       
   status            String     @default("ACTIVE")
+  coachId           Int?
+  coach             User?      @relation("TrainerMemberships", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
@@ -184,6 +187,7 @@ model Booking {
   startTime     DateTime
   endTime       DateTime
   status        String        @default("UPCOMING")
+  sessionQrToken String?      @db.NVarChar(Max)
   
   reportedAbsence Boolean     @default(false)
   absenceReason   String?
