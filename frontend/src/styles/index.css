@@ -1,13 +1,20 @@
 @import './design-tokens.css';
 
-/* Global Resets */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* ==========================================================================
+   GLOBAL RESETS & FOUNDATION
+   ========================================================================== */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 }
 
-html, body {
+html,
+body {
   background-color: var(--bg-app);
   color: var(--text-primary);
   font-family: var(--font-body);
@@ -15,46 +22,63 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
   line-height: 1.5;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 /* Typography Defaults */
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-display);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--text-white);
-  line-height: 1.15;
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+    font-size: 14px;
+    color: inherit;
+  }
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-button, input, select, textarea {
-  font-family: inherit;
-  font-size: 14px;
-}
-
-/* Scrollbar */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: var(--bg-app);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: var(--color-secondary);
+  background: var(--aura-latte);
   border-radius: var(--radius-full);
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-primary);
 }
 
-/* Reusable UI Components & Utility Classes */
+/* ==========================================================================
+   BUTTONS (Matches Mobile Aura Theme: Rounded 12px or Pill, Dark Coffee)
+   ========================================================================== */
 
-/* Athletic Pill Button */
+/* Primary Button (Bo góc tròn 12px mặc định, có thể bo tròn pill hoặc tuỳ biến) */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -62,47 +86,59 @@ button, input, select, textarea {
   gap: var(--space-sm);
   background: var(--color-primary);
   color: #FFFFFF;
-  font-weight: 700;
-  font-size: 15px;
-  padding: 10px 24px;
-  border-radius: var(--radius-full);
-  border: none;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 12px 24px;
+  border-radius: var(--radius-btn, 12px);
+  border: 1.5px solid var(--color-primary);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 14px rgba(254, 116, 19, 0.35);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px var(--color-primary-glow);
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--color-primary-hover);
-  transform: translateY(-1.5px);
-  box-shadow: 0 6px 20px rgba(254, 116, 19, 0.45);
+  border-color: var(--color-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px var(--color-primary-glow);
 }
 
 .btn-primary:active:not(:disabled) {
   transform: translateY(0);
 }
 
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Secondary Button (Bo góc tròn 12px) */
 .btn-secondary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
-  background: var(--color-secondary);
-  color: var(--text-white);
-  font-weight: 600;
-  font-size: 14px;
-  padding: 10px 20px;
-  border-radius: var(--radius-full);
-  border: 1px solid rgba(207, 216, 220, 0.2);
+  background: var(--bg-card);
+  color: var(--color-primary);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 12px 24px;
+  border-radius: var(--radius-btn, 12px);
+  border: 1.5px solid var(--color-primary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.22s ease;
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--color-secondary-hover);
-  border-color: rgba(207, 216, 220, 0.4);
+  background: var(--color-primary);
+  color: #FFFFFF;
 }
 
+/* Outline Button (Bo góc tròn 12px) */
 .btn-outline {
   display: inline-flex;
   align-items: center;
@@ -110,19 +146,23 @@ button, input, select, textarea {
   gap: var(--space-sm);
   background: transparent;
   color: var(--color-primary);
-  font-weight: 700;
-  font-size: 14px;
-  padding: 8px 18px;
-  border-radius: var(--radius-full);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 22px;
+  border-radius: var(--radius-btn, 12px);
   border: 1.5px solid var(--color-primary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.22s ease;
 }
 
 .btn-outline:hover:not(:disabled) {
-  background: var(--color-primary-light);
+  background: var(--color-primary);
+  color: #FFFFFF;
 }
 
+/* Ghost Button (Bo góc tròn) */
 .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -130,19 +170,24 @@ button, input, select, textarea {
   gap: var(--space-sm);
   background: transparent;
   color: var(--text-muted);
-  font-weight: 600;
-  padding: 8px 14px;
-  border-radius: var(--radius-sm);
-  border: none;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 20px;
+  border-radius: var(--radius-btn, 12px);
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .btn-ghost:hover {
-  color: var(--text-white);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border-color: var(--aura-border);
 }
 
+/* Danger Button (Bo góc tròn) */
 .btn-danger {
   display: inline-flex;
   align-items: center;
@@ -152,37 +197,103 @@ button, input, select, textarea {
   color: #fff;
   font-weight: 700;
   padding: 8px 18px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-btn, 12px);
   border: none;
   cursor: pointer;
   transition: opacity 0.2s;
 }
+
 .btn-danger:hover {
   opacity: 0.9;
 }
 
-/* Card primitives */
+/* --- Button Border Radius Modifiers (Tùy chọn Bo Tròn Hoặc Bo Góc Tròn) --- */
+/* 1. Bo tròn hoàn toàn (Pill / Full Round) */
+.btn-pill,
+.btn-rounded,
+.btn-full,
+.btn-rounded-full {
+  border-radius: 9999px !important;
+}
+
+/* 2. Bo góc tròn các cấp độ */
+.btn-rounded-xs {
+  border-radius: var(--radius-xs, 4px) !important;
+}
+
+.btn-rounded-sm {
+  border-radius: var(--radius-sm, 8px) !important;
+}
+
+.btn-rounded-md {
+  border-radius: var(--radius-md, 12px) !important;
+}
+
+.btn-rounded-lg {
+  border-radius: var(--radius-lg, 16px) !important;
+}
+
+.btn-rounded-xl {
+  border-radius: var(--radius-xl, 20px) !important;
+}
+
+/* 3. Góc vuông (Sharp) khi cần */
+.btn-sharp,
+.btn-square {
+  border-radius: 0px !important;
+}
+
+/* ==========================================================================
+   CARDS & CONTAINERS (Clean White Surfaces with Warm Shadows)
+   ========================================================================== */
+
 .card-athletic {
   background: var(--bg-card);
   border: var(--border-card);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: var(--space-xxxl);
   box-shadow: var(--shadow-sm);
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .card-athletic:hover {
-  border-color: rgba(254, 116, 19, 0.3);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
 }
 
-/* Status Badges */
+/* Mobile-like Clean White Card */
+.aura-card {
+  background: var(--bg-card);
+  border: 1px solid var(--aura-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.aura-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+/* Dark Hero Container as in Mobile Screenshots */
+.hero-coffee-container {
+  background-color: var(--bg-header);
+  color: var(--bg-header-text);
+  border-radius: 0 0 32px 32px;
+  box-shadow: var(--shadow-md);
+}
+
+/* ==========================================================================
+   BADGES (Pill style)
+   ========================================================================== */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 4px 12px;
   border-radius: var(--radius-full);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -191,19 +302,19 @@ button, input, select, textarea {
 .badge-active {
   background: var(--color-success-bg);
   color: var(--color-success);
-  border: 1px solid rgba(0, 200, 83, 0.3);
+  border: 1px solid rgba(46, 125, 50, 0.3);
 }
 
 .badge-expiring {
   background: var(--color-warning-bg);
   color: var(--color-warning);
-  border: 1px solid rgba(255, 171, 0, 0.3);
+  border: 1px solid rgba(239, 108, 0, 0.3);
 }
 
 .badge-expired {
   background: var(--color-danger-bg);
   color: var(--color-danger);
-  border: 1px solid rgba(255, 61, 0, 0.3);
+  border: 1px solid rgba(198, 40, 40, 0.3);
 }
 
 .badge-primary {
@@ -213,36 +324,43 @@ button, input, select, textarea {
 }
 
 .badge-rank-master {
-  background: linear-gradient(135deg, #FFD700, #FF8C00);
-  color: #000;
+  background: linear-gradient(135deg, #D4AF37, #8C3E26);
+  color: #fff;
   font-weight: 800;
 }
 
 .badge-rank-senior {
-  background: linear-gradient(135deg, #00C853, #009624);
+  background: linear-gradient(135deg, #2E7D32, #1B5E20);
   color: #fff;
 }
 
 .badge-rank-junior {
-  background: var(--color-secondary);
-  color: #fff;
+  background: var(--aura-latte);
+  color: var(--aura-dark-coffee);
+  border: 1px solid var(--aura-border);
 }
 
-/* Inputs */
+/* ==========================================================================
+   FORMS & INPUTS
+   ========================================================================== */
 .form-input {
   width: 100%;
   background: var(--bg-input);
-  border: 1px solid rgba(207, 216, 220, 0.2);
-  color: var(--text-white);
+  border: 1.5px solid var(--aura-border);
+  color: var(--text-primary);
   padding: 12px 16px;
   border-radius: var(--radius-sm);
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
 }
 
 .form-input:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.form-input::placeholder {
+  color: var(--text-dim);
 }
 
 /* Monospace Metric number */
@@ -251,12 +369,14 @@ button, input, select, textarea {
   font-weight: 700;
 }
 
-/* Modal Overlay */
+/* ==========================================================================
+   MODAL OVERLAY
+   ========================================================================== */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(13, 22, 25, 0.85);
-  backdrop-filter: blur(8px);
+  background: rgba(44, 27, 18, 0.65);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -268,33 +388,51 @@ button, input, select, textarea {
 .modal-content {
   background: var(--bg-panel);
   border: var(--border-card);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   max-width: 650px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
   animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--text-primary);
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
-/* Print Styles for Invoices */
+/* ==========================================================================
+   PRINT STYLES
+   ========================================================================== */
 @media print {
   body * {
     visibility: hidden;
   }
-  .printable-invoice, .printable-invoice * {
+
+  .printable-invoice,
+  .printable-invoice * {
     visibility: visible;
   }
+
   .printable-invoice {
     position: absolute;
     left: 0;
@@ -304,3 +442,282 @@ button, input, select, textarea {
     color: #000 !important;
   }
 }
+
+/* ==========================================================================
+   APPLE & STRIPE LUXURY DESIGN UTILITIES
+   ========================================================================== */
+.apple-glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius-xl);
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.apple-glass-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.stripe-gradient-text {
+  background: var(--gradient-text);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+.stripe-caramel-text {
+  background: var(--gradient-caramel);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 20px;
+}
+
+.bento-item {
+  background: var(--bg-card);
+  border-radius: 24px;
+  border: 1px solid var(--border-subtle);
+  padding: 32px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bento-item:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--aura-caramel);
+}
+
+.apple-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(90, 35, 20, 0.06);
+  color: var(--color-primary);
+  border: 1px solid rgba(90, 35, 20, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+/* ==========================================================================
+   FREELETICS ATHLETIC REVEAL PANELS (Full background boundary, sharp edges)
+   ========================================================================== */
+.fl-hero-banner {
+  position: relative;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  border-radius: 0px !important;
+}
+
+.fl-pillar-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: #120704;
+  border: none;
+  border-radius: 0 !important;
+}
+
+@media (max-width: 768px) {
+  .fl-pillar-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+.fl-reveal-card {
+  position: relative;
+  height: 420px;
+  overflow: hidden;
+  border-radius: 0 !important;
+  cursor: pointer;
+  background-color: #120704;
+  display: flex;
+  flex-direction: column;
+  justifyContent: flex-end;
+  box-shadow: none;
+  border: none;
+}
+
+.fl-reveal-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s ease;
+  filter: brightness(0.72) contrast(1.1);
+  will-change: transform;
+}
+
+.fl-reveal-card:hover .fl-reveal-bg {
+  transform: scale(1.08);
+  filter: brightness(0.38) contrast(1.2);
+}
+
+.fl-reveal-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(35, 14, 7, 0.45) 50%, rgba(18, 7, 3, 0.92) 100%);
+  transition: background 0.4s ease;
+  pointer-events: none;
+}
+
+.fl-reveal-card:hover .fl-reveal-scrim {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, rgba(45, 18, 9, 0.75) 40%, rgba(18, 7, 3, 0.98) 100%);
+}
+
+.fl-reveal-content {
+  position: relative;
+  z-index: 2;
+  padding: 32px 28px;
+  color: #FFFFFF;
+}
+
+.fl-reveal-tag {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--aura-caramel);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.fl-reveal-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: #FFFFFF;
+  margin: 0;
+  line-height: 1.15;
+}
+
+/* Hidden details revealed on hover */
+.fl-reveal-details {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(18px);
+  transition: max-height 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fl-reveal-card:hover .fl-reveal-details {
+  max-height: 240px;
+  opacity: 1;
+  transform: translateY(0);
+  margin-top: 14px;
+}
+
+/* ==========================================================================
+   AURA ATMOSPHERIC BACKGROUND EFFECTS (Luxury Depth & Athletic Tech)
+   ========================================================================== */
+.section-atmosphere {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-card);
+}
+
+.section-atmosphere-dark {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-app);
+}
+
+/* Ambient Aura Glow Spots */
+.aura-glow-top-right {
+  position: absolute;
+  top: -100px;
+  right: -80px;
+  width: 540px;
+  height: 540px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(202, 92, 40, 0.12) 0%, rgba(229, 169, 101, 0.04) 50%, transparent 75%);
+  pointer-events: none;
+  filter: blur(55px);
+  z-index: 0;
+}
+
+.aura-glow-bottom-left {
+  position: absolute;
+  bottom: -120px;
+  left: -80px;
+  width: 540px;
+  height: 540px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(202, 92, 40, 0.10) 0%, rgba(202, 92, 40, 0.02) 50%, transparent 75%);
+  pointer-events: none;
+  filter: blur(60px);
+  z-index: 0;
+}
+
+.aura-glow-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 720px;
+  height: 720px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(202, 92, 40, 0.08) 0%, rgba(229, 169, 101, 0.03) 55%, transparent 75%);
+  pointer-events: none;
+  filter: blur(75px);
+  z-index: 0;
+}
+
+/* Athletic Precision Dot Matrix Pattern */
+.athletic-dot-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: 0 0;
+  pointer-events: none;
+  z-index: 0;
+  mask-image: radial-gradient(ellipse 85% 85% at 50% 50%, black 45%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 85% 85% at 50% 50%, black 45%, transparent 100%);
+}
+
+/* Athletic Typography Watermark */
+.athletic-watermark {
+  position: absolute;
+  font-family: var(--font-display);
+  font-size: clamp(72px, 10vw, 150px);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.03);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  z-index: 0;
+  line-height: 1;
+}
+
+/* Luminous Section Top/Bottom Divider */
+.luminous-divider {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(202, 92, 40, 0.25) 25%, rgba(229, 169, 101, 0.45) 50%, rgba(202, 92, 40, 0.25) 75%, transparent 100%);
+}
+

@@ -1,86 +1,175 @@
 /* ==========================================================================
    AURA FITNESS DESIGN SYSTEM TOKENS
-   Strictly matched with DESIGN.md (Freeletics Athletic Tokens)
+   Synchronized 100% with Flutter Mobile Theme (AuraColors)
+   Light Mode Default (Pure White & Cream Background) + Dark Mode Support
    ========================================================================== */
 
-:root {
-  /* Color Palette */
-  --color-primary: #FE7413;
-  --color-primary-hover: #E06008;
-  --color-primary-light: rgba(254, 116, 19, 0.12);
-  --color-primary-glow: rgba(254, 116, 19, 0.35);
+:root,
+[data-theme="light"] {
+  /* --- Mobile AuraColors Constants --- */
+  --aura-coffee: #6B2D1B;
+  --aura-espresso: #3B180E;
+  --aura-dark-coffee: #5A2314;
+  --aura-caramel: #8C3E26;
+  --aura-cream: #FAF7F2;
+  --aura-latte: #F1E2D4;
+  --aura-ink: #2C1B12;
+  --aura-muted: #8C7567;
+  --aura-border: #EADBCE;
+  --aura-green: #2E7D32;
 
-  --color-secondary: #37474F;
-  --color-secondary-hover: #263238;
-  --color-secondary-light: rgba(55, 71, 79, 0.1);
+  /* --- Primary & Brand Tokens --- */
+  --color-primary: #5A2314; /* AuraColors.darkCoffee */
+  --color-primary-hover: #3B180E; /* AuraColors.espresso */
+  --color-primary-light: rgba(90, 35, 20, 0.08);
+  --color-primary-glow: rgba(90, 35, 20, 0.22);
+  --color-accent: #8C3E26; /* AuraColors.caramel */
 
-  --color-tertiary: #0000EE;
-  --color-tertiary-hover: #0000B8;
+  --color-secondary: #6B2D1B; /* AuraColors.coffee */
+  --color-secondary-hover: #5A2314;
+  --color-secondary-light: rgba(107, 45, 27, 0.08);
 
-  --color-surface: #CFD8DC;
-  --color-surface-subtle: #ECEFF1;
-  --color-on-surface: #161E21;
+  --color-tertiary: #8C3E26;
+  --color-tertiary-hover: #6B2D1B;
 
-  /* Athletic Dark Theme Grounds */
-  --bg-app: #0D1619;
-  --bg-panel: #142024;
-  --bg-card: #1B292E;
-  --bg-card-hover: #22343B;
-  --bg-input: #101B1E;
+  --color-surface: #FFFFFF;
+  --color-surface-subtle: #FAF7F2;
+  --color-on-surface: #2C1B12;
 
-  /* Typography Colors */
+  /* --- Backgrounds (Pure White & Warm Cream Default) --- */
+  --bg-app: #FAF7F2; /* AuraColors.cream */
+  --bg-panel: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F6EFE8;
+  --bg-input: #FFFFFF;
+  --bg-subtle: #F1E2D4; /* AuraColors.latte */
+  --bg-header: #5A2314; /* Mobile Dark Coffee Header style */
+  --bg-header-text: #FFFFFF;
+
+  /* --- Typography Colors --- */
   --text-white: #FFFFFF;
-  --text-primary: #F7FAF9;
-  --text-muted: #90A4AE;
-  --text-dim: #607D8B;
+  --text-primary: #2C1B12; /* AuraColors.ink */
+  --text-secondary: #5A2314;
+  --text-muted: #8C7567; /* AuraColors.muted */
+  --text-dim: #A89589;
 
-  /* Semantic Feedback */
-  --color-success: #00C853;
-  --color-success-bg: rgba(0, 200, 83, 0.14);
-  --color-danger: #FF3D00;
-  --color-danger-bg: rgba(255, 61, 0, 0.14);
-  --color-warning: #FFAB00;
-  --color-warning-bg: rgba(255, 171, 0, 0.14);
-  --color-info: #00B0FF;
-  --color-info-bg: rgba(0, 176, 255, 0.14);
+  /* --- Semantic Feedback --- */
+  --color-success: #2E7D32; /* AuraColors.green */
+  --color-success-bg: rgba(46, 125, 50, 0.12);
+  --color-danger: #C62828;
+  --color-danger-bg: rgba(198, 40, 40, 0.12);
+  --color-warning: #EF6C00;
+  --color-warning-bg: rgba(239, 108, 0, 0.12);
+  --color-info: #0277BD;
+  --color-info-bg: rgba(2, 119, 189, 0.12);
 
-  /* Spacing Scale (8px base) */
-  --space-xs: 2.5px;
+  /* --- Spacing Scale --- */
+  --space-xs: 4px;
   --space-sm: 8px;
-  --space-md: 10px;
-  --space-lg: 12px;
-  --space-xl: 16px;
-  --space-xxl: 16.8px;
-  --space-xxxl: 24px;
-  --space-xxxxl: 32px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-xxl: 24px;
+  --space-xxxl: 32px;
+  --space-xxxxl: 40px;
   --space-5xl: 48px;
   --space-6xl: 64px;
 
-  /* Corner Radius (Shapes) */
+  /* --- Corner Radius (Hỗ trợ bo góc tròn & bo tròn pill) --- */
   --radius-xs: 4px;
   --radius-sm: 8px;
-  --radius-md: 27.5px;
-  --radius-lg: 36.7px;
-  --radius-xl: 43.3px;
-  --radius-full: 9999px; /* Athletic Pill Button */
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+  --radius-btn: 12px; /* Mặc định bo góc tròn cho buttons */
+  --radius-btn-pill: 9999px; /* Bo tròn hoàn toàn (pill) */
 
-  /* Typography Stacks */
-  --font-display: 'Outfit', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* --- Typography Stacks (Hỗ trợ 100% Tiếng Việt có dấu, không lỗi font in hoa đậm) --- */
+  --font-display: "Plus Jakarta Sans", "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: "Plus Jakarta Sans", "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
 
-  /* Athletic Shadows */
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 20px rgba(254, 116, 19, 0.35);
+  /* --- Apple & Stripe Diffuse Shadows & Glows --- */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(90, 35, 20, 0.04);
+  --shadow-md: 0 4px 20px -2px rgba(90, 35, 20, 0.07), 0 2px 6px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 18px 40px -8px rgba(90, 35, 20, 0.12), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-float: 0 24px 60px -12px rgba(90, 35, 20, 0.16);
+  --shadow-glow: 0 0 32px rgba(194, 142, 92, 0.35);
 
-  /* Borders */
-  --border-subtle: 1px solid rgba(207, 216, 220, 0.12);
-  --border-card: 1px solid rgba(207, 216, 220, 0.18);
-  --border-highlight: 1px solid rgba(254, 116, 19, 0.5);
+  /* --- Apple Liquid Glass & Stripe Aurora Surfaces --- */
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-blur: blur(20px) saturate(180%);
+  --glass-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.8), 0 8px 32px -4px rgba(90, 35, 20, 0.06);
 
-  /* Layout */
+  /* --- Stripe Mesh Gradients --- */
+  --gradient-brand: linear-gradient(135deg, #5A2314 0%, #7A3320 50%, #C28E5C 100%);
+  --gradient-text: linear-gradient(135deg, #2C1B12 0%, #5A2314 55%, #8C3E26 100%);
+  --gradient-caramel: linear-gradient(135deg, #C28E5C 0%, #E5BA88 100%);
+  --gradient-aurora: radial-gradient(circle at 10% 15%, rgba(194, 142, 92, 0.12) 0%, transparent 45%), radial-gradient(circle at 90% 85%, rgba(90, 35, 20, 0.08) 0%, transparent 50%);
+
+  /* --- Borders --- */
+  --border-subtle: 1px solid rgba(234, 219, 206, 0.65);
+  --border-card: 1px solid rgba(234, 219, 206, 0.75);
+  --border-highlight: 1.5px solid #5A2314;
+
+  /* --- Layout --- */
   --header-height: 72px;
   --max-content-width: 1440px;
+}
+
+/* ==========================================================================
+   DARK THEME PALETTE (Luxury Espresso & Dark Coffee Grounds)
+   ========================================================================== */
+[data-theme="dark"] {
+  --color-primary: #D48970; /* Soft warm terracotta for dark mode */
+  --color-primary-hover: #E29C85;
+  --color-primary-light: rgba(212, 137, 112, 0.16);
+  --color-primary-glow: rgba(212, 137, 112, 0.35);
+  --color-accent: #E29C85;
+
+  --color-secondary: #FAF7F2;
+  --color-secondary-hover: #FFFFFF;
+  --color-secondary-light: rgba(250, 247, 242, 0.1);
+
+  --color-tertiary: #C2765E;
+  --color-tertiary-hover: #D48970;
+
+  --color-surface: #26130C;
+  --color-surface-subtle: #1C0D08;
+  --color-on-surface: #FAF7F2;
+
+  --bg-app: #150905;
+  --bg-panel: #200E07;
+  --bg-card: #28120B;
+  --bg-card-hover: #35190F;
+  --bg-input: #1A0B06;
+  --bg-subtle: #381B11;
+  --bg-header: #1E0D07;
+  --bg-header-text: #FAF7F2;
+
+  --text-white: #FFFFFF;
+  --text-primary: #FAF7F2;
+  --text-secondary: #EADBCE;
+  --text-muted: #BBA79B;
+  --text-dim: #7D6B61;
+
+  --color-success: #4CAF50;
+  --color-success-bg: rgba(76, 175, 80, 0.18);
+  --color-danger: #EF5350;
+  --color-danger-bg: rgba(239, 83, 80, 0.18);
+  --color-warning: #FFA726;
+  --color-warning-bg: rgba(255, 167, 38, 0.18);
+  --color-info: #29B6F6;
+  --color-info-bg: rgba(41, 182, 246, 0.18);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 24px rgba(212, 137, 112, 0.25);
+
+  --border-subtle: 1px solid rgba(234, 219, 206, 0.12);
+  --border-card: 1px solid rgba(234, 219, 206, 0.18);
+  --border-highlight: 1.5px solid #D48970;
 }

@@ -1,21 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Member, Coach, PackagePlan, AuditLog, Invoice, SupportTicket } from '../../types';
 import { MockDatabase } from '../../mocks/mockData';
+import { api, ApiPackage, ApiUser } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
-import { 
-  BarChart3, 
-  Users, 
-  Dumbbell, 
-  Layers, 
-  ShieldAlert, 
-  TrendingUp, 
-  Calendar, 
-  DollarSign, 
-  Edit3, 
-  Trash2, 
-  Plus, 
-  Search, 
-  Check, 
+import {
+  BarChart3,
+  Users,
+  Dumbbell,
+  Layers,
+  ShieldAlert,
+  TrendingUp,
+  Calendar,
+  DollarSign,
+  Edit3,
+  Trash2,
+  Plus,
+  Search,
+  Check,
   AlertCircle,
   Eye,
   FileSpreadsheet,
@@ -30,8 +31,23 @@ import {
   Wrench,
   AlertTriangle,
   CornerDownRight,
-  Filter
+  Filter,
+  Activity,
+  Loader2
 } from 'lucide-react';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Progress } from '@/components/ui/progress';
+import { StatCard, StaffPage, Field } from '@/components/staff/StaffKit';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -70,20 +86,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // New Package Modal
   const [isCreatingPackage, setIsCreatingPackage] = useState(false);
+  const [packageLoading, setPackageLoading] = useState(false);
   const [newPackageForm, setNewPackageForm] = useState({
     name: '',
-    type: 'hybrid_pt' as const,
-    durationMonths: 1,
-    priceVND: 2500000,
-    ptSessionsIncluded: 8,
-    description: '',
-    featuresText: 'Ra vào phòng tập 24/7\n8 Buổi tập cùng HLV\nXông hơi miễn phí'
+    type: 'MEMBERSHIP' as 'MEMBERSHIP' | 'PT',
+    durationDays: 30,
+    price: 1500000,
+    trialPtSessions: 2,
+    totalPtSessions: 0,
+    description: 'Gói tập chất lượng cao toàn bộ hệ thống AURA Fitness.'
   });
 
-  const reloadData = () => {
-    setMembers(MockDatabase.getMembers());
+  const reloadData = async () => {
+    // 1. Fetch live Packages from backend
+    try {
+      const livePkgs = await api.packages.getPackages({ includeInactive: true });
+      if (livePkgs && livePkgs.length > 0) {
+        const mappedPkgs: PackagePlan[] = livePkgs.map(p => ({
+          id: String(p.id),
+          name: p.name,
+          type: p.type === 'PT' ? 'hybrid_pt' : 'standard_gym',
+          durationMonths: Math.max(1, Math.round(p.durationDays / 30)),
+          priceVND: Number(p.price),
+          unlimitedGymAccess: true,
+          ptSessionsIncluded: p.trialPtSessions || p.totalPtSessions || 0,
+          description: p.description || '',
+          features: ['Ra vào phòng tập 24/7', `${p.durationDays} ngày hiệu lực`, `${p.trialPtSessions || 0} buổi PT`]
+        }));
+        setPackages(mappedPkgs);
+      } else {
+        setPackages(MockDatabase.getPackages());
+      }
+    } catch {
+      setPackages(MockDatabase.getPackages());
+    }
+
+    // 2. Fetch live Users from backend
+    try {
+      const liveUsers = await api.users.getUsers({ limit: 50 });
+      if (liveUsers.data && liveUsers.data.length > 0) {
+        const mappedMembers: Member[] = liveUsers.data.map(u => ({
+          id: String(u.id),
+          code: 'MEM-' + u.id,
+          name: u.fullName || u.email,
+          phone: u.phone || '0900000000',
+          email: u.email,
+          avatar: u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+          cccd: '0012026' + u.id,
+          gender: (u.gender === 'female' ? 'female' : 'male') as any,
+          birthYear: 1996,
+          emergencyContact: { name: 'Người thân', phone: u.phone || '', relationship: 'Gia đình' },
+          status: 'active',
+          activePackageId: 'pkg-standard',
+          packageName: 'Gói Tiêu Chuẩn',
+          packageType: 'standard_gym',
+          packageStartDate: new Date().toISOString().slice(0, 10),
+          packageEndDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+          daysRemaining: 30,
+          ptSessionsTotal: 2,
+          ptSessionsRemaining: 2,
+          totalCheckIns: 1,
+          inBodyHistory: []
+        }));
+        setMembers(mappedMembers);
+      } else {
+        setMembers(MockDatabase.getMembers());
+      }
+    } catch {
+      setMembers(MockDatabase.getMembers());
+    }
+
     setCoaches(MockDatabase.getCoaches());
-    setPackages(MockDatabase.getPackages());
     setInvoices(MockDatabase.getInvoices());
     setAuditLogs(MockDatabase.getAuditLogs());
     setTickets(MockDatabase.getTickets());
@@ -96,8 +169,98 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Total Revenue Calculation
   const totalRevenue = invoices.reduce((sum, inv) => sum + inv.totalVND, 0);
 
+  // Global Time Range Filter State
+  const [timeFilter, setTimeFilter] = useState<'today' | '7days' | 'month' | 'quarter' | 'year'>('month');
+
+  // Dynamic metrics & trend series based on timeFilter
+  const timeFilteredData = React.useMemo(() => {
+    const baseRev = totalRevenue > 0 ? totalRevenue : 11250000;
+    switch (timeFilter) {
+      case 'today':
+        return {
+          label: 'Hôm Nay',
+          subLabel: 'Số liệu 24 giờ qua',
+          revenue: Math.round(baseRev * 0.12),
+          growth: '+8.4%',
+          membersCount: members.length,
+          activeCheckIns: 142,
+          chartData: [
+            { label: '06:00', rev: 1.2, checkins: 28 },
+            { label: '09:00', rev: 0.8, checkins: 14 },
+            { label: '12:00', rev: 1.5, checkins: 32 },
+            { label: '15:00', rev: 0.9, checkins: 18 },
+            { label: '18:00', rev: 3.4, checkins: 76 },
+            { label: '21:00', rev: 0.8, checkins: 22 },
+          ]
+        };
+      case '7days':
+        return {
+          label: '7 Ngày Qua',
+          subLabel: 'Tuần vận hành hiện tại',
+          revenue: Math.round(baseRev * 0.42),
+          growth: '+14.6%',
+          membersCount: members.length,
+          activeCheckIns: 840,
+          chartData: [
+            { label: 'Thứ 2', rev: 5.4, checkins: 110 },
+            { label: 'Thứ 3', rev: 6.8, checkins: 125 },
+            { label: 'Thứ 4', rev: 5.9, checkins: 118 },
+            { label: 'Thứ 5', rev: 7.2, checkins: 134 },
+            { label: 'Thứ 6', rev: 8.5, checkins: 146 },
+            { label: 'Thứ 7', rev: 9.6, checkins: 162 },
+            { label: 'Chủ Nhật', rev: 8.2, checkins: 145 },
+          ]
+        };
+      case 'quarter':
+        return {
+          label: 'Quý Này (Q4)',
+          subLabel: 'Tháng 10 - Tháng 12/2026',
+          revenue: Math.round(baseRev * 2.8),
+          growth: '+22.5%',
+          membersCount: members.length,
+          activeCheckIns: 3250,
+          chartData: [
+            { label: 'Tháng 10', rev: 38.5, checkins: 980 },
+            { label: 'Tháng 11', rev: 44.2, checkins: 1120 },
+            { label: 'Tháng 12', rev: 52.8, checkins: 1290 },
+          ]
+        };
+      case 'year':
+        return {
+          label: 'Năm 2026',
+          subLabel: 'Lũy kế cả năm tài chính',
+          revenue: Math.round(baseRev * 9.5),
+          growth: '+31.2%',
+          membersCount: members.length,
+          activeCheckIns: 12800,
+          chartData: [
+            { label: 'Quý 1', rev: 95.0, checkins: 2800 },
+            { label: 'Quý 2', rev: 112.5, checkins: 3100 },
+            { label: 'Quý 3', rev: 128.0, checkins: 3450 },
+            { label: 'Quý 4 (Dự kiến)', rev: 145.2, checkins: 3890 },
+          ]
+        };
+      case 'month':
+      default:
+        return {
+          label: 'Tháng Này',
+          subLabel: 'Tháng 10/2026',
+          revenue: baseRev,
+          growth: '+18.4%',
+          membersCount: members.length,
+          activeCheckIns: 1250,
+          chartData: [
+            { label: 'Tuần 1', rev: 2.4, checkins: 280 },
+            { label: 'Tuần 2', rev: 3.1, checkins: 315 },
+            { label: 'Tuần 3', rev: 3.6, checkins: 340 },
+            { label: 'Tuần 4', rev: 4.2, checkins: 395 },
+          ]
+        };
+    }
+  }, [timeFilter, totalRevenue, members.length]);
+
   // Filtered members for Member 360
-  const filteredMembers = members.filter(m => 
+  const filteredMembers = members.filter(m =>
     m.name.toLowerCase().includes(memberSearchQuery.toLowerCase()) ||
     m.phone.includes(memberSearchQuery) ||
     m.code.toLowerCase().includes(memberSearchQuery.toLowerCase())
@@ -130,33 +293,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditingCoach(null);
   };
 
-  // Handle Create Package
-  const handleSavePackage = (e: React.FormEvent) => {
+  // Handle Create Package via Live Backend REST API
+  const handleSavePackage = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newPkg: PackagePlan = {
-      id: 'pkg-' + Date.now(),
-      name: newPackageForm.name,
-      type: newPackageForm.type,
-      durationMonths: newPackageForm.durationMonths,
-      priceVND: newPackageForm.priceVND,
-      unlimitedGymAccess: true,
-      ptSessionsIncluded: newPackageForm.ptSessionsIncluded,
-      description: newPackageForm.description || 'Gói tập chất lượng cao tại AURA Fitness.',
-      features: newPackageForm.featuresText.split('\n').filter(f => f.trim().length > 0)
-    };
+    setPackageLoading(true);
+    try {
+      await api.packages.createPackage({
+        name: newPackageForm.name,
+        type: newPackageForm.type,
+        durationDays: newPackageForm.durationDays,
+        price: newPackageForm.price,
+        trialPtSessions: newPackageForm.trialPtSessions,
+        totalPtSessions: newPackageForm.type === 'PT' ? newPackageForm.totalPtSessions : undefined,
+        description: newPackageForm.description
+      });
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      setIsCreatingPackage(false);
+      alert(`Đã tạo thành công gói tập "${newPackageForm.name}" lên cơ sở dữ liệu!`);
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi khi tạo gói tập: ${err.message}`);
+    } finally {
+      setPackageLoading(false);
+    }
+  };
 
-    MockDatabase.addPackage(newPkg);
-    MockDatabase.logAction(
-      'Hoàng Quản Lý',
-      'admin',
-      'Tạo gói tập mới',
-      newPkg.name,
-      `Giá: ${newPkg.priceVND.toLocaleString('vi-VN')}đ - ${newPkg.durationMonths} Tháng (${newPkg.ptSessionsIncluded} buổi PT)`
-    );
+  // Handle Delete Package via Live Backend REST API
+  const handleDeletePackage = async (packageId: string | number, packageName: string) => {
+    if (!window.confirm(`Bạn có chắc muốn xoá gói tập "${packageName}"?`)) return;
+    try {
+      await api.packages.deletePackage(packageId);
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      alert(`Đã xoá gói tập "${packageName}" thành công.`);
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi khi xoá: ${err.message}`);
+    }
+  };
 
-    soundEffects.playSuccessBeep();
-    reloadData();
-    setIsCreatingPackage(false);
+  // Handle Update User Role via Live Backend REST API
+  const handleChangeUserRole = async (userId: string | number, newRole: 'ADMIN' | 'STAFF' | 'RECEPTIONIST' | 'COACH' | 'MEMBER' | string) => {
+    try {
+      await api.users.updateUserRole(userId, newRole);
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      alert(`Đã cập nhật vai trò thành công sang ${newRole}!`);
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi cập nhật quyền: ${err.message}`);
+    }
   };
 
   // Handle Open Ticket Response Modal
@@ -235,1403 +422,1054 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return matchesStatus && matchesCategory && matchesQuery;
   });
 
+  const categoryMeta = (c: string) => {
+    switch (c) {
+      case 'lost_found': return { label: 'Đồ thất lạc', variant: 'warning' as const };
+      case 'freeze_request': return { label: 'Bảo lưu gói tập', variant: 'info' as const };
+      case 'equipment': return { label: 'Hỏng máy / CSVC', variant: 'destructive' as const };
+      case 'coach_feedback': return { label: 'Phản ánh HLV', variant: 'soft' as const };
+      default: return { label: 'Yêu cầu khác', variant: 'secondary' as const };
+    }
+  };
+
+  const rankVariant = (rank: string) => (rank === 'master' ? 'default' : rank === 'senior' ? 'success' : 'secondary') as 'default' | 'success' | 'secondary';
+
+  const openTicketsCount = tickets.filter(t => t.status === 'open').length;
+  const inProgressTicketsCount = tickets.filter(t => t.status === 'in_progress').length;
+
   return (
-    <div style={{ padding: 'var(--space-xxl) var(--space-xl)', maxWidth: 'var(--max-content-width)', margin: '0 auto' }}>
+    <StaffPage>
+      {/* Top Global Time Range Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border/80">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-foreground">
+            <Calendar className="size-4 text-primary" />
+            <span>Kỳ Thống Kê:</span>
+          </div>
+          <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border">
+            {[
+              { id: 'today', label: 'Hôm Nay' },
+              { id: '7days', label: '7 Ngày Qua' },
+              { id: 'month', label: 'Tháng Này' },
+              { id: 'quarter', label: 'Quý Này' },
+              { id: 'year', label: 'Cả Năm' },
+            ].map(tf => {
+              const isActive = timeFilter === tf.id;
+              return (
+                <button
+                  key={tf.id}
+                  type="button"
+                  onClick={() => {
+                    setTimeFilter(tf.id as any);
+                    soundEffects.playSuccessBeep();
+                  }}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-background/60'
+                    }`}
+                >
+                  {tf.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+          <span className="inline-block size-2 rounded-full bg-success animate-pulse" />
+          <span>{timeFilteredData.subLabel} • Dữ liệu thời gian thực</span>
+        </div>
+      </div>
+
       {/* Top BI Metric Strip */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-        gap: 'var(--space-lg)',
-        marginBottom: 'var(--space-xxxl)'
-      }}>
-        <div className="card-athletic" style={{ padding: '18px 22px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>
-                Tổng Doanh Thu Tháng Này
-              </div>
-              <div className="metric-mono" style={{ fontSize: 26, fontWeight: 900, color: 'var(--color-primary)', marginTop: 4 }}>
-                {totalRevenue.toLocaleString('vi-VN')} <span style={{ fontSize: 14 }}>đ</span>
-              </div>
-            </div>
-            <div style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: 10, borderRadius: 'var(--radius-full)' }}>
-              <DollarSign size={20} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-success)', marginTop: 10 }}>
-            <TrendingUp size={14} />
-            <span>+18.4% so với tháng trước</span>
-          </div>
-        </div>
-
-        <div className="card-athletic" style={{ padding: '18px 22px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>
-                Tổng Số Hội Viên
-              </div>
-              <div className="metric-mono" style={{ fontSize: 26, fontWeight: 900, color: '#fff', marginTop: 4 }}>
-                {members.length} <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>hội viên</span>
-              </div>
-            </div>
-            <div style={{ background: 'rgba(0, 200, 83, 0.15)', color: 'var(--color-success)', padding: 10, borderRadius: 'var(--radius-full)' }}>
-              <Users size={20} />
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>
-            Tỷ lệ gia hạn tái ký: <strong style={{ color: 'var(--color-success)' }}>86.5%</strong>
-          </div>
-        </div>
-
-        <div className="card-athletic" style={{ padding: '18px 22px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>
-                Đội Ngũ HLV
-              </div>
-              <div className="metric-mono" style={{ fontSize: 26, fontWeight: 900, color: '#fff', marginTop: 4 }}>
-                {coaches.length} <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>HLV active</span>
-              </div>
-            </div>
-            <div style={{ background: 'rgba(0, 176, 255, 0.15)', color: 'var(--color-info)', padding: 10, borderRadius: 'var(--radius-full)' }}>
-              <Dumbbell size={20} />
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>
-            Trung bình: <strong>8.5 học viên / Coach</strong>
-          </div>
-        </div>
-
-        <div className="card-athletic" style={{ padding: '18px 22px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>
-                Gói Tập & Khóa Học
-              </div>
-              <div className="metric-mono" style={{ fontSize: 26, fontWeight: 900, color: '#fff', marginTop: 4 }}>
-                {packages.length} <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>gói</span>
-              </div>
-            </div>
-            <div style={{ background: 'rgba(255, 171, 0, 0.15)', color: 'var(--color-warning)', padding: 10, borderRadius: 'var(--radius-full)' }}>
-              <Layers size={20} />
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>
-            Chiếm <strong style={{ color: '#fff' }}>42%</strong> doanh thu
-          </div>
-        </div>
-
-        {/* 5th KPI Card: Tickets / Reports awaiting Admin action */}
-        <div 
-          className="card-athletic" 
-          style={{ 
-            padding: '18px 22px', 
-            cursor: 'pointer',
-            border: tickets.filter(t => t.status === 'open').length > 0 
-              ? '1px solid var(--color-warning)' 
-              : '1px solid rgba(255,255,255,0.06)'
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <button
+          type="button"
+          onClick={() => {
+            onTabChange('analytics');
+            soundEffects.playSuccessBeep();
           }}
-          onClick={() => onTabChange('tickets-management')}
-          title="Bấm để chuyển nhanh sang Xử Lý Báo Cáo & Yêu Cầu"
+          className="text-left transition-all active:scale-[0.98] hover:-translate-y-0.5 group relative block w-full focus:outline-none cursor-pointer"
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>
-                Báo Cáo / Sự Cố Chờ Duyệt
-              </div>
-              <div className="metric-mono" style={{ fontSize: 26, fontWeight: 900, color: tickets.filter(t => t.status === 'open').length > 0 ? 'var(--color-warning)' : '#fff', marginTop: 4 }}>
-                {tickets.filter(t => t.status === 'open').length} <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>chờ BQL</span>
-              </div>
+          <StatCard
+            icon={DollarSign}
+            tone="primary"
+            label={`Tổng Doanh Thu (${timeFilteredData.label})`}
+            value={`${timeFilteredData.revenue.toLocaleString('vi-VN')} đ`}
+            hint={
+              <span className="text-success font-semibold flex items-center justify-between gap-1 text-xs">
+                <span className="flex items-center gap-1">
+                  <TrendingUp className="size-3.5" /> {timeFilteredData.growth}
+                </span>
+                <span className="text-primary font-semibold group-hover:underline">Chi tiết BI →</span>
+              </span>
+            }
+            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-primary/60 h-full ${activeTab === 'analytics' ? 'ring-2 ring-primary/40 border-primary shadow-xs' : ''
+              }`}
+          />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            onTabChange('members-360');
+            soundEffects.playSuccessBeep();
+          }}
+          className="text-left transition-all active:scale-[0.98] hover:-translate-y-0.5 group relative block w-full focus:outline-none cursor-pointer"
+        >
+          <StatCard
+            icon={Users}
+            tone="success"
+            label="Tổng Số Hội Viên"
+            value={`${members.length} hội viên`}
+            hint={
+              <span className="flex items-center justify-between text-xs">
+                <span>Tái ký: <strong className="text-success font-bold">86.5%</strong></span>
+                <span className="text-success font-semibold group-hover:underline ml-1">Xem danh sách →</span>
+              </span>
+            }
+            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-success/60 h-full ${activeTab === 'members-360' ? 'ring-2 ring-success/40 border-success shadow-xs' : ''
+              }`}
+          />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            onTabChange('coaches-config');
+            soundEffects.playSuccessBeep();
+          }}
+          className="text-left transition-all active:scale-[0.98] hover:-translate-y-0.5 group relative block w-full focus:outline-none cursor-pointer"
+        >
+          <StatCard
+            icon={Dumbbell}
+            tone="info"
+            label="Đội Ngũ HLV"
+            value={`${coaches.length} HLV active`}
+            hint={
+              <span className="flex items-center justify-between text-xs">
+                <span>8.5 hv / Coach</span>
+                <span className="text-sky-600 dark:text-sky-400 font-semibold group-hover:underline ml-1">Quản lý HLV →</span>
+              </span>
+            }
+            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-sky-500/60 h-full ${activeTab === 'coaches-config' ? 'ring-2 ring-sky-500/40 border-sky-500 shadow-xs' : ''
+              }`}
+          />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            onTabChange('packages-engine');
+            soundEffects.playSuccessBeep();
+          }}
+          className="text-left transition-all active:scale-[0.98] hover:-translate-y-0.5 group relative block w-full focus:outline-none cursor-pointer"
+        >
+          <StatCard
+            icon={Layers}
+            tone="warning"
+            label="Gói Tập & Khóa Học"
+            value={`${packages.length} gói`}
+            hint={
+              <span className="flex items-center justify-between text-xs">
+                <span>42% doanh thu</span>
+                <span className="text-amber-600 dark:text-amber-400 font-semibold group-hover:underline ml-1">Cấu hình gói →</span>
+              </span>
+            }
+            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-amber-500/60 h-full ${activeTab === 'packages-engine' ? 'ring-2 ring-amber-500/40 border-amber-500 shadow-xs' : ''
+              }`}
+          />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            onTabChange('tickets-management');
+            soundEffects.playSuccessBeep();
+          }}
+          className="text-left transition-all active:scale-[0.98] hover:-translate-y-0.5 group relative block w-full focus:outline-none cursor-pointer"
+        >
+          {openTicketsCount > 0 && (
+            <div className="absolute -top-2.5 right-2 z-10">
+              <Badge variant="destructive" className="animate-pulse shadow-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border-2 border-background">
+                ⚠ CẦN XỬ LÝ GẤP
+              </Badge>
             </div>
-            <div style={{ background: 'rgba(255, 61, 0, 0.15)', color: 'var(--color-danger)', padding: 10, borderRadius: 'var(--radius-full)' }}>
-              <LifeBuoy size={20} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-primary)', marginTop: 10 }}>
-            <span>{tickets.filter(t => t.status === 'in_progress').length} đang xử lý • Xem ngay →</span>
-          </div>
-        </div>
+          )}
+          <StatCard
+            icon={LifeBuoy}
+            tone={openTicketsCount > 0 ? 'danger' : 'primary'}
+            label="Báo Cáo / Sự Cố Chờ Duyệt"
+            value={`${openTicketsCount} chờ BQL`}
+            hint={
+              <span className={openTicketsCount > 0 ? 'text-destructive font-bold flex items-center justify-between text-xs' : 'text-primary font-medium flex items-center justify-between text-xs'}>
+                <span>{openTicketsCount > 0 ? `${openTicketsCount} sự cố khẩn cấp` : `${inProgressTicketsCount} đang xử lý`}</span>
+                <span className="font-semibold group-hover:underline ml-1">Xem ngay →</span>
+              </span>
+            }
+            className={`transition-all duration-200 group-hover:shadow-md h-full ${openTicketsCount > 0
+                ? 'border-destructive/80 bg-destructive/10 ring-2 ring-destructive/40 group-hover:border-destructive'
+                : activeTab === 'tickets-management'
+                  ? 'ring-2 ring-primary/40 border-primary shadow-xs'
+                  : 'group-hover:border-primary/60'
+              }`}
+          />
+        </button>
       </div>
 
       {/* TAB 1: BI Analytics & Reports */}
       {activeTab === 'analytics' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 'var(--space-xxxl)' }}>
-          {/* Revenue Breakdown */}
-          <div className="card-athletic">
-            <h3 style={{ fontSize: 18, color: '#fff', marginBottom: 6 }}>Cơ Cấu Doanh Thu Theo Loại Dịch Vụ</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-              Phân tích tỷ trọng đóng góp vào ngân sách trung tâm
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Hybrid Gold */}
+        <div className="grid gap-6">
+          {/* 1. Full-Width Interactive Area & Line Growth Chart */}
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4 pb-2">
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                  <span style={{ color: '#fff' }}>Gói VIP Hybrid (Gym + PT Quota)</span>
-                  <span className="metric-mono" style={{ color: 'var(--color-primary)', fontWeight: 700 }}>52% (5.800.000 đ)</span>
-                </div>
-                <div style={{ height: 10, background: 'var(--bg-app)', borderRadius: 10, overflow: 'hidden' }}>
-                  <div style={{ width: '52%', height: '100%', background: 'var(--color-primary)' }} />
-                </div>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="size-5 text-primary" />
+                  Xu Hướng Tăng Trưởng Doanh Thu & Lượng Khách Check-in
+                </CardTitle>
+                <CardDescription className="text-foreground/75 font-medium">
+                  Biểu đồ phân tích tương quan giữa doanh số bán thẻ và mật độ tập luyện ({timeFilteredData.label})
+                </CardDescription>
               </div>
 
-              {/* Specialized Courses */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                  <span style={{ color: '#fff' }}>Khóa Học Chuyên Biệt (Yoga Trị Liệu, Boxing Bootcamp)</span>
-                  <span className="metric-mono" style={{ color: 'var(--color-info)', fontWeight: 700 }}>34% (3.800.000 đ)</span>
+              {/* Chart Legend & Summary Chips */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/50 text-xs font-semibold">
+                  <span className="size-2.5 rounded-full bg-primary" />
+                  <span className="text-foreground">Doanh Thu:</span>
+                  <span className="text-primary font-bold">{timeFilteredData.revenue.toLocaleString('vi-VN')} đ</span>
                 </div>
-                <div style={{ height: 10, background: 'var(--bg-app)', borderRadius: 10, overflow: 'hidden' }}>
-                  <div style={{ width: '34%', height: '100%', background: 'var(--color-info)' }} />
-                </div>
-              </div>
-
-              {/* Standard Gym */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                  <span style={{ color: '#fff' }}>Thẻ Standard Gym Tự Do</span>
-                  <span className="metric-mono" style={{ color: 'var(--color-success)', fontWeight: 700 }}>14% (1.550.000 đ)</span>
-                </div>
-                <div style={{ height: 10, background: 'var(--bg-app)', borderRadius: 10, overflow: 'hidden' }}>
-                  <div style={{ width: '14%', height: '100%', background: 'var(--color-success)' }} />
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/50 text-xs font-semibold">
+                  <span className="size-2.5 rounded-full bg-sky-500" />
+                  <span className="text-foreground">Check-in:</span>
+                  <span className="text-sky-600 dark:text-sky-400 font-bold">{timeFilteredData.activeCheckIns} lượt</span>
                 </div>
               </div>
-            </div>
+            </CardHeader>
+            <CardContent>
+              {/* SVG Growth Curve Area & Line Chart */}
+              <div className="w-full overflow-x-auto">
+                <div className="min-w-[580px] h-[210px] w-full pt-2">
+                  <svg viewBox="0 0 700 200" className="w-full h-full overflow-visible">
+                    <defs>
+                      <linearGradient id="auraRevenueGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.32" />
+                        <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.0" />
+                      </linearGradient>
+                      <linearGradient id="auraSkyGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0284c7" stopOpacity="0.2" />
+                        <stop offset="100%" stopColor="#0284c7" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
 
-            {/* Peak Hours Heatmap simulation */}
-            <div style={{ marginTop: 32 }}>
-              <h4 style={{ fontSize: 16, color: '#fff', marginBottom: 12 }}>Mật Độ Hội Viên Theo Khung Giờ (Peak Hours)</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, textAlign: 'center' }}>
-                {[
-                  { time: '06:00 - 08:00', density: '65%', label: 'Vừa' },
-                  { time: '08:00 - 11:00', density: '35%', label: 'Thấp' },
-                  { time: '11:30 - 13:30', density: '50%', label: 'Vừa' },
-                  { time: '14:00 - 17:00', density: '40%', label: 'Thấp' },
-                  { time: '17:30 - 20:30', density: '95%', label: 'Rất Cao', peak: true },
-                  { time: '20:30 - 22:00', density: '60%', label: 'Vừa' }
-                ].map((slot, i) => (
-                  <div key={i} style={{
-                    padding: '12px 6px',
-                    background: slot.peak ? 'rgba(254,116,19,0.2)' : 'var(--bg-app)',
-                    border: slot.peak ? '1px solid var(--color-primary)' : '1px solid rgba(255,255,255,0.06)',
-                    borderRadius: 'var(--radius-sm)'
-                  }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{slot.time}</div>
-                    <div className="metric-mono" style={{ fontSize: 16, fontWeight: 800, color: slot.peak ? 'var(--color-primary)' : '#fff', marginTop: 4 }}>
-                      {slot.density}
+                    {/* Horizontal Grid lines */}
+                    <line x1="40" y1="30" x2="680" y2="30" stroke="currentColor" strokeOpacity="0.08" strokeDasharray="3 3" />
+                    <line x1="40" y1="80" x2="680" y2="80" stroke="currentColor" strokeOpacity="0.08" strokeDasharray="3 3" />
+                    <line x1="40" y1="130" x2="680" y2="130" stroke="currentColor" strokeOpacity="0.08" strokeDasharray="3 3" />
+                    <line x1="40" y1="170" x2="680" y2="170" stroke="currentColor" strokeOpacity="0.15" />
+
+                    {/* Y-axis labels */}
+                    <text x="32" y="34" textAnchor="end" className="text-[10px] fill-foreground/60 font-semibold">Cao</text>
+                    <text x="32" y="104" textAnchor="end" className="text-[10px] fill-foreground/60 font-semibold">TB</text>
+                    <text x="32" y="174" textAnchor="end" className="text-[10px] fill-foreground/60 font-semibold">0</text>
+
+                    {/* Area Polygon & Curve for Revenue */}
+                    {(() => {
+                      const data = timeFilteredData.chartData;
+                      const stepX = (640 / Math.max(1, data.length - 1));
+                      const maxRev = Math.max(...data.map(d => d.rev), 1);
+                      const points = data.map((d, i) => {
+                        const x = 50 + i * stepX;
+                        const y = 170 - (d.rev / maxRev) * 135;
+                        return { x, y, ...d };
+                      });
+
+                      const pathD = points.reduce((acc, p, i) => {
+                        if (i === 0) return `M ${p.x} ${p.y}`;
+                        const prev = points[i - 1];
+                        const cx1 = prev.x + (p.x - prev.x) / 2;
+                        const cx2 = cx1;
+                        return `${acc} C ${cx1} ${prev.y}, ${cx2} ${p.y}, ${p.x} ${p.y}`;
+                      }, '');
+
+                      const areaD = `${pathD} L ${points[points.length - 1].x} 170 L ${points[0].x} 170 Z`;
+
+                      return (
+                        <>
+                          <path d={areaD} fill="url(#auraRevenueGrad)" />
+                          <path d={pathD} fill="none" stroke="var(--color-primary)" strokeWidth="3" strokeLinecap="round" />
+                          {points.map((p, i) => (
+                            <g key={i}>
+                              <circle cx={p.x} cy={p.y} r="5" fill="var(--bg-card)" stroke="var(--color-primary)" strokeWidth="2.5" />
+                              <text x={p.x} y={p.y - 10} textAnchor="middle" className="text-[10px] font-bold fill-primary">
+                                {p.rev}M
+                              </text>
+                              {/* Bottom X-axis label */}
+                              <text x={p.x} y="190" textAnchor="middle" className="text-[11px] font-semibold fill-foreground/80">
+                                {p.label}
+                              </text>
+                            </g>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </svg>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 2. Operational Breakdown Grid: Service Mix & Peak Hours vs Recent Invoices */}
+          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Cơ Cấu Doanh Thu Theo Loại Dịch Vụ</CardTitle>
+                <CardDescription className="text-foreground/75 font-medium">Phân tích tỷ trọng đóng góp vào ngân sách trung tâm</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-6">
+                <div className="grid gap-4">
+                  <div>
+                    <div className="flex justify-between text-sm mb-1.5 font-semibold text-foreground">
+                      <span>Gói VIP Hybrid (Gym + PT Quota)</span>
+                      <span className="text-primary font-bold">52% (5.800.000 đ)</span>
                     </div>
-                    <span style={{ fontSize: 10, color: slot.peak ? 'var(--color-primary)' : 'var(--text-dim)' }}>
-                      {slot.label}
-                    </span>
+                    <Progress value={52} className="h-2.5" />
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Invoices Feed */}
-          <div className="card-athletic">
-            <h3 style={{ fontSize: 18, color: '#fff', marginBottom: 16 }}>Giao Dịch Gần Đây</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {invoices.map(inv => (
-                <div key={inv.id} style={{
-                  padding: 14,
-                  background: 'var(--bg-app)',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid rgba(255,255,255,0.06)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <strong style={{ color: '#fff', fontSize: 14 }}>{inv.memberName}</strong>
-                    <span className="metric-mono" style={{ color: 'var(--color-primary)', fontWeight: 800 }}>
-                      +{inv.totalVND.toLocaleString('vi-VN')} đ
-                    </span>
+                  <div>
+                    <div className="flex justify-between text-sm mb-1.5 font-semibold text-foreground">
+                      <span>Khóa Học Chuyên Biệt (Yoga, Boxing Bootcamp)</span>
+                      <span className="text-sky-600 dark:text-sky-400 font-bold">34% (3.800.000 đ)</span>
+                    </div>
+                    <Progress value={34} className="h-2.5" />
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {inv.items[0]?.name}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>
-                    <span>PT: {inv.paymentMethod.toUpperCase()}</span>
-                    <span>{new Date(inv.createdAt).toLocaleString('vi-VN')}</span>
+                  <div>
+                    <div className="flex justify-between text-sm mb-1.5 font-semibold text-foreground">
+                      <span>Thẻ Standard Gym Tự Do</span>
+                      <span className="text-success font-bold">14% (1.550.000 đ)</span>
+                    </div>
+                    <Progress value={14} className="h-2.5" />
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* TAB 2: Member Management 360 (Luồng 8) */}
-      {activeTab === 'members-360' && (
-        <div className="card-athletic">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <div>
-              <h3 style={{ fontSize: 20, color: '#fff' }}>Quản Lý Hồ Sơ Hội Viên 360°</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Tra cứu đầy đủ thông tin cá nhân, gói tập, lịch sử check-in, hóa đơn và tiến độ tập luyện
-              </p>
-            </div>
+                <Separator />
 
-            <div style={{ position: 'relative', width: 300 }}>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Tìm theo tên, SĐT, mã HV..."
-                value={memberSearchQuery}
-                onChange={(e) => setMemberSearchQuery(e.target.value)}
-              />
-              <Search size={16} style={{ position: 'absolute', right: 12, top: 14, color: 'var(--text-dim)' }} />
-            </div>
-          </div>
-
-          {/* Members Table */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-dim)', fontSize: 11, textTransform: 'uppercase' }}>
-                <th style={{ padding: '12px 8px' }}>Hội Viên</th>
-                <th style={{ padding: '12px 8px' }}>Gói Đang Dùng</th>
-                <th style={{ padding: '12px 8px' }}>Hạn Gói</th>
-                <th style={{ padding: '12px 8px' }}>Buổi PT Còn</th>
-                <th style={{ padding: '12px 8px' }}>HLV Phụ Trách</th>
-                <th style={{ padding: '12px 8px' }}>Check-in</th>
-                <th style={{ padding: '12px 8px', textAlign: 'right' }}>Chi Tiết 360°</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredMembers.map(m => (
-                <tr key={m.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <td style={{ padding: '12px 8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <img src={m.avatar} alt={m.name} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
-                      <div>
-                        <strong style={{ color: '#fff' }}>{m.name}</strong>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.code} • {m.phone}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 8px', color: '#fff' }}>{m.packageName}</td>
-                  <td style={{ padding: '12px 8px' }}>
-                    <span className="metric-mono" style={{ color: m.daysRemaining > 3 ? '#fff' : 'var(--color-danger)' }}>
-                      {m.packageEndDate}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 8px' }}>
-                    {m.ptSessionsTotal > 0 ? (
-                      <span className="metric-mono" style={{ color: 'var(--color-primary)', fontWeight: 700 }}>
-                        {m.ptSessionsRemaining}/{m.ptSessionsTotal}
-                      </span>
-                    ) : '-'}
-                  </td>
-                  <td style={{ padding: '12px 8px', color: '#fff' }}>
-                    {m.assignedCoachName || 'Chưa gán'}
-                  </td>
-                  <td style={{ padding: '12px 8px' }}>
-                    <span className="metric-mono" style={{ color: 'var(--color-success)', fontWeight: 700 }}>
-                      {m.totalCheckIns} lượt
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 8px', textAlign: 'right' }}>
-                    <button
-                      className="btn-outline"
-                      style={{ padding: '6px 12px', fontSize: 12 }}
-                      onClick={() => setInspectingMember(m)}
-                    >
-                      <Eye size={14} />
-                      <span>Xem Hồ Sơ 360°</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Member 360 Profile Modal (Luồng 8) */}
-      {inspectingMember && (
-        <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 720 }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '20px 24px',
-              borderBottom: 'var(--border-subtle)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <img src={inspectingMember.avatar} alt={inspectingMember.name} style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }} />
                 <div>
-                  <h3 style={{ fontSize: 18, color: '#fff' }}>Hồ Sơ Toàn Diện Hội Viên (Member 360°)</h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {inspectingMember.name} • {inspectingMember.code} • {inspectingMember.phone}
-                  </p>
-                </div>
-              </div>
-              <button className="btn-ghost" onClick={() => setInspectingMember(null)}>✕</button>
-            </div>
-
-            <div style={{ padding: '24px' }}>
-              {/* 4 Tabs Inside Member Profile */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 20 }}>
-                {/* 1. Gói tập hiện tại */}
-                <div style={{ background: 'var(--bg-app)', padding: 16, borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 8 }}>
-                    Thông tin Gói Tập
-                  </div>
-                  <strong style={{ color: '#fff', fontSize: 14 }}>{inspectingMember.packageName}</strong>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                    Hạn dùng: {inspectingMember.packageStartDate} đến {inspectingMember.packageEndDate}
-                  </div>
-                  {inspectingMember.ptSessionsTotal > 0 && (
-                    <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-primary)', fontWeight: 700 }}>
-                      Số buổi PT cá nhân: {inspectingMember.ptSessionsRemaining}/{inspectingMember.ptSessionsTotal} buổi
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. HLV Phụ Trách & Đổi Coach */}
-                <div style={{ background: 'var(--bg-app)', padding: 16, borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 8 }}>
-                    Huấn Luyện Viên Phụ Trách
-                  </div>
-                  <strong style={{ color: '#fff', fontSize: 14 }}>
-                    {inspectingMember.assignedCoachName || 'Chưa gán HLV'}
-                  </strong>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                    Học viên có quyền đổi Coach theo chính sách bù trừ chênh lệch giá.
-                  </p>
-                  <button
-                    className="btn-outline"
-                    style={{ padding: '4px 10px', fontSize: 11, marginTop: 8 }}
-                    onClick={() => {
-                      soundEffects.playSuccessBeep();
-                      alert(`Đã mở quy trình hỗ trợ đổi Coach cho ${inspectingMember.name}!`);
-                    }}
-                  >
-                    Hỗ Trợ Đổi Huấn Luyện Viên
-                  </button>
-                </div>
-              </div>
-
-              {/* InBody Records */}
-              <div style={{ background: 'var(--bg-app)', padding: 16, borderRadius: 'var(--radius-sm)', marginBottom: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 10 }}>
-                  Lịch Sử Tiến Trình Thể Thao & InBody
-                </div>
-                {inspectingMember.inBodyHistory.length > 0 ? (
-                  <div style={{ display: 'flex', gap: 16 }}>
-                    {inspectingMember.inBodyHistory.map(ib => (
-                      <div key={ib.id} style={{
-                        background: 'var(--bg-panel)',
-                        padding: 12,
-                        borderRadius: 8,
-                        fontSize: 12,
-                        flex: 1
-                      }}>
-                        <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{ib.date}</div>
-                        <div style={{ color: '#fff', marginTop: 4 }}>Cân nặng: <strong>{ib.weightKg} kg</strong></div>
-                        <div style={{ color: 'var(--color-success)' }}>Khối cơ: <strong>{ib.muscleMassKg} kg</strong></div>
-                        <div style={{ color: 'var(--color-warning)' }}>Tỷ lệ mỡ: <strong>{ib.bodyFatPercent}%</strong></div>
+                  <h4 className="text-sm font-bold text-foreground mb-3">Mật Độ Hội Viên Theo Khung Giờ (Peak Hours)</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 text-center">
+                    {[
+                      { time: '06:00 - 08:00', density: '65%', label: 'Vừa' },
+                      { time: '08:00 - 11:00', density: '35%', label: 'Thấp' },
+                      { time: '11:30 - 13:30', density: '50%', label: 'Vừa' },
+                      { time: '14:00 - 17:00', density: '40%', label: 'Thấp' },
+                      { time: '17:30 - 20:30', density: '95%', label: 'Rất Cao', peak: true },
+                      { time: '20:30 - 22:00', density: '60%', label: 'Vừa' }
+                    ].map((slot, i) => (
+                      <div
+                        key={i}
+                        className={`p-3 rounded-lg border text-xs transition-all ${slot.peak
+                          ? 'border-primary bg-primary/10 ring-1 ring-primary shadow-xs'
+                          : 'bg-muted/50 border-border'
+                          }`}
+                      >
+                        <div className="text-foreground/75 font-semibold text-[11px]">{slot.time}</div>
+                        <div className={`text-base font-extrabold my-1 ${slot.peak ? 'text-primary' : 'text-foreground'}`}>
+                          {slot.density}
+                        </div>
+                        <Badge variant={slot.peak ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0 font-bold">
+                          {slot.label}
+                        </Badge>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Chưa có lần đo InBody nào được ghi nhận.</p>
-                )}
-              </div>
-
-              <button className="btn-secondary" style={{ width: '100%' }} onClick={() => setInspectingMember(null)}>
-                Đóng Hồ Sơ
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB: Incident & Support Ticket Command Center (Tiếp nhận & Chỉ đạo xử lý sự cố từ Lễ tân) */}
-      {activeTab === 'tickets-management' && (
-        <div>
-          {/* Main Console Card */}
-          <div className="card-athletic" style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 16 }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 'var(--radius-full)',
-                    background: 'rgba(254, 116, 19, 0.15)',
-                    color: 'var(--color-primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <LifeBuoy size={20} />
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: 20, color: '#fff', margin: 0 }}>
-                      Trung Tâm Xử Lý Báo Cáo & Yêu Cầu Hỗ Trợ
-                    </h3>
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, marginTop: 2 }}>
-                      Tiếp nhận sự cố, yêu cầu bảo lưu thẻ và khiếu nại từ quầy Lễ tân • Phê duyệt & Giao việc xử lý
-                    </p>
-                  </div>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              {/* Search & Category Filter */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative', width: 280 }}>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Tìm mã ticket, tên khách, SĐT..."
-                    value={ticketSearchQuery}
-                    onChange={(e) => setTicketSearchQuery(e.target.value)}
-                  />
-                  <Search size={16} style={{ position: 'absolute', right: 12, top: 14, color: 'var(--text-dim)' }} />
-                </div>
-
-                <select
-                  className="form-input"
-                  style={{ width: 'auto', minWidth: 160 }}
-                  value={ticketCategoryFilter}
-                  onChange={(e) => setTicketCategoryFilter(e.target.value)}
-                >
-                  <option value="all">Tất cả danh mục</option>
-                  <option value="lost_found">Đồ thất lạc (Lost & Found)</option>
-                  <option value="freeze_request">Yêu cầu bảo lưu gói tập</option>
-                  <option value="equipment">Hỏng máy / CSVC</option>
-                  <option value="coach_feedback">Phản ánh Huấn luyện viên</option>
-                  <option value="other">Yêu cầu khác</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Status Filter Tabs Bar */}
-            <div style={{
-              display: 'flex',
-              gap: 8,
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
-              paddingBottom: 12,
-              marginBottom: 20,
-              overflowX: 'auto'
-            }}>
-              <button
-                type="button"
-                style={{
-                  background: ticketStatusFilter === 'all' ? 'var(--color-primary)' : 'transparent',
-                  color: ticketStatusFilter === 'all' ? '#fff' : 'var(--text-muted)',
-                  border: 'none',
-                  borderRadius: 'var(--radius-full)',
-                  padding: '6px 14px',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-                onClick={() => setTicketStatusFilter('all')}
-              >
-                Tất Cả ({tickets.length})
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  background: ticketStatusFilter === 'open' ? 'var(--color-danger)' : 'transparent',
-                  color: ticketStatusFilter === 'open' ? '#fff' : 'var(--color-danger)',
-                  border: '1px solid rgba(255, 61, 0, 0.3)',
-                  borderRadius: 'var(--radius-full)',
-                  padding: '6px 14px',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-                onClick={() => setTicketStatusFilter('open')}
-              >
-                Chờ BQL Duyệt ({tickets.filter(t => t.status === 'open').length})
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  background: ticketStatusFilter === 'in_progress' ? 'var(--color-warning)' : 'transparent',
-                  color: ticketStatusFilter === 'in_progress' ? '#000' : 'var(--color-warning)',
-                  border: '1px solid rgba(255, 171, 0, 0.3)',
-                  borderRadius: 'var(--radius-full)',
-                  padding: '6px 14px',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-                onClick={() => setTicketStatusFilter('in_progress')}
-              >
-                Đang Xử Lý / Giao Việc ({tickets.filter(t => t.status === 'in_progress').length})
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  background: ticketStatusFilter === 'resolved' ? 'var(--color-success)' : 'transparent',
-                  color: ticketStatusFilter === 'resolved' ? '#fff' : 'var(--color-success)',
-                  border: '1px solid rgba(0, 200, 83, 0.3)',
-                  borderRadius: 'var(--radius-full)',
-                  padding: '6px 14px',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-                onClick={() => setTicketStatusFilter('resolved')}
-              >
-                Đã Giải Quyết Xong ({tickets.filter(t => t.status === 'resolved').length})
-              </button>
-            </div>
-
-            {/* Ticket List */}
-            {filteredTickets.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
-                <CheckCircle2 size={42} style={{ color: 'var(--color-success)', margin: '0 auto 12px auto' }} />
-                <h4 style={{ color: '#fff', fontSize: 16 }}>Không có báo cáo nào trong danh mục này!</h4>
-                <p style={{ fontSize: 13, marginTop: 4 }}>Hệ thống vận hành ổn định, không có sự cố nào cần xử lý thêm.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {filteredTickets.map(t => (
-                  <div
-                    key={t.id}
-                    style={{
-                      background: 'var(--bg-app)',
-                      border: t.status === 'open' 
-                        ? '1px solid rgba(255, 61, 0, 0.4)' 
-                        : t.status === 'in_progress'
-                        ? '1px solid rgba(255, 171, 0, 0.3)'
-                        : '1px solid rgba(255,255,255,0.06)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: 18,
-                      transition: 'border-color 0.15s ease'
-                    }}
-                  >
-                    {/* Top Row: Code, Category, Priority, Status */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span className="metric-mono" style={{ fontSize: 13, fontWeight: 900, color: 'var(--color-primary)' }}>
-                          {t.ticketCode || t.id.toUpperCase()}
-                        </span>
-
-                        <span style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: 4,
-                          background: 'rgba(255,255,255,0.06)',
-                          color: t.category === 'lost_found' ? 'var(--color-warning)' :
-                                 t.category === 'freeze_request' ? 'var(--color-info)' :
-                                 t.category === 'equipment' ? 'var(--color-danger)' : '#fff'
-                        }}>
-                          {t.category === 'lost_found' ? '📦 Đồ thất lạc' :
-                           t.category === 'freeze_request' ? '⏸️ Bảo lưu gói tập' :
-                           t.category === 'equipment' ? '⚠️ Hỏng máy tập / CSVC' :
-                           t.category === 'coach_feedback' ? '💬 Phản ánh HLV' : '📋 Yêu cầu khác'}
-                        </span>
-
-                        <span style={{
-                          fontSize: 10,
-                          fontWeight: 800,
-                          padding: '2px 6px',
-                          borderRadius: 4,
-                          textTransform: 'uppercase',
-                          background: t.priority === 'high' ? 'rgba(255, 61, 0, 0.2)' : 'rgba(255,255,255,0.05)',
-                          color: t.priority === 'high' ? 'var(--color-danger)' : 'var(--text-muted)'
-                        }}>
-                          Ưu tiên {t.priority === 'high' ? 'Cao' : t.priority === 'medium' ? 'Trung bình' : 'Thấp'}
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className={`badge ${
-                          t.status === 'open' ? 'badge-warning' :
-                          t.status === 'in_progress' ? 'badge-primary' : 'badge-success'
-                        }`}>
-                          {t.status === 'open' ? '🔴 Chờ BQL Phê Duyệt' :
-                           t.status === 'in_progress' ? '🟡 Đang Chỉ Đạo Xử Lý' : '🟢 Đã Giải Quyết'}
-                        </span>
-                      </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Giao Dịch Gần Đây</CardTitle>
+                <CardDescription className="text-foreground/75 font-medium">Nhật ký hóa đơn vừa thanh toán</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 max-h-[500px] overflow-y-auto pr-1">
+                {invoices.map(inv => (
+                  <div key={inv.id} className="p-3.5 rounded-lg border bg-card/90 hover:border-primary/50 transition-all text-xs shadow-xs">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-bold text-sm text-foreground">{inv.memberName}</span>
+                      <span className="font-extrabold text-sm text-primary">+{inv.totalVND.toLocaleString('vi-VN')} đ</span>
                     </div>
-
-                    {/* Incident Title & Description */}
-                    <h4 style={{ fontSize: 16, color: '#fff', marginBottom: 6 }}>
-                      {t.title}
-                    </h4>
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12 }}>
-                      {t.description}
-                    </p>
-
-                    {/* Member & Submitter Info */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      background: 'var(--bg-panel)',
-                      padding: '8px 12px',
-                      borderRadius: 6,
-                      fontSize: 12,
-                      color: 'var(--text-dim)',
-                      flexWrap: 'wrap',
-                      gap: 8
-                    }}>
-                      <div>
-                        <span>Hội viên liên quan: <strong style={{ color: '#fff' }}>{t.memberName}</strong> ({t.memberPhone})</span>
-                      </div>
-                      <div>
-                        <span>Người tiếp nhận: <strong style={{ color: 'var(--color-primary)' }}>{t.createdBy || 'Thu Ngân (Lễ tân)'}</strong> • lúc {new Date(t.createdAt).toLocaleTimeString('vi-VN')} {new Date(t.createdAt).toLocaleDateString('vi-VN')}</span>
-                      </div>
-                    </div>
-
-                    {/* Existing Admin Response Box (if already responded) */}
-                    {t.adminResponse && (
-                      <div style={{
-                        marginTop: 12,
-                        padding: '12px 14px',
-                        background: 'rgba(254, 116, 19, 0.08)',
-                        border: '1px solid rgba(254, 116, 19, 0.3)',
-                        borderRadius: 6
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            👨‍💼 CHỈ ĐẠO CỦA QUẢN LÝ TRUNG TÂM (ADMIN):
-                          </span>
-                          <span className="badge badge-warning" style={{ fontSize: 9 }}>
-                            {t.actionRequiredBy === 'receptionist' ? '⚡ Yêu cầu Lễ tân xử lý tiếp' :
-                             t.actionRequiredBy === 'technician' ? '🔧 Đã chuyển Kỹ thuật viên' :
-                             t.actionRequiredBy === 'coach' ? '🏋️ Đã chuyển Huấn luyện viên' : '👑 BQL trực tiếp xử lý'}
-                          </span>
-                        </div>
-                        <p style={{ fontSize: 13, color: '#fff', margin: 0, lineHeight: 1.4 }}>
-                          {t.adminResponse}
-                        </p>
-                        {t.respondedAt && (
-                          <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 6 }}>
-                            Đã ban hành chỉ đạo lúc: {new Date(t.respondedAt).toLocaleTimeString('vi-VN')} {new Date(t.respondedAt).toLocaleDateString('vi-VN')}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Action Toolbar */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
-                      <button
-                        className="btn-primary"
-                        style={{ padding: '7px 16px', fontSize: 12 }}
-                        onClick={() => handleOpenResponseModal(t)}
-                      >
-                        <MessageSquare size={14} />
-                        <span>{t.adminResponse ? 'Sửa / Bổ Sung Chỉ Đạo' : 'Chỉ Đạo & Phản Hồi Xử Lý'}</span>
-                      </button>
-
-                      {t.status !== 'resolved' && (
-                        <button
-                          className="btn-outline"
-                          style={{ padding: '7px 14px', fontSize: 12, color: 'var(--color-success)', borderColor: 'rgba(0, 200, 83, 0.4)' }}
-                          onClick={() => handleQuickResolveTicket(t)}
-                        >
-                          <CheckCircle2 size={14} />
-                          <span>Duyệt & Đóng Ticket Xong</span>
-                        </button>
-                      )}
+                    <div className="text-foreground/80 font-medium line-clamp-1">{inv.items[0]?.name}</div>
+                    <div className="flex justify-between items-center text-foreground/75 mt-2.5 text-[11px] font-medium">
+                      <Badge variant="outline" className="text-[10px] uppercase font-bold border-border/80">{inv.paymentMethod}</Badge>
+                      <span>{new Date(inv.createdAt).toLocaleString('vi-VN')}</span>
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}
 
-      {/* TAB 3: Coach Management & Pricing (Luồng 9) */}
-      {activeTab === 'coaches-config' && (
-        <div className="card-athletic">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <div>
-              <h3 style={{ fontSize: 20, color: '#fff' }}>Quản Trị Huấn Luyện Viên & Bảng Giá Dạy Lẻ</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Thiết lập cấp bậc (Junior/Senior/Master), đơn giá riêng từng Coach và tỷ lệ chia sẻ hoa hồng
-              </p>
-            </div>
-          </div>
+      {/* TAB 2: Member Management 360 */}
+      {activeTab === 'members-360' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Quản Lý Hồ Sơ Hội Viên</CardTitle>
+            <CardDescription>Tra cứu đầy đủ thông tin cá nhân, gói tập, lịch sử check-in, hóa đơn và tiến độ</CardDescription>
+            <CardAction>
+              <div className="relative w-72">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Tìm theo tên, SĐT, mã HV..."
+                  value={memberSearchQuery}
+                  onChange={(e) => setMemberSearchQuery(e.target.value)}
+                />
+              </div>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Hội Viên</TableHead>
+                  <TableHead>Gói Đang Dùng</TableHead>
+                  <TableHead>Hạn Gói</TableHead>
+                  <TableHead>Buổi PT Còn</TableHead>
+                  <TableHead>HLV Phụ Trách</TableHead>
+                  <TableHead>Check-in</TableHead>
+                  <TableHead className="text-right">Chi Tiết</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredMembers.map(m => (
+                  <TableRow key={m.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="size-9">
+                          <AvatarImage src={m.avatar} alt={m.name} />
+                          <AvatarFallback>{m.name.slice(0, 1)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium text-foreground">{m.name}</div>
+                          <div className="text-xs text-muted-foreground">{m.code} • {m.phone}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium">{m.packageName}</TableCell>
+                    <TableCell className={m.daysRemaining > 3 ? '' : 'text-destructive font-medium'}>
+                      {m.packageEndDate}
+                    </TableCell>
+                    <TableCell>
+                      {m.ptSessionsTotal > 0 ? (
+                        <span className="font-semibold text-primary">{m.ptSessionsRemaining}/{m.ptSessionsTotal}</span>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>{m.assignedCoachName || <span className="text-muted-foreground">Chưa gán</span>}</TableCell>
+                    <TableCell className="font-semibold text-success">{m.totalCheckIns} lượt</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="outline" size="sm" onClick={() => setInspectingMember(m)}>
+                        <Eye className="size-4" /> Xem 360°
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-            {coaches.map(c => (
-              <div key={c.id} style={{
-                background: 'var(--bg-app)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: 'var(--radius-sm)',
-                padding: 18
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                  <img src={c.avatar} alt={c.name} style={{ width: 50, height: 50, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }} />
+      {/* Member 360 Modal Dialog */}
+      <Dialog open={!!inspectingMember} onOpenChange={(open) => { if (!open) setInspectingMember(null); }}>
+        <DialogContent className="max-w-2xl">
+          {inspectingMember && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-3">
+                  <Avatar className="size-12">
+                    <AvatarImage src={inspectingMember.avatar} alt={inspectingMember.name} />
+                    <AvatarFallback>{inspectingMember.name.slice(0, 1)}</AvatarFallback>
+                  </Avatar>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <strong style={{ color: '#fff', fontSize: 15 }}>{c.name}</strong>
-                      <span className={`badge badge-rank-${c.rank}`}>{c.rank.toUpperCase()}</span>
+                    <DialogTitle>{inspectingMember.name} (Member 360°)</DialogTitle>
+                    <DialogDescription>{inspectingMember.code} • SĐT: {inspectingMember.phone} • CCCD: {inspectingMember.cccd}</DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="grid gap-4 py-2">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-lg border bg-muted/40">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Thông tin Gói Tập</div>
+                    <div className="font-semibold text-foreground text-sm">{inspectingMember.packageName}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {inspectingMember.packageStartDate} đến {inspectingMember.packageEndDate}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.code} • {c.phone}</div>
+                    {inspectingMember.ptSessionsTotal > 0 && (
+                      <div className="text-xs font-bold text-primary mt-2">
+                        PT cá nhân: {inspectingMember.ptSessionsRemaining}/{inspectingMember.ptSessionsTotal} buổi
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-4 rounded-lg border bg-muted/40">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Huấn Luyện Viên Phụ Trách</div>
+                    <div className="font-semibold text-foreground text-sm">{inspectingMember.assignedCoachName || 'Chưa gán HLV'}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Học viên có quyền đổi Coach theo chính sách bù trừ chênh lệch.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => {
+                        soundEffects.playSuccessBeep();
+                        alert(`Đã mở quy trình hỗ trợ đổi Coach cho ${inspectingMember.name}!`);
+                      }}
+                    >
+                      Hỗ Trợ Đổi HLV
+                    </Button>
                   </div>
                 </div>
 
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-                  Chuyên môn: <strong style={{ color: '#fff' }}>{c.specialties.join(', ')}</strong>
-                </div>
-
-                <div style={{
-                  background: 'var(--bg-panel)',
-                  padding: 12,
-                  borderRadius: 6,
-                  marginBottom: 14
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Đơn giá buổi dạy lẻ:</span>
-                    <strong className="metric-mono" style={{ color: 'var(--color-primary)', fontSize: 15 }}>
-                      {c.hourlyRateVND.toLocaleString('vi-VN')} đ
-                    </strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Hoa hồng Coach nhận:</span>
-                    <strong style={{ color: 'var(--color-success)', fontSize: 13 }}>{c.commissionPercent}%</strong>
-                  </div>
-                </div>
-
-                <button
-                  className="btn-outline"
-                  style={{ width: '100%', padding: '8px' }}
-                  onClick={() => {
-                    setEditingCoach(c);
-                    setNewHourlyRate(c.hourlyRateVND);
-                    setNewCommission(c.commissionPercent);
-                    setNewRank(c.rank);
-                  }}
-                >
-                  <Edit3 size={14} />
-                  <span>Cấu Hình Giá & Cấp Bậc</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Edit Coach Pricing Modal */}
-      {editingCoach && (
-        <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 500 }}>
-            <div style={{ padding: '20px 24px', borderBottom: 'var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
-              <h3 style={{ fontSize: 18, color: '#fff' }}>Thiết Lập Đơn Giá Cho HLV {editingCoach.name}</h3>
-              <button className="btn-ghost" onClick={() => setEditingCoach(null)}>✕</button>
-            </div>
-
-            <form onSubmit={handleSaveCoachPricing} style={{ padding: 24 }}>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 6 }}>
-                  Cấp Bậc Chuyên Môn:
-                </label>
-                <select
-                  className="form-input"
-                  value={newRank}
-                  onChange={(e) => setNewRank(e.target.value as any)}
-                >
-                  <option value="junior">JUNIOR COACH (Khởi điểm)</option>
-                  <option value="senior">SENIOR COACH (Kinh nghiệm &gt; 3 năm)</option>
-                  <option value="master">MASTER COACH (Vận động viên / Bằng Quốc tế)</option>
-                </select>
-              </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 6 }}>
-                  Đơn Giá Dạy Lẻ 1 Buổi (VNĐ) *:
-                </label>
-                <input
-                  type="number"
-                  step="50000"
-                  className="form-input"
-                  value={newHourlyRate}
-                  onChange={(e) => setNewHourlyRate(parseInt(e.target.value) || 250000)}
-                />
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 6 }}>
-                  Tỷ Lệ Hoa Hồng Thực Nhận (%):
-                </label>
-                <input
-                  type="number"
-                  min="30"
-                  max="80"
-                  className="form-input"
-                  value={newCommission}
-                  onChange={(e) => setNewCommission(parseInt(e.target.value) || 50)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setEditingCoach(null)}>
-                  Hủy Bỏ
-                </button>
-                <button type="submit" className="btn-primary" style={{ flex: 1 }}>
-                  <span>Lưu Cấu Hình Giá</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: Packages & Specialized Courses */}
-      {activeTab === 'packages-engine' && (
-        <div className="card-athletic">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <div>
-              <h3 style={{ fontSize: 20, color: '#fff' }}>Quản Lý Gói Tập & Khóa Học Chuyên Biệt</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Cấu hình mô hình Hybrid (Vào tập không giới hạn + Quota buổi PT) và Khóa học chuyên sâu
-              </p>
-            </div>
-            <button className="btn-primary" onClick={() => setIsCreatingPackage(true)}>
-              <Plus size={16} />
-              <span>Tạo Gói Dịch Vụ Mới</span>
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
-            {packages.map(pkg => (
-              <div key={pkg.id} style={{
-                background: 'var(--bg-app)',
-                borderRadius: 'var(--radius-sm)',
-                padding: 20,
-                border: '1px solid rgba(255,255,255,0.06)'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                  <h4 style={{ fontSize: 17, color: '#fff' }}>{pkg.name}</h4>
-                  {pkg.type === 'hybrid_pt' ? (
-                    <span className="badge badge-primary">Hybrid PT</span>
-                  ) : pkg.type === 'specialized_course' ? (
-                    <span className="badge" style={{ background: 'rgba(0,176,255,0.15)', color: 'var(--color-info)' }}>Chuyên Biệt</span>
+                <div className="p-4 rounded-lg border bg-muted/40">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Lịch Sử Tiến Trình InBody</div>
+                  {inspectingMember.inBodyHistory.length > 0 ? (
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      {inspectingMember.inBodyHistory.map(ib => (
+                        <div key={ib.id} className="p-3 rounded-md border bg-card text-xs">
+                          <div className="font-bold text-primary">{ib.date}</div>
+                          <div className="flex justify-between mt-1 text-muted-foreground">
+                            <span>Cân nặng: <strong className="text-foreground">{ib.weightKg}kg</strong></span>
+                            <span>Cơ: <strong className="text-success">{ib.muscleMassKg}kg</strong></span>
+                            <span>Mỡ: <strong className="text-warning">{ib.bodyFatPercent}%</strong></span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <span className="badge" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>Standard</span>
+                    <p className="text-xs text-muted-foreground">Chưa có lần đo InBody nào được ghi nhận.</p>
                   )}
                 </div>
 
-                <div className="metric-mono" style={{ fontSize: 24, fontWeight: 900, color: 'var(--color-primary)', marginBottom: 8 }}>
-                  {pkg.priceVND.toLocaleString('vi-VN')} <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>đ / {pkg.durationMonths} Tháng</span>
-                </div>
-
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
-                  {pkg.description}
-                </p>
-
-                {pkg.ptSessionsIncluded > 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--color-success)', fontWeight: 600, marginBottom: 12 }}>
-                    ✓ Bao gồm: {pkg.ptSessionsIncluded} buổi tập cùng HLV cá nhân
-                  </div>
-                )}
-
-                <div style={{ fontSize: 12, color: 'var(--text-dim)', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}>
-                  {pkg.features.slice(0, 3).map((f, i) => (
-                    <div key={i}>• {f}</div>
-                  ))}
+                <div className="p-4 rounded-lg border bg-muted/40">
+                  <Field label="Phân Quyền Vai Trò (Live Backend API Role)">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Select defaultValue="MEMBER" onValueChange={(val) => handleChangeUserRole(inspectingMember.id, val as any)}>
+                        <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="MEMBER">MEMBER (Hội Viên Thường)</SelectItem>
+                          <SelectItem value="COACH">COACH (Huấn Luyện Viên)</SelectItem>
+                          <SelectItem value="STAFF">STAFF (Lễ Tân / Thu Ngân)</SelectItem>
+                          <SelectItem value="ADMIN">ADMIN (Ban Quản Lý)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <span className="text-xs text-muted-foreground">Cập nhật quyền tức thời vào database qua REST API</span>
+                    </div>
+                  </Field>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* Create Package Modal */}
-      {isCreatingPackage && (
-        <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 540 }}>
-            <div style={{ padding: '20px 24px', borderBottom: 'var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
-              <h3 style={{ fontSize: 18, color: '#fff' }}>Tạo Gói Tập / Khóa Học Mới</h3>
-              <button className="btn-ghost" onClick={() => setIsCreatingPackage(false)}>✕</button>
-            </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setInspectingMember(null)}>Đóng Hồ Sơ</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
-            <form onSubmit={handleSavePackage} style={{ padding: 24 }}>
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                  Tên Gói Tập *:
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="form-input"
-                  placeholder="VD: Gói VIP Hybrid Platinum (3 Tháng + 24 Buổi PT)"
-                  value={newPackageForm.name}
-                  onChange={(e) => setNewPackageForm({ ...newPackageForm, name: e.target.value })}
+      {/* TAB 3: Incident & Support Ticket Command Center */}
+      {activeTab === 'tickets-management' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <LifeBuoy className="size-5 text-primary" /> Trung Tâm Xử Lý Báo Cáo & Yêu Cầu Hỗ Trợ
+            </CardTitle>
+            <CardDescription>
+              Tiếp nhận sự cố, bảo lưu và khiếu nại từ Lễ tân • Phê duyệt & Giao việc xử lý
+            </CardDescription>
+            <CardAction className="flex flex-wrap items-center gap-3">
+              <div className="relative w-64">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Tìm mã ticket, tên khách..."
+                  value={ticketSearchQuery}
+                  onChange={(e) => setTicketSearchQuery(e.target.value)}
                 />
               </div>
+              <Select value={ticketCategoryFilter} onValueChange={setTicketCategoryFilter}>
+                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tất cả danh mục</SelectItem>
+                  <SelectItem value="lost_found">Đồ thất lạc (Lost & Found)</SelectItem>
+                  <SelectItem value="freeze_request">Yêu cầu bảo lưu gói tập</SelectItem>
+                  <SelectItem value="equipment">Hỏng máy / CSVC</SelectItem>
+                  <SelectItem value="coach_feedback">Phản ánh Huấn luyện viên</SelectItem>
+                  <SelectItem value="other">Yêu cầu khác</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {/* Status Filter Tabs */}
+            <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+              <Button
+                variant={ticketStatusFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTicketStatusFilter('all')}
+              >
+                Tất Cả ({tickets.length})
+              </Button>
+              <Button
+                variant={ticketStatusFilter === 'open' ? 'destructive' : 'outline'}
+                size="sm"
+                onClick={() => setTicketStatusFilter('open')}
+              >
+                Chờ BQL Duyệt ({tickets.filter(t => t.status === 'open').length})
+              </Button>
+              <Button
+                variant={ticketStatusFilter === 'in_progress' ? 'secondary' : 'outline'}
+                size="sm"
+                className={ticketStatusFilter === 'in_progress' ? 'bg-warning/20 text-warning border-warning' : ''}
+                onClick={() => setTicketStatusFilter('in_progress')}
+              >
+                Đang Xử Lý / Giao Việc ({tickets.filter(t => t.status === 'in_progress').length})
+              </Button>
+              <Button
+                variant={ticketStatusFilter === 'resolved' ? 'secondary' : 'outline'}
+                size="sm"
+                className={ticketStatusFilter === 'resolved' ? 'bg-success/20 text-success border-success' : ''}
+                onClick={() => setTicketStatusFilter('resolved')}
+              >
+                Đã Giải Quyết Xong ({tickets.filter(t => t.status === 'resolved').length})
+              </Button>
+            </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                    Loại Gói:
-                  </label>
-                  <select
-                    className="form-input"
-                    value={newPackageForm.type}
-                    onChange={(e) => setNewPackageForm({ ...newPackageForm, type: e.target.value as any })}
-                  >
-                    <option value="hybrid_pt">Hybrid (Gym + Quota PT)</option>
-                    <option value="specialized_course">Khóa học chuyên biệt</option>
-                    <option value="standard_gym">Standard Gym thường</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                    Thời hạn (Tháng):
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    className="form-input"
-                    value={newPackageForm.durationMonths}
-                    onChange={(e) => setNewPackageForm({ ...newPackageForm, durationMonths: parseFloat(e.target.value) || 1 })}
-                  />
-                </div>
+            {filteredTickets.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground">
+                <CheckCircle2 className="size-10 text-success mx-auto mb-2" />
+                <h4 className="font-semibold text-foreground">Không có báo cáo nào trong danh mục này!</h4>
+                <p className="text-xs mt-1">Hệ thống vận hành ổn định, không có sự cố nào tồn đọng.</p>
               </div>
+            ) : (
+              <div className="grid gap-3">
+                {filteredTickets.map(t => {
+                  const cat = categoryMeta(t.category);
+                  return (
+                    <div key={t.id} className="p-4 rounded-lg border bg-card text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-primary">{t.ticketCode || t.id.toUpperCase()}</span>
+                          <Badge variant={cat.variant}>{cat.label}</Badge>
+                        </div>
+                        <Badge variant={t.status === 'open' ? 'destructive' : t.status === 'in_progress' ? 'warning' : 'success'}>
+                          {t.status === 'open' ? 'Chờ BQL duyệt' : t.status === 'in_progress' ? 'Đang xử lý' : 'Đã giải quyết'}
+                        </Badge>
+                      </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12, marginBottom: 14 }}>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                    Giá Niêm Yết (VNĐ) *:
-                  </label>
-                  <input
-                    type="number"
-                    step="100000"
+                      <h4 className="font-semibold text-foreground text-base">{t.title}</h4>
+                      <p className="text-muted-foreground text-sm mt-1">{t.description}</p>
+
+                      <div className="flex flex-wrap justify-between items-center text-xs text-muted-foreground mt-3 pt-3 border-t">
+                        <div>
+                          Hội viên: <strong className="text-foreground">{t.memberName}</strong> ({t.memberPhone}) • Người tạo: {t.createdBy}
+                        </div>
+                        <div>{new Date(t.createdAt).toLocaleString('vi-VN')}</div>
+                      </div>
+
+                      {t.adminResponse && (
+                        <div className="mt-3 p-3 rounded-md bg-primary/5 border border-primary/20 text-xs">
+                          <div className="flex justify-between items-center font-semibold text-primary mb-1">
+                            <span>CHỈ ĐẠO CỦA BQL (Giao cho: {t.actionRequiredBy?.toUpperCase()})</span>
+                            {t.respondedAt && <span>{new Date(t.respondedAt).toLocaleTimeString('vi-VN')}</span>}
+                          </div>
+                          <p className="text-foreground">{t.adminResponse}</p>
+                        </div>
+                      )}
+
+                      <div className="flex justify-end gap-2 mt-3 pt-2">
+                        {t.status !== 'resolved' && (
+                          <Button variant="outline" size="sm" onClick={() => handleQuickResolveTicket(t)}>
+                            <Check className="size-3.5" /> Đóng Trực Tiếp
+                          </Button>
+                        )}
+                        <Button size="sm" onClick={() => handleOpenResponseModal(t)}>
+                          <Send className="size-3.5" /> Chỉ Đạo / Giao Việc
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Ticket Response Modal Dialog */}
+      <Dialog open={!!respondingTicket} onOpenChange={(open) => { if (!open) setRespondingTicket(null); }}>
+        <DialogContent className="max-w-xl">
+          {respondingTicket && (
+            <form onSubmit={handleSaveAdminResponse}>
+              <DialogHeader>
+                <DialogTitle>Chỉ Đạo Xử Lý: {respondingTicket.title}</DialogTitle>
+                <DialogDescription>Mã: {respondingTicket.ticketCode} • Hội viên: {respondingTicket.memberName}</DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4 py-3">
+                <Field label="Ý kiến chỉ đạo & Phương án giải quyết *">
+                  <Textarea
+                    rows={4}
                     required
-                    className="form-input"
-                    value={newPackageForm.priceVND}
-                    onChange={(e) => setNewPackageForm({ ...newPackageForm, priceVND: parseInt(e.target.value) || 0 })}
+                    placeholder="VD: Lễ tân liên hệ trả đồ cho khách; Kỹ thuật kiểm tra dây cáp..."
+                    value={adminResponseText}
+                    onChange={(e) => setAdminResponseText(e.target.value)}
                   />
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                    Số Buổi PT Kèm Theo:
-                  </label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={newPackageForm.ptSessionsIncluded}
-                    onChange={(e) => setNewPackageForm({ ...newPackageForm, ptSessionsIncluded: parseInt(e.target.value) || 0 })}
-                  />
-                </div>
+                </Field>
+
+                <Field label="Bộ phận chịu trách nhiệm xử lý (Assignee)">
+                  <Select value={targetAssignee} onValueChange={(v) => setTargetAssignee(v as any)}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="receptionist">Lễ Tân / Quầy Thu Ngân</SelectItem>
+                      <SelectItem value="technician">Bộ Phận Kỹ Thuật & Bảo Trì</SelectItem>
+                      <SelectItem value="coach">Huấn Luyện Viên</SelectItem>
+                      <SelectItem value="admin">Ban Quản Lý trực tiếp</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field label="Cập nhật trạng thái">
+                  <Select value={targetStatus} onValueChange={(v) => setTargetStatus(v as any)}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="in_progress">🟡 Đang Chỉ Đạo Xử Lý (Giao việc)</SelectItem>
+                      <SelectItem value="resolved">🟢 Phê Duyệt & Đóng Hoàn Tất (Resolved)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
               </div>
 
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                  Mô Tả Ngắn:
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={newPackageForm.description}
-                  onChange={(e) => setNewPackageForm({ ...newPackageForm, description: e.target.value })}
-                />
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                  Danh sách đặc quyền (Mỗi dòng một mục):
-                </label>
-                <textarea
-                  rows={3}
-                  className="form-input"
-                  value={newPackageForm.featuresText}
-                  onChange={(e) => setNewPackageForm({ ...newPackageForm, featuresText: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setIsCreatingPackage(false)}>
-                  Hủy
-                </button>
-                <button type="submit" className="btn-primary" style={{ flex: 1 }}>
-                  <span>Tạo Gói Mới</span>
-                </button>
-              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setRespondingTicket(null)}>Hủy Bỏ</Button>
+                <Button type="submit"><Send className="size-4" /> Ban Hành Chỉ Đạo</Button>
+              </DialogFooter>
             </form>
-          </div>
-        </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* TAB 4: Coaches Management & Pricing */}
+      {activeTab === 'coaches-config' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Quản Trị Huấn Luyện Viên & Bảng Giá Dạy Lẻ</CardTitle>
+            <CardDescription>Thiết lập cấp bậc (Junior/Senior/Master), đơn giá riêng từng Coach và tỷ lệ chia sẻ hoa hồng</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {coaches.map(c => (
+                <div key={c.id} className="p-4 rounded-lg border bg-card flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-3 mb-3">
+                      <Avatar className="size-12">
+                        <AvatarImage src={c.avatar} alt={c.name} />
+                        <AvatarFallback>{c.name.slice(0, 1)}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-foreground">{c.name}</span>
+                          <Badge variant={rankVariant(c.rank)}>{c.rank.toUpperCase()}</Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground">{c.code} • {c.phone}</div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Chuyên môn: <strong className="text-foreground">{c.specialties.join(', ')}</strong>
+                    </p>
+
+                    <div className="p-3 rounded-md bg-muted/50 text-xs mb-4">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-muted-foreground">Đơn giá buổi dạy lẻ:</span>
+                        <strong className="text-primary font-bold text-sm">{c.hourlyRateVND.toLocaleString('vi-VN')} đ</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Hoa hồng Coach nhận:</span>
+                        <strong className="text-success font-semibold">{c.commissionPercent}%</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      setEditingCoach(c);
+                      setNewHourlyRate(c.hourlyRateVND);
+                      setNewCommission(c.commissionPercent);
+                      setNewRank(c.rank);
+                    }}
+                  >
+                    <Edit3 className="size-3.5" /> Cấu Hình Giá & Cấp Bậc
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* TAB 5: RBAC & Audit Trail */}
-      {activeTab === 'audit-rbac' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 'var(--space-xxxl)' }}>
-          {/* RBAC Matrix */}
-          <div className="card-athletic">
-            <h3 style={{ fontSize: 18, color: '#fff', marginBottom: 14 }}>Ma Trận Phân Quyền (RBAC)</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 13 }}>
-              <div style={{ padding: 12, background: 'var(--bg-app)', borderRadius: 6 }}>
-                <strong style={{ color: 'var(--color-primary)' }}>1. Center Manager (Quản lý)</strong>
-                <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
-                  Toàn quyền hệ thống: Doanh thu BI, cấu hình bảng giá Coach, tạo gói tập, phân quyền và duyệt ngoại lệ.
-                </p>
+      {/* Edit Coach Pricing Dialog */}
+      <Dialog open={!!editingCoach} onOpenChange={(open) => { if (!open) setEditingCoach(null); }}>
+        <DialogContent className="max-w-md">
+          {editingCoach && (
+            <form onSubmit={handleSaveCoachPricing}>
+              <DialogHeader>
+                <DialogTitle>Thiết Lập Đơn Giá Cho HLV {editingCoach.name}</DialogTitle>
+                <DialogDescription>Mã HLV: {editingCoach.code}</DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4 py-3">
+                <Field label="Cấp Bậc Chuyên Môn">
+                  <Select value={newRank} onValueChange={(v) => setNewRank(v as any)}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="junior">JUNIOR COACH (Khởi điểm)</SelectItem>
+                      <SelectItem value="senior">SENIOR COACH (Kinh nghiệm &gt; 3 năm)</SelectItem>
+                      <SelectItem value="master">MASTER COACH (Vận động viên / Bằng Quốc tế)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field label="Đơn Giá Dạy Lẻ 1 Buổi (VNĐ) *">
+                  <Input
+                    type="number"
+                    step="50000"
+                    required
+                    value={newHourlyRate}
+                    onChange={(e) => setNewHourlyRate(parseInt(e.target.value) || 250000)}
+                  />
+                </Field>
+
+                <Field label="Tỷ Lệ Hoa Hồng Thực Nhận (%)">
+                  <Input
+                    type="number"
+                    min="30"
+                    max="80"
+                    required
+                    value={newCommission}
+                    onChange={(e) => setNewCommission(parseInt(e.target.value) || 50)}
+                  />
+                </Field>
               </div>
 
-              <div style={{ padding: 12, background: 'var(--bg-app)', borderRadius: 6 }}>
-                <strong style={{ color: 'var(--color-success)' }}>2. Receptionist (Lễ tân)</strong>
-                <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
-                  Quét check-in QR, đăng ký thành viên mới tại quầy, thu tiền mặt/chuyển khoản, in hóa đơn K80, tiếp nhận yêu cầu hỗ trợ.
-                </p>
-              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditingCoach(null)}>Hủy Bỏ</Button>
+                <Button type="submit">Lưu Cấu Hình Giá</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
-              <div style={{ padding: 12, background: 'var(--bg-app)', borderRadius: 6 }}>
-                <strong style={{ color: 'var(--color-info)' }}>3. Coach (Huấn luyện viên)</strong>
-                <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
-                  Xem lịch dạy, điểm danh buổi tập, xử lý vắng mặt/học bù, ghi nhận tạ/rep, tạo kế hoạch dinh dưỡng và gợi ý bài tập bằng AI.
-                </p>
-              </div>
-            </div>
-          </div>
+      {/* TAB 5: Packages & Services */}
+      {activeTab === 'packages-engine' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Quản Lý Gói Tập & Khóa Học Chuyên Biệt</CardTitle>
+            <CardDescription>Cấu hình mô hình Hybrid (Vào tập không giới hạn + Quota buổi PT) và Khóa học chuyên sâu</CardDescription>
+            <CardAction>
+              <Button onClick={() => setIsCreatingPackage(true)}>
+                <Plus className="size-4" /> Tạo Gói Dịch Vụ Mới
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {packages.map(pkg => (
+                <div key={pkg.id} className="p-4 rounded-lg border bg-card flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-semibold text-foreground text-base">{pkg.name}</h4>
+                      <Badge variant={pkg.type === 'hybrid_pt' ? 'soft' : pkg.type === 'specialized_course' ? 'info' : 'secondary'}>
+                        {pkg.type === 'hybrid_pt' ? 'Hybrid PT' : pkg.type === 'specialized_course' ? 'Chuyên Biệt' : 'Standard'}
+                      </Badge>
+                    </div>
 
-          {/* Audit Trail Real-time logs */}
-          <div className="card-athletic">
-            <h3 style={{ fontSize: 18, color: '#fff', marginBottom: 14 }}>Nhật Ký Thao Tác Hệ Thống (Audit Trail)</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflowY: 'auto' }}>
-              {auditLogs.map(log => (
-                <div key={log.id} style={{
-                  padding: 12,
-                  background: 'var(--bg-app)',
-                  borderRadius: 6,
-                  border: '1px solid rgba(255,255,255,0.05)',
-                  fontSize: 12
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <strong style={{ color: 'var(--color-primary)' }}>{log.action}</strong>
-                    <span className="metric-mono" style={{ color: 'var(--text-dim)' }}>
-                      {new Date(log.timestamp).toLocaleTimeString('vi-VN')}
-                    </span>
+                    <div className="text-xl font-bold text-primary mb-2">
+                      {pkg.priceVND.toLocaleString('vi-VN')} <span className="text-xs font-normal text-muted-foreground">đ / {pkg.durationMonths} Tháng</span>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground mb-3">{pkg.description}</p>
+
+                    {pkg.ptSessionsIncluded > 0 && (
+                      <div className="text-xs text-success font-medium mb-3">
+                        ✓ Bao gồm: {pkg.ptSessionsIncluded} buổi tập cùng HLV cá nhân
+                      </div>
+                    )}
                   </div>
-                  <div style={{ color: '#fff' }}>
-                    Thực hiện bởi: <strong>{log.actorName}</strong> ({log.actorRole.toUpperCase()})
-                  </div>
-                  <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>
-                    Mục tiêu: <strong style={{ color: '#fff' }}>{log.target}</strong>
-                  </div>
-                  <div style={{ color: 'var(--text-dim)', fontStyle: 'italic', marginTop: 4 }}>
-                    "{log.details}"
+
+                  <div className="pt-3 border-t flex justify-between items-center text-xs text-muted-foreground">
+                    <div>
+                      {pkg.features.slice(0, 2).map((f, i) => (
+                        <div key={i}>• {f}</div>
+                      ))}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeletePackage(pkg.id, pkg.name)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Incident & Ticket Directive Modal (Modal Chỉ Đạo & Phản Hồi) */}
-      {respondingTicket && (
-        <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 640 }}>
-            <div style={{
-              padding: '18px 24px',
-              borderBottom: 'var(--border-subtle)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <div>
-                <h3 style={{ fontSize: 18, color: '#fff', margin: 0 }}>
-                  Chỉ Đạo & Phản Hồi Xử Lý Báo Cáo
-                </h3>
-                <span className="metric-mono" style={{ fontSize: 12, color: 'var(--color-primary)' }}>
-                  Mã yêu cầu: {respondingTicket.ticketCode || respondingTicket.id}
-                </span>
+      {/* Create Package Dialog */}
+      <Dialog open={isCreatingPackage} onOpenChange={setIsCreatingPackage}>
+        <DialogContent className="max-w-lg">
+          <form onSubmit={handleSavePackage}>
+            <DialogHeader>
+              <DialogTitle>Tạo Gói Tập Mới (Lưu Vào Database)</DialogTitle>
+              <DialogDescription>Gói tập mới sẽ đồng bộ trực tiếp tới bảng giá của khách hàng và quầy POS.</DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-3">
+              <Field label="Tên Gói Tập *">
+                <Input
+                  required
+                  placeholder="VD: Gói Hybrid VIP 3 Tháng + 12 Buổi PT"
+                  value={newPackageForm.name}
+                  onChange={(e) => setNewPackageForm({ ...newPackageForm, name: e.target.value })}
+                />
+              </Field>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Loại Gói">
+                  <Select value={newPackageForm.type} onValueChange={(v) => setNewPackageForm({ ...newPackageForm, type: v as any })}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MEMBERSHIP">MEMBERSHIP (Thẻ Hội Viên)</SelectItem>
+                      <SelectItem value="PT">PT (Gói Kèm 1:1 Riêng)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field label="Thời Hạn Sử Dụng (Ngày) *">
+                  <Input
+                    type="number"
+                    min="1"
+                    required
+                    value={newPackageForm.durationDays}
+                    onChange={(e) => setNewPackageForm({ ...newPackageForm, durationDays: parseInt(e.target.value) || 30 })}
+                  />
+                </Field>
               </div>
-              <button className="btn-ghost" onClick={() => setRespondingTicket(null)}>✕</button>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Giá Niêm Yết (VNĐ) *">
+                  <Input
+                    type="number"
+                    step="50000"
+                    required
+                    value={newPackageForm.price}
+                    onChange={(e) => setNewPackageForm({ ...newPackageForm, price: parseInt(e.target.value) || 0 })}
+                  />
+                </Field>
+
+                <Field label="Số Buổi PT Tặng Kèm">
+                  <Input
+                    type="number"
+                    min="0"
+                    value={newPackageForm.trialPtSessions}
+                    onChange={(e) => setNewPackageForm({ ...newPackageForm, trialPtSessions: parseInt(e.target.value) || 0 })}
+                  />
+                </Field>
+              </div>
+
+              <Field label="Mô Tả Gói">
+                <Textarea
+                  rows={3}
+                  value={newPackageForm.description}
+                  onChange={(e) => setNewPackageForm({ ...newPackageForm, description: e.target.value })}
+                />
+              </Field>
             </div>
 
-            <form onSubmit={handleSaveAdminResponse} style={{ padding: 24 }}>
-              {/* Incident Summary Card */}
-              <div style={{
-                background: 'var(--bg-app)',
-                padding: 14,
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                marginBottom: 18
-              }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>
-                  Nội dung Lễ tân ghi nhận:
-                </div>
-                <strong style={{ color: '#fff', fontSize: 14, display: 'block', marginBottom: 4 }}>
-                  {respondingTicket.title}
-                </strong>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, marginBottom: 8, lineHeight: 1.4 }}>
-                  "{respondingTicket.description}"
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreatingPackage(false)}>Hủy Bỏ</Button>
+              <Button type="submit" disabled={packageLoading}>
+                {packageLoading ? 'Đang lưu...' : 'Lưu Gói Vào Database'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* TAB 6: RBAC & Audit Trail */}
+      {activeTab === 'audit-rbac' && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_1.3fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Ma Trận Phân Quyền (RBAC)</CardTitle>
+              <CardDescription>Cơ chế bảo mật và phân quyền theo cấp bậc nhân sự</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 text-xs">
+              <div className="p-3.5 rounded-lg border bg-muted/40">
+                <strong className="text-primary text-sm">1. Center Manager (Quản lý)</strong>
+                <p className="text-muted-foreground mt-1">
+                  Toàn quyền hệ thống: Doanh thu BI, cấu hình bảng giá Coach, tạo gói tập, phân quyền và duyệt ngoại lệ.
                 </p>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-                  Hội viên: <strong style={{ color: '#fff' }}>{respondingTicket.memberName}</strong> ({respondingTicket.memberPhone}) • Người gửi: <strong>{respondingTicket.createdBy || 'Lễ tân'}</strong>
-                </div>
               </div>
-
-              {/* Quick Template Directives (Tiện lợi cho Admin bấm 1 chạm) */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', display: 'block', marginBottom: 6, textTransform: 'uppercase' }}>
-                  ⚡ Chỉ đạo mẫu nhanh (Bấm để tự động điền):
-                </label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <button
-                    type="button"
-                    style={{
-                      background: 'var(--bg-panel)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: 6,
-                      padding: '7px 10px',
-                      fontSize: 12,
-                      color: '#fff',
-                      textAlign: 'left',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => {
-                      setAdminResponseText('Đã phê duyệt bảo lưu gói tập 10 ngày. Yêu cầu Lễ tân cập nhật ngày hết hạn trên phần mềm và gọi điện thông báo hội viên.');
-                      setTargetAssignee('receptionist');
-                      setTargetStatus('in_progress');
-                    }}
-                  >
-                    👉 <strong>Duyệt bảo lưu thẻ:</strong> Giao Lễ tân cập nhật hạn thẻ & báo khách
-                  </button>
-
-                  <button
-                    type="button"
-                    style={{
-                      background: 'var(--bg-panel)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: 6,
-                      padding: '7px 10px',
-                      fontSize: 12,
-                      color: '#fff',
-                      textAlign: 'left',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => {
-                      setAdminResponseText('Đã tìm thấy đồ thất lạc tại quầy gửi đồ. Yêu cầu Lễ tân gọi điện liên hệ khách hẹn giờ đến quầy nhận lại.');
-                      setTargetAssignee('receptionist');
-                      setTargetStatus('in_progress');
-                    }}
-                  >
-                    👉 <strong>Đồ thất lạc:</strong> Đã tìm thấy, giao Lễ tân liên hệ khách nhận lại
-                  </button>
-
-                  <button
-                    type="button"
-                    style={{
-                      background: 'var(--bg-panel)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: 6,
-                      padding: '7px 10px',
-                      fontSize: 12,
-                      color: '#fff',
-                      textAlign: 'left',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => {
-                      setAdminResponseText('Đã gọi kỹ thuật viên Technogym hẹn đến bảo dưỡng lúc 14:00 hôm nay. Lễ tân duy trì biển báo tạm ngưng sử dụng thiết bị.');
-                      setTargetAssignee('technician');
-                      setTargetStatus('in_progress');
-                    }}
-                  >
-                    👉 <strong>Hỏng máy tập:</strong> Đã báo bảo trì hãng, giao Lễ tân giữ biển báo
-                  </button>
-
-                  <button
-                    type="button"
-                    style={{
-                      background: 'var(--bg-panel)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: 6,
-                      padding: '7px 10px',
-                      fontSize: 12,
-                      color: '#fff',
-                      textAlign: 'left',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => {
-                      setAdminResponseText('BQL đã trực tiếp làm việc và giải quyết dứt điểm với các bên liên quan. Đóng ticket sự cố.');
-                      setTargetAssignee('admin');
-                      setTargetStatus('resolved');
-                    }}
-                  >
-                    👉 <strong>BQL giải quyết dứt điểm:</strong> Đóng ticket hoàn tất
-                  </button>
-                </div>
+              <div className="p-3.5 rounded-lg border bg-muted/40">
+                <strong className="text-success text-sm">2. Receptionist (Lễ tân)</strong>
+                <p className="text-muted-foreground mt-1">
+                  Quét check-in QR, đăng ký thành viên mới tại quầy, thu tiền mặt/chuyển khoản, in hóa đơn K80, tiếp nhận yêu cầu hỗ trợ.
+                </p>
               </div>
-
-              {/* Directive Textarea */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 6 }}>
-                  Nội Dung Chỉ Đạo Của Quản Lý (Admin Response) *:
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  className="form-input"
-                  style={{ resize: 'vertical' }}
-                  placeholder="Nhập nội dung chỉ đạo, phương án giải quyết hoặc hướng dẫn nhân sự..."
-                  value={adminResponseText}
-                  onChange={(e) => setAdminResponseText(e.target.value)}
-                />
+              <div className="p-3.5 rounded-lg border bg-muted/40">
+                <strong className="text-sky-600 dark:text-sky-400 text-sm">3. Coach (Huấn luyện viên)</strong>
+                <p className="text-muted-foreground mt-1">
+                  Xem lịch dạy, điểm danh buổi tập, xử lý vắng mặt/học bù, ghi nhận tạ/rep, tạo kế hoạch dinh dưỡng và gợi ý bài tập bằng AI.
+                </p>
               </div>
+            </CardContent>
+          </Card>
 
-              {/* Assignment (Phân công người xử lý) */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 6 }}>
-                  Phân Công / Yêu Cầu Bộ Phận Xử Lý:
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    background: 'var(--bg-app)',
-                    padding: '10px 12px',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    border: targetAssignee === 'receptionist' ? '1px solid var(--color-primary)' : '1px solid transparent'
-                  }}>
-                    <input
-                      type="radio"
-                      name="assignee"
-                      checked={targetAssignee === 'receptionist'}
-                      onChange={() => setTargetAssignee('receptionist')}
-                    />
-                    <span style={{ fontSize: 12, color: '#fff', fontWeight: 600 }}>
-                      ⚡ Yêu cầu Lễ Tân xử lý tiếp
-                    </span>
-                  </label>
-
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    background: 'var(--bg-app)',
-                    padding: '10px 12px',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    border: targetAssignee === 'technician' ? '1px solid var(--color-primary)' : '1px solid transparent'
-                  }}>
-                    <input
-                      type="radio"
-                      name="assignee"
-                      checked={targetAssignee === 'technician'}
-                      onChange={() => setTargetAssignee('technician')}
-                    />
-                    <span style={{ fontSize: 12, color: '#fff', fontWeight: 600 }}>
-                      🔧 Chuyển Kỹ Thuật Viên bảo trì
-                    </span>
-                  </label>
-
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    background: 'var(--bg-app)',
-                    padding: '10px 12px',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    border: targetAssignee === 'coach' ? '1px solid var(--color-primary)' : '1px solid transparent'
-                  }}>
-                    <input
-                      type="radio"
-                      name="assignee"
-                      checked={targetAssignee === 'coach'}
-                      onChange={() => setTargetAssignee('coach')}
-                    />
-                    <span style={{ fontSize: 12, color: '#fff', fontWeight: 600 }}>
-                      🏋️ Chuyển Huấn Luyện Viên
-                    </span>
-                  </label>
-
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    background: 'var(--bg-app)',
-                    padding: '10px 12px',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    border: targetAssignee === 'admin' ? '1px solid var(--color-primary)' : '1px solid transparent'
-                  }}>
-                    <input
-                      type="radio"
-                      name="assignee"
-                      checked={targetAssignee === 'admin'}
-                      onChange={() => setTargetAssignee('admin')}
-                    />
-                    <span style={{ fontSize: 12, color: '#fff', fontWeight: 600 }}>
-                      👑 Ban Quản Lý trực tiếp xử lý
-                    </span>
-                  </label>
-                </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Nhật Ký Kiểm Toán (Audit Trail)</CardTitle>
+              <CardDescription>Ghi nhận mọi hành động nhạy cảm của nhân viên</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-2 max-h-[460px] overflow-y-auto pr-1">
+                {auditLogs.map(log => (
+                  <div key={log.id} className="p-3 rounded-lg border bg-muted/40 text-xs">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-semibold text-foreground">{log.actorName}</span>
+                      <Badge variant="outline" className="text-[10px]">{log.actorRole.toUpperCase()}</Badge>
+                    </div>
+                    <div className="font-medium text-primary">{log.action}: {log.target}</div>
+                    <div className="text-muted-foreground mt-0.5">{log.details}</div>
+                    <div className="text-muted-foreground text-[10px] mt-1 text-right">
+                      {new Date(log.timestamp).toLocaleString('vi-VN')}
+                    </div>
+                  </div>
+                ))}
               </div>
-
-              {/* Status Update */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 6 }}>
-                  Cập Nhật Trạng Thái Báo Cáo:
-                </label>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    background: 'var(--bg-app)',
-                    padding: '8px 14px',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    border: targetStatus === 'in_progress' ? '1px solid var(--color-warning)' : '1px solid transparent'
-                  }}>
-                    <input
-                      type="radio"
-                      name="status"
-                      checked={targetStatus === 'in_progress'}
-                      onChange={() => setTargetStatus('in_progress')}
-                    />
-                    <span style={{ fontSize: 12, color: 'var(--color-warning)', fontWeight: 700 }}>
-                      🟡 Đang Chỉ Đạo Xử Lý (Giao việc)
-                    </span>
-                  </label>
-
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    background: 'var(--bg-app)',
-                    padding: '8px 14px',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    border: targetStatus === 'resolved' ? '1px solid var(--color-success)' : '1px solid transparent'
-                  }}>
-                    <input
-                      type="radio"
-                      name="status"
-                      checked={targetStatus === 'resolved'}
-                      onChange={() => setTargetStatus('resolved')}
-                    />
-                    <span style={{ fontSize: 12, color: 'var(--color-success)', fontWeight: 700 }}>
-                      🟢 Phê Duyệt & Đóng Hoàn Tất (Resolved)
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Submit Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-                <button type="button" className="btn-secondary" onClick={() => setRespondingTicket(null)}>
-                  Hủy Bỏ
-                </button>
-                <button type="submit" className="btn-primary" style={{ padding: '10px 20px' }}>
-                  <Send size={15} />
-                  <span>Ban Hành Chỉ Đạo & Gửi Lệnh</span>
-                </button>
-              </div>
-            </form>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       )}
-    </div>
+    </StaffPage>
   );
 };

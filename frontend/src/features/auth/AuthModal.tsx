@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../../types';
-import { TEST_USERS, AuthUser, MockDatabase } from '../../mocks/mockData';
+import { api, ApiUser } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import { 
   X, 
@@ -14,14 +14,39 @@ import {
   Lock, 
   User as UserIcon,
   CheckCircle2,
-  ArrowRight
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'login' | 'register' | 'otp';
+  initialTab?: 'login' | 'register' | 'forgot';
   onLoginSuccess: (user: User) => void;
+}
+
+// Convert Backend User model to Frontend User format
+export function mapBackendUserToFrontend(apiUser: ApiUser): User {
+  let mappedRole: UserRole = 'guest';
+  const role = (apiUser.role || '').toUpperCase().trim();
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'MANAGER') {
+    mappedRole = 'admin';
+  } else if (role === 'RECEPTIONIST' || role === 'STAFF' || role === 'LE_TAN' || role === 'FRONT_DESK') {
+    mappedRole = 'receptionist';
+  } else if (role === 'COACH' || role === 'TRAINER' || role === 'PT' || role === 'HLV') {
+    mappedRole = 'coach';
+  } else {
+    mappedRole = 'guest';
+  }
+
+  return {
+    id: String(apiUser.id),
+    name: apiUser.fullName || apiUser.email.split('@')[0],
+    email: apiUser.email,
+    phone: apiUser.phone || '',
+    role: mappedRole,
+    avatar: apiUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80'
+  };
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -30,12 +55,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialTab = 'login',
   onLoginSuccess
 }) => {
-  const [tab, setTab] = useState<'login' | 'register' | 'otp'>(initialTab);
+  const [tab, setTab] = useState<'login' | 'register' | 'forgot'>(initialTab);
+
+  // Synchronize internal tab state when initialTab or isOpen changes
+  React.useEffect(() => {
+    if (isOpen) {
+      setTab(initialTab);
+      setAuthError(null);
+      setSuccessMsg(null);
+    }
+  }, [isOpen, initialTab]);
 
   // Login form state
-  const [loginIdentifier, setLoginIdentifier] = useState('admin@aurafitness.vn');
-  const [loginPassword, setLoginPassword] = useState('admin123');
-  const [useOtpLogin, setUseOtpLogin] = useState(false);
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   // Register form state
   const [registerForm, setRegisterForm] = useState({
@@ -43,492 +76,561 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     phone: '',
     email: '',
     password: '',
-    confirmPassword: '',
-    gender: 'male' as const,
-    role: 'coach' as UserRole
+    confirmPassword: ''
   });
 
-  // OTP state
-  const [otpCode, setOtpCode] = useState(['8', '8', '8', '9', '9', '9']);
-  const [otpTimer, setOtpTimer] = useState(59);
-  const [pendingUser, setPendingUser] = useState<AuthUser | null>(null);
+  // Forgot password state
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
+
+  // Processing state
+  const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  // Handle direct 1-click test account login
-  const handleQuickLogin = (testUser: AuthUser) => {
-    soundEffects.playSuccessBeep();
-    MockDatabase.saveCurrentSession({
-      id: testUser.id,
-      name: testUser.name,
-      email: testUser.email,
-      phone: testUser.phone,
-      role: testUser.role,
-      avatar: testUser.avatar
-    });
-    onLoginSuccess(testUser);
-    onClose();
-  };
-
-  // Handle standard login
-  const handleSubmitLogin = (e: React.FormEvent) => {
+  // Handle standard login via Backend REST API
+  const handleSubmitLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    setSuccessMsg(null);
+    setIsLoading(true);
 
-    const trimmed = loginIdentifier.trim().toLowerCase();
-    if (trimmed.includes('member') || trimmed.includes('guest') || trimmed.includes('vanan') || trimmed.includes('maitran') || trimmed.includes('hoangnam')) {
-      soundEffects.playErrorBeep();
-      setAuthError('Khách vãng lai (Guest) không cần đăng nhập. Cổng đăng nhập này chỉ dành riêng cho Ban Quản Lý, Lễ Tân và Huấn Luyện Viên.');
-      return;
-    }
+    try {
+      const data = await api.auth.login({
+        email: loginIdentifier.trim(),
+        password: loginPassword
+      });
 
-    const found = TEST_USERS.find(u => 
-      (u.email.toLowerCase() === trimmed || u.phone.includes(trimmed)) &&
-      u.password === loginPassword
-    );
-
-    if (found) {
-      if (useOtpLogin) {
-        setPendingUser(found);
-        setTab('otp');
-        soundEffects.playSuccessBeep();
-      } else {
-        soundEffects.playSuccessBeep();
-        MockDatabase.saveCurrentSession({
-          id: found.id,
-          name: found.name,
-          email: found.email,
-          phone: found.phone,
-          role: found.role,
-          avatar: found.avatar
-        });
-        onLoginSuccess(found);
+      soundEffects.playSuccessBeep();
+      setSuccessMsg('Đăng nhập thành công!');
+      const frontendUser = mapBackendUserToFrontend(data.user);
+      setTimeout(() => {
+        onLoginSuccess(frontendUser);
         onClose();
-      }
-    } else {
+      }, 500);
+    } catch (err: any) {
       soundEffects.playErrorBeep();
-      setAuthError('Email/SĐT hoặc mật khẩu không chính xác. Đăng nhập web chỉ áp dụng cho Quản Lý, Lễ Tân và Huấn Luyện Viên.');
+      setAuthError(err.message || 'Đăng nhập không thành công. Vui lòng kiểm tra lại tài khoản.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // Handle register
-  const handleSubmitRegister = (e: React.FormEvent) => {
+  // Handle register via Backend REST API
+  const handleSubmitRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    setSuccessMsg(null);
 
     if (registerForm.password !== registerForm.confirmPassword) {
       soundEffects.playErrorBeep();
-      setAuthError('Mật khẩu xác nhận không khớp. Vui lòng kiểm tra lại.');
+      setAuthError('Mật khẩu xác nhận không khớp. Vui lòng thử lại.');
       return;
     }
 
-    const newUser: AuthUser = {
-      id: 'user-' + Date.now(),
-      name: registerForm.name,
-      email: registerForm.email || `${registerForm.phone}@aurafitness.vn`,
-      phone: registerForm.phone,
-      role: registerForm.role,
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80',
-      password: registerForm.password,
-      mockOtp: '888999',
-      title: 'Hội Viên Mới Đăng Ký',
-      description: 'Tài khoản đăng ký trực tuyến'
-    };
+    setIsLoading(true);
+    try {
+      await api.auth.register({
+        fullName: registerForm.name.trim(),
+        email: registerForm.email.trim(),
+        password: registerForm.password,
+        phone: registerForm.phone.trim() || undefined
+      });
 
-    setPendingUser(newUser);
-    setTab('otp');
-    soundEffects.playSuccessBeep();
+      // Auto login right after registration
+      const loginData = await api.auth.login({
+        email: registerForm.email.trim(),
+        password: registerForm.password
+      });
+
+      soundEffects.playSuccessBeep();
+      setSuccessMsg('Đăng ký tài khoản thành công!');
+      const frontendUser = mapBackendUserToFrontend(loginData.user);
+      setTimeout(() => {
+        onLoginSuccess(frontendUser);
+        onClose();
+      }, 600);
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      setAuthError(err.message || 'Đăng ký thất bại. Email có thể đã tồn tại.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // Handle OTP verification
-  const handleVerifyOtp = (e: React.FormEvent) => {
+  // Handle Forgot Password
+  const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const entered = otpCode.join('');
-    if (entered === '888999' || entered.length === 6) {
-      soundEffects.playSuccessBeep();
-      const userToSave = pendingUser || TEST_USERS[0];
-      MockDatabase.saveCurrentSession({
-        id: userToSave.id,
-        name: userToSave.name,
-        email: userToSave.email,
-        phone: userToSave.phone,
-        role: userToSave.role,
-        avatar: userToSave.avatar
-      });
-      onLoginSuccess(userToSave);
-      onClose();
-    } else {
+    setAuthError(null);
+    setSuccessMsg(null);
+    setIsLoading(true);
+
+    try {
+      if (forgotStep === 1) {
+        const res = await api.auth.forgotPassword(forgotEmail.trim());
+        setSuccessMsg('Đã tạo mã xác nhận Reset Token thành công!');
+        if (res.data?.resetToken) {
+          setResetToken(res.data.resetToken);
+        }
+        setForgotStep(2);
+      } else {
+        await api.auth.resetPassword({
+          resetToken: resetToken.trim(),
+          newPassword: newPassword
+        });
+        soundEffects.playSuccessBeep();
+        setSuccessMsg('Đặt lại mật khẩu thành công! Vui lòng đăng nhập.');
+        setTimeout(() => {
+          setTab('login');
+          setForgotStep(1);
+          setLoginIdentifier(forgotEmail);
+          setLoginPassword(newPassword);
+        }, 1000);
+      }
+    } catch (err: any) {
       soundEffects.playErrorBeep();
-      setAuthError('Mã OTP không đúng. Vui lòng nhập mã test 888999.');
+      setAuthError(err.message || 'Không thể gửi yêu cầu đặt lại mật khẩu.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-content" style={{ maxWidth: 580 }}>
-        {/* Header Tabs */}
+      <div className="modal-content" style={{ maxWidth: 520 }}>
+        {/* Header */}
         <div style={{
+          padding: '24px 28px 16px',
+          borderBottom: '1px solid var(--aura-border)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '16px 20px',
-          borderBottom: 'var(--border-subtle)'
+          background: 'var(--color-primary-light)'
         }}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button
-              type="button"
-              onClick={() => { setTab('login'); setAuthError(null); }}
-              style={{
-                background: tab === 'login' ? 'var(--color-primary)' : 'transparent',
-                color: tab === 'login' ? '#fff' : 'var(--text-muted)',
-                border: 'none',
-                borderRadius: 'var(--radius-full)',
-                padding: '6px 16px',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer'
-              }}
-            >
-              Đăng Nhập
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { setTab('register'); setAuthError(null); }}
-              style={{
-                background: tab === 'register' ? 'var(--color-primary)' : 'transparent',
-                color: tab === 'register' ? '#fff' : 'var(--text-muted)',
-                border: 'none',
-                borderRadius: 'var(--radius-full)',
-                padding: '6px 16px',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer'
-              }}
-            >
-              Đăng Ký Tài Khoản
-            </button>
-
-            {pendingUser && (
-              <button
-                type="button"
-                onClick={() => setTab('otp')}
-                style={{
-                  background: tab === 'otp' ? 'var(--color-primary)' : 'transparent',
-                  color: tab === 'otp' ? '#fff' : 'var(--text-muted)',
-                  border: 'none',
-                  borderRadius: 'var(--radius-full)',
-                  padding: '6px 16px',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: 'pointer'
-                }}
-              >
-                Xác Thực OTP
-              </button>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--color-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff'
+            }}>
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 18, color: 'var(--text-primary)', margin: 0 }}>
+                {tab === 'login' && 'Đăng Nhập Tài Khoản'}
+                {tab === 'register' && 'Tạo Tài Khoản Mới'}
+                {tab === 'forgot' && 'Quên Mật Khẩu'}
+              </h3>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                Aura Gym & Fitness Club System
+              </p>
+            </div>
           </div>
-
-          <button className="btn-ghost" style={{ padding: 6 }} onClick={onClose}>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: 4
+            }}
+          >
             <X size={20} />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div style={{ padding: '24px' }}>
+        {/* Tab switchers */}
+        <div style={{
+          display: 'flex',
+          borderBottom: '1px solid var(--aura-border)',
+          background: 'var(--bg-card)'
+        }}>
+          <button
+            onClick={() => { setTab('login'); setAuthError(null); }}
+            style={{
+              flex: 1,
+              padding: '12px',
+              border: 'none',
+              background: 'transparent',
+              borderBottom: tab === 'login' ? '2.5px solid var(--color-primary)' : 'none',
+              color: tab === 'login' ? 'var(--color-primary)' : 'var(--text-muted)',
+              fontWeight: tab === 'login' ? 700 : 500,
+              cursor: 'pointer',
+              fontSize: 14
+            }}
+          >
+            Đăng Nhập
+          </button>
+          <button
+            onClick={() => { setTab('register'); setAuthError(null); }}
+            style={{
+              flex: 1,
+              padding: '12px',
+              border: 'none',
+              background: 'transparent',
+              borderBottom: tab === 'register' ? '2.5px solid var(--color-primary)' : 'none',
+              color: tab === 'register' ? 'var(--color-primary)' : 'var(--text-muted)',
+              fontWeight: tab === 'register' ? 700 : 500,
+              cursor: 'pointer',
+              fontSize: 14
+            }}
+          >
+            Đăng Ký
+          </button>
+        </div>
+
+        {/* Form Body */}
+        <div style={{ padding: '24px 28px' }}>
+          {/* Notification / Error / Success alerts */}
           {authError && (
             <div style={{
-              background: 'rgba(255, 61, 0, 0.12)',
-              border: '1px solid rgba(255, 61, 0, 0.3)',
+              background: 'var(--color-danger-bg)',
               color: 'var(--color-danger)',
-              padding: '10px 14px',
+              padding: '12px 16px',
               borderRadius: 'var(--radius-sm)',
               fontSize: 13,
-              marginBottom: 16
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              border: '1px solid rgba(198, 40, 40, 0.3)'
             }}>
-              ⚠️ {authError}
+              <AlertCircle size={16} />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          {successMsg && (
+            <div style={{
+              background: 'var(--color-success-bg)',
+              color: 'var(--color-success)',
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 13,
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              border: '1px solid rgba(46, 125, 50, 0.3)'
+            }}>
+              <CheckCircle2 size={16} />
+              <span>{successMsg}</span>
             </div>
           )}
 
           {/* TAB 1: LOGIN */}
           {tab === 'login' && (
-            <div>
-              <form onSubmit={handleSubmitLogin} style={{ marginBottom: 20 }}>
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 6 }}>
-                    Email Hoặc Số Điện Thoại *:
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      required
-                      className="form-input"
-                      placeholder="admin@aurafitness.vn hoặc 0900 111 222"
-                      value={loginIdentifier}
-                      onChange={(e) => setLoginIdentifier(e.target.value)}
-                    />
-                    <Mail size={16} style={{ position: 'absolute', right: 12, top: 14, color: 'var(--text-dim)' }} />
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 6 }}>
-                    Mật Khẩu *:
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="password"
-                      required
-                      className="form-input"
-                      placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                    />
-                    <Lock size={16} style={{ position: 'absolute', right: 12, top: 14, color: 'var(--text-dim)' }} />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, fontSize: 12 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={useOtpLogin}
-                      onChange={(e) => setUseOtpLogin(e.target.checked)}
-                    />
-                    <span>Xác thực qua mã OTP 2 lớp (2FA)</span>
-                  </label>
-                  <span style={{ color: 'var(--color-primary)', cursor: 'pointer' }}>Quên mật khẩu?</span>
-                </div>
-
-                <button type="submit" className="btn-primary" style={{ width: '100%', padding: '12px' }}>
-                  <LogIn size={16} />
-                  <span>Đăng Nhập Vào Hệ Thống</span>
-                </button>
-              </form>
-
-              {/* 1-Click Fast Login for Testing (Rất tiện cho việc chấm bài / demo) */}
-              <div style={{
-                background: 'var(--bg-app)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '14px',
-                border: '1px solid rgba(255,255,255,0.06)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                  <Sparkles size={14} color="var(--color-primary)" />
-                  <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase' }}>
-                    Tài khoản nhân sự test nhanh (1-Click Đăng nhập)
-                  </span>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {TEST_USERS.map(u => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => handleQuickLogin(u)}
-                      style={{
-                        background: 'var(--bg-panel)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        borderRadius: 6,
-                        padding: '8px 10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        color: '#fff',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        transition: 'border-color 0.15s'
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)')}
-                    >
-                      <img src={u.avatar} alt={u.name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
-                      <div style={{ overflow: 'hidden' }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                          {u.name}
-                        </div>
-                        <div style={{ fontSize: 10, color: 'var(--color-primary)' }}>
-                          {u.role.toUpperCase()}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+            <form onSubmit={handleSubmitLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6, color: 'var(--text-primary)' }}>
+                  Email hoặc Tên đăng nhập
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <Mail size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+                  <input
+                    type="email"
+                    required
+                    className="form-input"
+                    style={{ paddingLeft: 40 }}
+                    value={loginIdentifier}
+                    onChange={(e) => setLoginIdentifier(e.target.value)}
+                    placeholder="name@example.com"
+                  />
                 </div>
               </div>
-            </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Mật khẩu
+                  </label>
+                  <a
+                    href="#forgot"
+                    onClick={(e) => { e.preventDefault(); setTab('forgot'); }}
+                    style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'underline' }}
+                  >
+                    Quên mật khẩu?
+                  </a>
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <Lock size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+                  <input
+                    type="password"
+                    required
+                    className="form-input"
+                    style={{ paddingLeft: 40 }}
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="btn-primary"
+                style={{ width: '100%', padding: '12px', marginTop: 8 }}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Đang kết nối API...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn size={16} />
+                    <span>Đăng Nhập Ngay</span>
+                  </>
+                )}
+              </button>
+
+              {/* Switch to Register link */}
+              <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>
+                Chưa có tài khoản?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTab('register');
+                    setAuthError(null);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-primary)',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    padding: 0,
+                    textDecoration: 'underline'
+                  }}
+                >
+                  Đăng ký tài khoản ngay
+                </button>
+              </div>
+            </form>
           )}
 
           {/* TAB 2: REGISTER */}
           {tab === 'register' && (
-            <form onSubmit={handleSubmitRegister}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                    Họ và Tên *:
-                  </label>
+            <form onSubmit={handleSubmitRegister} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6, color: 'var(--text-primary)' }}>
+                  Họ và tên *
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <UserIcon size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
                   <input
                     type="text"
                     required
                     className="form-input"
-                    placeholder="VD: Trần Đình Trọng"
+                    style={{ paddingLeft: 40 }}
                     value={registerForm.name}
                     onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
+                    placeholder="Nguyễn Văn A"
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                    Số Điện Thoại *:
-                  </label>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6, color: 'var(--text-primary)' }}>
+                  Email liên hệ *
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <Mail size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+                  <input
+                    type="email"
+                    required
+                    className="form-input"
+                    style={{ paddingLeft: 40 }}
+                    value={registerForm.email}
+                    onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
+                    placeholder="nguyenvana@gmail.com"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6, color: 'var(--text-primary)' }}>
+                  Số điện thoại
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <Phone size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
                   <input
                     type="tel"
-                    required
                     className="form-input"
-                    placeholder="VD: 0988 123 456"
+                    style={{ paddingLeft: 40 }}
                     value={registerForm.phone}
                     onChange={(e) => setRegisterForm({ ...registerForm, phone: e.target.value })}
+                    placeholder="0912 345 678"
                   />
                 </div>
               </div>
 
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                  Địa Chỉ Email:
-                </label>
-                <input
-                  type="email"
-                  className="form-input"
-                  placeholder="name@example.com"
-                  value={registerForm.email}
-                  onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                    Mật Khẩu *:
+                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6, color: 'var(--text-primary)' }}>
+                    Mật khẩu *
                   </label>
                   <input
                     type="password"
                     required
+                    minLength={6}
                     className="form-input"
-                    placeholder="Tối thiểu 6 ký tự"
                     value={registerForm.password}
                     onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                    placeholder="Tối thiểu 6 ký tự"
                   />
                 </div>
-
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                    Xác Nhận Mật Khẩu *:
+                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6, color: 'var(--text-primary)' }}>
+                    Nhập lại mật khẩu *
                   </label>
                   <input
                     type="password"
                     required
+                    minLength={6}
                     className="form-input"
-                    placeholder="Nhập lại mật khẩu"
                     value={registerForm.confirmPassword}
                     onChange={(e) => setRegisterForm({ ...registerForm, confirmPassword: e.target.value })}
+                    placeholder="Nhập lại mật khẩu"
                   />
                 </div>
               </div>
 
-              <div style={{ marginBottom: 18 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
-                  Đăng ký ứng tuyển nhân sự:
-                </label>
-                <select
-                  className="form-input"
-                  value={registerForm.role}
-                  onChange={(e) => setRegisterForm({ ...registerForm, role: e.target.value as UserRole })}
-                >
-                  <option value="coach">Ứng tuyển Huấn luyện viên (Coach)</option>
-                  <option value="receptionist">Nhân viên Lễ tân (Front-Desk Staff)</option>
-                </select>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6, lineHeight: 1.4 }}>
-                  💡 Lưu ý: Khách vãng lai (Guest) không cần đăng ký tài khoản. Hội viên tập luyện (Member) sẽ sử dụng Mobile App riêng.
-                </div>
-              </div>
-
-              <button type="submit" className="btn-primary" style={{ width: '100%', padding: '12px' }}>
-                <UserPlus size={16} />
-                <span>Tiếp Tục Xác Thực Tài Khoản</span>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="btn-primary"
+                style={{ width: '100%', padding: '12px', marginTop: 8 }}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Đang tạo tài khoản...</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus size={16} />
+                    <span>Tạo Tài Khoản & Đăng Nhập</span>
+                  </>
+                )}
               </button>
+
+              {/* Switch to Login link */}
+              <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--text-muted)' }}>
+                Đã có tài khoản?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTab('login');
+                    setAuthError(null);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-primary)',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    padding: 0,
+                    textDecoration: 'underline'
+                  }}
+                >
+                  Đăng nhập ngay
+                </button>
+              </div>
             </form>
           )}
 
-          {/* TAB 3: OTP VERIFICATION */}
-          {tab === 'otp' && (
-            <form onSubmit={handleVerifyOtp} style={{ textAlign: 'center' }}>
-              <div style={{
-                width: 52,
-                height: 52,
-                borderRadius: 'var(--radius-full)',
-                background: 'var(--color-primary-light)',
-                color: 'var(--color-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 14px auto'
-              }}>
-                <ShieldCheck size={28} />
-              </div>
+          {/* TAB 3: FORGOT PASSWORD */}
+          {tab === 'forgot' && (
+            <form onSubmit={handleForgotSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {forgotStep === 1 ? (
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6, color: 'var(--text-primary)' }}>
+                    Nhập địa chỉ Email đăng ký
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Mail size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+                    <input
+                      type="email"
+                      required
+                      className="form-input"
+                      style={{ paddingLeft: 40 }}
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="email@aurafitness.vn"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6, color: 'var(--text-primary)' }}>
+                      Mã Reset Token
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="form-input"
+                      value={resetToken}
+                      onChange={(e) => setResetToken(e.target.value)}
+                      placeholder="Dán token tại đây"
+                    />
+                  </div>
 
-              <h4 style={{ fontSize: 18, color: '#fff', marginBottom: 6 }}>Xác Thực Mã OTP Bảo Mật</h4>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-                Hệ thống đã gửi mã xác thực 6 số đến số điện thoại / email của bạn.
-              </p>
+                  <div>
+                    <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6, color: 'var(--text-primary)' }}>
+                      Mật khẩu mới
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      className="form-input"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Tối thiểu 6 ký tự"
+                    />
+                  </div>
+                </>
+              )}
 
-              {/* 6 OTP Boxes */}
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 20 }}>
-                {otpCode.map((digit, i) => (
-                  <input
-                    key={i}
-                    type="text"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const next = [...otpCode];
-                      next[i] = val;
-                      setOtpCode(next);
-                      if (val && e.target.nextElementSibling) {
-                        (e.target.nextElementSibling as HTMLInputElement).focus();
-                      }
-                    }}
-                    style={{
-                      width: 44,
-                      height: 52,
-                      fontSize: 22,
-                      fontWeight: 800,
-                      textAlign: 'center',
-                      background: 'var(--bg-app)',
-                      border: '2px solid var(--color-primary)',
-                      borderRadius: 8,
-                      color: '#fff',
-                      outline: 'none'
-                    }}
-                  />
-                ))}
-              </div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="btn-primary"
+                style={{ width: '100%', padding: '12px' }}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Đang xử lý...</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound size={16} />
+                    <span>{forgotStep === 1 ? 'Lấy Mã Xác Nhận' : 'Cập Nhật Mật Khẩu Mới'}</span>
+                  </>
+                )}
+              </button>
 
-              <div style={{
-                fontSize: 12,
-                color: 'var(--text-dim)',
-                background: 'rgba(255,255,255,0.04)',
-                padding: '8px 12px',
-                borderRadius: 6,
-                display: 'inline-block',
-                marginBottom: 20
-              }}>
-                💡 Mã OTP test mặc định: <strong style={{ color: 'var(--color-primary)' }}>888999</strong>
-              </div>
-
-              <button type="submit" className="btn-primary" style={{ width: '100%', padding: '12px' }}>
-                <CheckCircle2 size={16} />
-                <span>Xác Nhận & Đăng Nhập Ngay</span>
+              <button
+                type="button"
+                onClick={() => setTab('login')}
+                className="btn-ghost"
+                style={{ width: '100%' }}
+              >
+                Quay lại Đăng nhập
               </button>
             </form>
           )}
