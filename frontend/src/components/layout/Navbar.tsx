@@ -1,14 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserRole, User } from '../../types';
-import { 
-  Dumbbell, 
-  QrCode, 
-  ChevronDown, 
-  LogIn, 
-  UserPlus, 
-  Settings, 
-  LogOut
+import {
+  Dumbbell,
+  Home,
+  Package,
+  Users,
+  Calendar,
+  QrCode,
+  CreditCard,
+  LifeBuoy,
+  UserCheck,
+  Sparkles,
+  Clock,
+  BarChart3,
+  FileText,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Sun,
+  Moon,
+  LogIn,
+  UserPlus,
+  Settings,
+  LogOut,
+  ChevronDown,
+  GripVertical
 } from 'lucide-react';
+import { AuraLogo } from '../common/AuraLogo';
 
 interface NavbarProps {
   currentRole: UserRole;
@@ -20,6 +37,14 @@ interface NavbarProps {
   onOpenRegister: () => void;
   onOpenSettings: () => void;
   onLogout: () => void;
+  theme: 'light' | 'dark';
+  onToggleTheme: () => void;
+}
+
+interface NavTabItem {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; style?: React.CSSProperties }>;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -31,48 +56,97 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLogin,
   onOpenRegister,
   onOpenSettings,
-  onLogout
+  onLogout,
+  theme,
+  onToggleTheme
 }) => {
+  // Horizontal resize and collapse states
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('aura_sidebar_width');
+    return saved ? Math.max(200, Math.min(420, Number(saved))) : 260;
+  });
+
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    const saved = localStorage.getItem('aura_sidebar_collapsed');
+    return saved === 'true';
+  });
+
+  const [isDragging, setIsDragging] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
+
+  // Sync collapsed state to localStorage
+  useEffect(() => {
+    localStorage.setItem('aura_sidebar_collapsed', String(isCollapsed));
+  }, [isCollapsed]);
+
+  // Drag-to-resize listener
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = e.clientX;
+      if (newWidth < 140) {
+        setIsCollapsed(true);
+      } else {
+        setIsCollapsed(false);
+        const clamped = Math.max(200, Math.min(420, newWidth));
+        setSidebarWidth(clamped);
+        localStorage.setItem('aura_sidebar_width', String(clamped));
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
 
   const roleLabels: Record<UserRole, string> = {
-    admin: 'Center Manager',
-    receptionist: 'Lễ Tân',
-    coach: 'Huấn Luyện Viên',
-    guest: 'Hội Viên / Khách'
+    admin: 'Quản Trị Viên (Admin)',
+    receptionist: 'Lễ Tân (Receptionist)',
+    coach: 'Huấn Luyện Viên (Coach)',
+    guest: 'Khách / Hội Viên (Member)'
   };
 
-  const getTabsForRole = (role: UserRole) => {
+  const getTabsForRole = (role: UserRole): NavTabItem[] => {
     switch (role) {
       case 'receptionist':
         return [
-          { id: 'checkin', label: 'Quầy Check-in QR' },
-          { id: 'pos', label: 'Bán Gói Tại Quầy (POS)' },
-          { id: 'members', label: 'Danh Sách Hội Viên' },
-          { id: 'tickets', label: 'Hỗ Trợ & Yêu Cầu' }
+          { id: 'checkin', label: 'Check-in QR', icon: QrCode },
+          { id: 'pos', label: 'Gói Tập (POS)', icon: CreditCard },
+          { id: 'members', label: 'Hội Viên', icon: Users },
+          { id: 'tickets', label: 'Hỗ Trợ', icon: LifeBuoy }
         ];
       case 'coach':
         return [
-          { id: 'schedule', label: 'Lịch Dạy & Điểm Danh' },
-          { id: 'trainees', label: 'Hồ Sơ Học Viên PT' },
-          { id: 'ai-workout', label: 'Gợi Ý Giáo Án (AI)' },
-          { id: 'availability', label: 'Ca Rảnh & Đơn Giá' }
+          { id: 'schedule', label: 'Lịch Dạy', icon: Calendar },
+          { id: 'trainees', label: 'Hồ Sơ Học Viên', icon: UserCheck },
+          { id: 'ai-workout', label: 'Giáo Án (AI)', icon: Sparkles },
+          { id: 'availability', label: 'Đăng Lịch Rảnh', icon: Clock }
         ];
       case 'admin':
         return [
-          { id: 'analytics', label: 'Tổng Quan & BI Báo Cáo' },
-          { id: 'members-360', label: 'Quản Lý Member 360°' },
-          { id: 'tickets-management', label: 'Xử Lý Báo Cáo & Yêu Cầu' },
-          { id: 'coaches-config', label: 'Quản Lý & Giá Coach' },
-          { id: 'packages-engine', label: 'Gói Tập & Khóa Học' },
-          { id: 'audit-rbac', label: 'Nhật Ký & Phân Quyền' }
+          { id: 'analytics', label: 'Tổng Quan & BI', icon: BarChart3 },
+          { id: 'members-360', label: 'Quản Lý Hội Viên', icon: Users },
+          { id: 'tickets-management', label: 'Xử Lý Yêu Cầu', icon: LifeBuoy },
+          { id: 'coaches-config', label: 'Quản Lý HLV', icon: UserCheck },
+          { id: 'packages-engine', label: 'Gói Tập & Dịch Vụ', icon: Package },
+          { id: 'audit-rbac', label: 'Nhật Ký Hệ Thống', icon: FileText }
         ];
       case 'guest':
         return [
-          { id: 'home', label: 'Trang Chủ' },
-          { id: 'pricing', label: 'Bảng Giá & Khóa Học' },
-          { id: 'coaches', label: 'Đội Ngũ Huấn Luyện Viên' },
-          { id: 'schedule', label: 'Lịch Lớp Tuần Này' }
+          { id: 'home', label: 'Trang Chủ', icon: Home },
+          { id: 'pricing', label: 'Gói Tập & Bảng Giá', icon: Package },
+          { id: 'coaches', label: 'Đội Ngũ HLV', icon: Users },
+          { id: 'schedule', label: 'Lịch Lớp Tuần Này', icon: Calendar },
+          { id: 'checkin-portal', label: 'Check-in QR', icon: QrCode }
         ];
       default:
         return [];
@@ -83,256 +157,592 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleTabClick = (tabId: string) => {
     onTabChange(tabId);
-    // If in guest mode, smooth scroll directly to target section
     if (currentRole === 'guest') {
       const el = document.getElementById(tabId);
       if (el) {
-        const yOffset = -80;
+        const yOffset = -24;
         const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
         window.scrollTo({ top: y, behavior: 'smooth' });
       }
     }
   };
 
-  return (
-    <header style={{
-      position: 'sticky',
-      top: 0,
-      zIndex: 100,
-      backgroundColor: 'rgba(13, 22, 25, 0.95)',
-      backdropFilter: 'blur(12px)',
-      borderBottom: 'var(--border-subtle)',
-      height: 'var(--header-height)'
-    }}>
-      <div style={{
-        maxWidth: 'var(--max-content-width)',
-        margin: '0 auto',
-        height: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 var(--space-xl)'
-      }}>
-        {/* Brand / Logo */}
-        <div 
-          style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', cursor: 'pointer' }}
-          onClick={() => handleTabClick('home')}
-        >
-          <div style={{
-            width: 42,
-            height: 42,
-            borderRadius: 'var(--radius-sm)',
-            background: 'linear-gradient(135deg, #FE7413, #FF3D00)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            boxShadow: 'var(--shadow-glow)'
-          }}>
-            <Dumbbell size={24} strokeWidth={2.4} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{
-                fontFamily: 'var(--font-display)',
-                fontWeight: 900,
-                fontSize: 19,
-                letterSpacing: '-0.03em',
-                color: '#fff'
-              }}>
-                AURA<span style={{ color: 'var(--color-primary)' }}>FITNESS</span>
-              </span>
-              <span style={{
-                fontSize: 10,
-                fontWeight: 800,
-                background: 'var(--color-primary-light)',
-                color: 'var(--color-primary)',
-                padding: '2px 6px',
-                borderRadius: 'var(--radius-full)',
-                border: '1px solid var(--color-primary-glow)'
-              }}>
-                PRO
-              </span>
-            </div>
-            <p style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 500 }}>
-              Sports Center Management System
-            </p>
-          </div>
-        </div>
+  const currentWidth = isCollapsed ? 76 : sidebarWidth;
 
-        {/* Dynamic Navigation Tabs based on Role */}
-        <nav style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {currentTabs.map(tab => {
-            const isActive = activeTab === tab.id;
-            return (
+  return (
+    <aside
+      style={{
+        width: currentWidth,
+        minWidth: currentWidth,
+        maxWidth: currentWidth,
+        height: '100vh',
+        position: 'sticky',
+        top: 0,
+        left: 0,
+        zIndex: 100,
+        backgroundColor: theme === 'light' ? 'rgba(255, 255, 255, 0.84)' : 'rgba(32, 14, 7, 0.86)',
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        borderRight: '1px solid var(--border-subtle)',
+        display: 'flex',
+        flexDirection: 'column',
+        transition: isDragging ? 'none' : 'width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)',
+        userSelect: isDragging ? 'none' : 'auto',
+        boxShadow: 'var(--shadow-sm)'
+      }}
+    >
+      {/* 1. TOP HEADER: BRAND LOGO & COLLAPSE / EXPAND BUTTON */}
+      <div
+        style={{
+          minHeight: isCollapsed ? 82 : 68,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: isCollapsed ? 'center' : 'space-between',
+          padding: isCollapsed ? '8px 10px' : '0 16px',
+          borderBottom: '1px solid var(--aura-border)',
+          gap: 10
+        }}
+      >
+        {isCollapsed ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: '100%' }}>
+            <div
+              onClick={() => handleTabClick('home')}
+              style={{ cursor: 'pointer' }}
+              title="Aura Fitness (Về Trang Chủ)"
+            >
+              <AuraLogo size={38} showText={false} />
+            </div>
+            <button
+              onClick={() => setIsCollapsed(false)}
+              title="Mở rộng sidebar"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 34,
+                height: 24,
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-app)',
+                border: '1px solid var(--aura-border)',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'var(--color-primary)';
+                e.currentTarget.style.borderColor = 'var(--color-primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--text-muted)';
+                e.currentTarget.style.borderColor = 'var(--aura-border)';
+              }}
+            >
+              <PanelLeftOpen size={14} />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div
+              onClick={() => handleTabClick('home')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+                overflow: 'hidden',
+                flex: 1
+              }}
+              title="Aura Gym & Fitness Club"
+            >
+              <AuraLogo size={42} showText={true} />
+            </div>
+
+            <button
+              onClick={() => setIsCollapsed(true)}
+              title="Thu gọn sidebar"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                minWidth: 32,
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-app)',
+                border: '1px solid var(--aura-border)',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'var(--color-primary)';
+                e.currentTarget.style.borderColor = 'var(--color-primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--text-muted)';
+                e.currentTarget.style.borderColor = 'var(--aura-border)';
+              }}
+            >
+              <PanelLeftClose size={16} />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* 2. QUICK CTA (Check-in QR for Staff/Admin) */}
+      {(currentRole === 'admin' || currentRole === 'receptionist') && (
+        <div style={{ padding: isCollapsed ? '12px 10px 4px' : '14px 16px 6px' }}>
+          <button
+            className="btn-primary"
+            onClick={onOpenQuickCheckIn}
+            title="Quét QR Check-in điểm danh"
+            style={{
+              width: '100%',
+              padding: isCollapsed ? '10px 0' : '9px 12px',
+              justifyContent: 'center',
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              borderRadius: 'var(--radius-sm)'
+            }}
+          >
+            <QrCode size={16} />
+            {!isCollapsed && <span style={{ whiteSpace: 'nowrap' }}>Quét QR Điểm Danh</span>}
+          </button>
+        </div>
+      )}
+
+      {/* 3. NAVIGATION ITEMS */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: isCollapsed ? '12px 8px' : '12px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4
+        }}
+      >
+        {!isCollapsed && (
+          <div
+            style={{
+              padding: '6px 10px',
+              fontSize: 11,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: 'var(--text-muted)'
+            }}
+          >
+            {currentRole === 'guest' ? 'Khám Phá' : 'Menu Quản Trị'}
+          </div>
+        )}
+
+        {currentTabs.map(tab => {
+          const isActive = activeTab === tab.id;
+          const IconComponent = tab.icon;
+          const isHovered = hoveredTabId === tab.id;
+
+          return (
+            <div
+              key={tab.id}
+              style={{ position: 'relative' }}
+              onMouseEnter={() => setHoveredTabId(tab.id)}
+              onMouseLeave={() => setHoveredTabId(null)}
+            >
               <button
-                key={tab.id}
                 onClick={() => handleTabClick(tab.id)}
                 style={{
-                  background: isActive ? 'var(--color-primary)' : 'transparent',
-                  color: isActive ? '#fff' : 'var(--text-muted)',
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: isCollapsed ? '12px 0' : '10px 14px',
+                  justifyContent: isCollapsed ? 'center' : 'flex-start',
+                  background: isActive ? 'var(--color-primary)' : isHovered ? 'var(--bg-app)' : 'transparent',
+                  color: isActive ? '#FFFFFF' : 'var(--text-primary)',
                   border: 'none',
-                  borderRadius: 'var(--radius-full)',
-                  padding: '8px 16px',
-                  fontWeight: isActive ? 700 : 600,
+                  borderRadius: 'var(--radius-sm)',
+                  fontWeight: isActive ? 700 : 500,
                   fontSize: 13,
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
-                  boxShadow: isActive ? '0 2px 10px rgba(254, 116, 19, 0.3)' : 'none'
+                  textAlign: 'left',
+                  boxShadow: isActive ? '0 2px 8px var(--color-primary-glow)' : 'none',
+                  position: 'relative'
                 }}
               >
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Right Actions: Quick QR (Admin/Lễ tân), User Profile / Auth */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
-          {/* Quick Check-in CTA Button (Chỉ hiển thị cho vai trò Admin và Lễ Tân) */}
-          {(currentRole === 'admin' || currentRole === 'receptionist') && (
-            <button 
-              className="btn-primary" 
-              style={{ padding: '7px 14px', fontSize: 12 }}
-              onClick={onOpenQuickCheckIn}
-              title="Mở cổng quét QR Check-in mô phỏng"
-            >
-              <QrCode size={15} />
-              <span>Quét QR Test</span>
-            </button>
-          )}
-
-          {/* User Profile Menu OR Login/Register buttons */}
-          {currentUser ? (
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  background: 'var(--bg-card)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 'var(--radius-full)',
-                  padding: '4px 14px 4px 4px',
-                  cursor: 'pointer',
-                  transition: 'border-color 0.15s'
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)')}
-              >
-                <img
-                  src={currentUser.avatar}
-                  alt={currentUser.name}
-                  style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
-                />
-                <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', display: 'block' }}>
-                    {currentUser.name}
-                  </span>
-                  <span style={{ fontSize: 10, color: 'var(--color-primary)', fontWeight: 600 }}>
-                    {roleLabels[currentUser.role] || currentUser.role.toUpperCase()}
-                  </span>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: 20
+                  }}
+                >
+                  <IconComponent size={18} strokeWidth={isActive ? 2.4 : 2} />
                 </div>
-                <ChevronDown size={14} style={{ color: 'var(--text-muted)', marginLeft: 2 }} />
+
+                {!isCollapsed && (
+                  <span
+                    style={{
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      flex: 1
+                    }}
+                  >
+                    {tab.label}
+                  </span>
+                )}
               </button>
 
-              {/* User Menu Dropdown */}
-              {showUserMenu && (
-                <div style={{
-                  position: 'absolute',
-                  right: 0,
-                  top: '120%',
-                  width: 230,
-                  background: 'var(--bg-panel)',
-                  border: 'var(--border-card)',
-                  borderRadius: 'var(--radius-sm)',
-                  boxShadow: 'var(--shadow-lg)',
-                  padding: 8,
-                  zIndex: 200,
-                  animation: 'fadeIn 0.15s ease'
-                }}>
-                  <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{currentUser.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{currentUser.email}</div>
-                    <span className="badge badge-primary" style={{ fontSize: 9, marginTop: 4 }}>
-                      {roleLabels[currentUser.role]}
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      onOpenSettings();
-                      setShowUserMenu(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '9px 10px',
-                      background: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: '#fff',
-                      fontSize: 13,
-                      cursor: 'pointer',
-                      textAlign: 'left'
-                    }}
-                  >
-                    <Settings size={15} color="var(--color-primary)" />
-                    <span>Cài Đặt & Cấu Hình</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      onLogout();
-                      setShowUserMenu(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '9px 10px',
-                      background: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: 'var(--color-danger)',
-                      fontSize: 13,
-                      cursor: 'pointer',
-                      textAlign: 'left'
-                    }}
-                  >
-                    <LogOut size={15} />
-                    <span>Đăng Xuất Tài Khoản</span>
-                  </button>
+              {/* Floating Tooltip in Collapsed Mode */}
+              {isCollapsed && isHovered && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 'calc(100% + 10px)',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    backgroundColor: 'var(--bg-panel)',
+                    color: 'var(--text-primary)',
+                    padding: '6px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    boxShadow: 'var(--shadow-lg)',
+                    border: '1px solid var(--aura-border)',
+                    zIndex: 300,
+                    pointerEvents: 'none'
+                  }}
+                >
+                  {tab.label}
                 </div>
               )}
             </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                className="btn-ghost"
-                style={{ padding: '8px 14px', fontSize: 13 }}
-                onClick={onOpenLogin}
-              >
-                <LogIn size={15} />
-                <span>Đăng Nhập</span>
-              </button>
+          );
+        })}
+      </div>
 
-              <button
-                className="btn-outline"
-                style={{ padding: '6px 16px', fontSize: 12 }}
-                onClick={onOpenRegister}
-              >
-                <UserPlus size={14} />
-                <span>Đăng Ký</span>
-              </button>
+      {/* 4. BOTTOM SECTION: THEME TOGGLE & USER PROFILE */}
+      <div
+        style={{
+          borderTop: '1px solid var(--aura-border)',
+          padding: isCollapsed ? '12px 8px' : '14px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          background: 'var(--bg-panel)'
+        }}
+      >
+        {/* Light / Dark Mode Toggle */}
+        {isCollapsed ? (
+          <button
+            onClick={onToggleTheme}
+            title={theme === 'light' ? 'Chuyển sang nền Tối' : 'Chuyển sang nền Sáng'}
+            style={{
+              width: '100%',
+              height: 38,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--aura-border)',
+              color: 'var(--color-primary)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {theme === 'light' ? <Moon size={17} /> : <Sun size={17} style={{ color: '#FFA726' }} />}
+          </button>
+        ) : (
+          <div
+            onClick={onToggleTheme}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 12px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--aura-border)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            title="Nhấp để đổi giao diện Sáng / Tối"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+              {theme === 'light' ? (
+                <>
+                  <Sun size={16} color="var(--color-primary)" />
+                  <span>Giao diện Sáng</span>
+                </>
+              ) : (
+                <>
+                  <Moon size={16} color="#FFA726" />
+                  <span>Giao diện Tối</span>
+                </>
+              )}
             </div>
-          )}
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '2px 6px',
+                borderRadius: 'var(--radius-full)',
+                background: 'var(--color-primary-light)',
+                color: 'var(--color-primary)'
+              }}
+            >
+              {theme === 'light' ? 'Light' : 'Dark'}
+            </span>
+          </div>
+        )}
+
+        {/* User Profile or Guest Login/Register */}
+        {currentUser ? (
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: isCollapsed ? '6px 0' : '6px 8px',
+                justifyContent: isCollapsed ? 'center' : 'flex-start',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--aura-border)',
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                transition: 'border-color 0.15s'
+              }}
+              title={currentUser.name}
+            >
+              <img
+                src={currentUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
+                alt={currentUser.name}
+                style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
+              />
+
+              {!isCollapsed && (
+                <>
+                  <div style={{ textAlign: 'left', flex: 1, minWidth: 0, lineHeight: 1.2 }}>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        display: 'block',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {currentUser.name}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--color-primary)', fontWeight: 600 }}>
+                      {roleLabels[currentUser.role] || currentUser.role.toUpperCase()}
+                    </span>
+                  </div>
+                  <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+                </>
+              )}
+            </button>
+
+            {/* User Dropdown Menu */}
+            {showUserMenu && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: isCollapsed ? 'calc(100% + 10px)' : 0,
+                  bottom: isCollapsed ? 0 : '110%',
+                  width: 230,
+                  background: 'var(--bg-panel)',
+                  border: '1px solid var(--aura-border)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'var(--shadow-lg)',
+                  padding: 8,
+                  zIndex: 300
+                }}
+              >
+                <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--aura-border)', marginBottom: 6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{currentUser.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{currentUser.email}</div>
+                  <span className="badge badge-primary" style={{ fontSize: 9, marginTop: 4 }}>
+                    {roleLabels[currentUser.role]}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => {
+                    onOpenSettings();
+                    setShowUserMenu(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 10px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: 6,
+                    color: 'var(--text-primary)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <Settings size={15} color="var(--color-primary)" />
+                  <span>Cài Đặt & Cấu Hình</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    onLogout();
+                    setShowUserMenu(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 10px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: 6,
+                    color: 'var(--color-danger)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <LogOut size={15} />
+                  <span>Đăng Xuất Tài Khoản</span>
+                </button>
+              </div>
+            )}
+          </div>
+        ) : isCollapsed ? (
+          /* Collapsed Guest Login/Register Icons */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <button
+              onClick={onOpenLogin}
+              title="Đăng Nhập"
+              style={{
+                width: '100%',
+                height: 36,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-app)',
+                border: '1px solid var(--aura-border)',
+                color: 'var(--color-primary)',
+                cursor: 'pointer'
+              }}
+            >
+              <LogIn size={16} />
+            </button>
+            <button
+              onClick={onOpenRegister}
+              title="Đăng Ký Tài Khoản"
+              style={{
+                width: '100%',
+                height: 36,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--color-primary)',
+                border: 'none',
+                color: '#FFFFFF',
+                cursor: 'pointer'
+              }}
+            >
+              <UserPlus size={16} />
+            </button>
+          </div>
+        ) : (
+          /* Expanded Guest Buttons */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              className="btn-ghost"
+              style={{ width: '100%', padding: '8px 12px', fontSize: 13, justifyContent: 'center' }}
+              onClick={onOpenLogin}
+            >
+              <LogIn size={15} />
+              <span>Đăng Nhập</span>
+            </button>
+            <button
+              className="btn-primary"
+              style={{ width: '100%', padding: '8px 12px', fontSize: 13, justifyContent: 'center' }}
+              onClick={onOpenRegister}
+            >
+              <UserPlus size={14} />
+              <span>Đăng Ký Tài Khoản</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 5. INTERACTIVE HORIZONTAL RESIZER HANDLE (Right edge) */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDoubleClick={() => setIsCollapsed(!isCollapsed)}
+        title="Kéo sang trái/phải để điều chỉnh độ rộng, hoặc nhấp đúp để thu gọn/mở rộng"
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: -3,
+          width: 6,
+          height: '100%',
+          cursor: 'col-resize',
+          zIndex: 400,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'background-color 0.15s'
+        }}
+      >
+        <div
+          style={{
+            width: 2,
+            height: '100%',
+            backgroundColor: isDragging ? 'var(--color-primary)' : 'transparent',
+            transition: 'background-color 0.15s'
+          }}
+        />
+        {/* Subtle Grip Icon hint */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'var(--bg-panel)',
+            border: '1px solid var(--aura-border)',
+            borderRadius: 'var(--radius-full)',
+            width: 14,
+            height: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: isDragging ? 1 : 0.4,
+            color: 'var(--text-muted)',
+            boxShadow: 'var(--shadow-sm)'
+          }}
+        >
+          <GripVertical size={10} />
         </div>
       </div>
-    </header>
+    </aside>
   );
 };

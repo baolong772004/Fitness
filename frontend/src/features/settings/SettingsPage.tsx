@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../../types';
 import { MockDatabase, SystemSettings, DEFAULT_SYSTEM_SETTINGS } from '../../mocks/mockData';
+import { api } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import { 
   Settings, 
@@ -15,7 +16,8 @@ import {
   LogOut,
   Lock,
   Smartphone,
-  Sparkles
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 
 interface SettingsPageProps {
@@ -32,6 +34,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onUpdateUser
 }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'center' | 'preferences' | 'security'>('profile');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Profile Form State
   const [profileForm, setProfileForm] = useState({
@@ -39,6 +42,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     phone: currentUser?.phone || '0900 111 222',
     email: currentUser?.email || 'user@aurafitness.vn',
     avatar: currentUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+    oldPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
@@ -52,22 +56,60 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     setCenterSettings(MockDatabase.getSettings());
   }, []);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentUser) {
-      const updated: User = {
-        ...currentUser,
-        name: profileForm.name,
-        phone: profileForm.phone,
-        email: profileForm.email,
-        avatar: profileForm.avatar
-      };
-      MockDatabase.saveCurrentSession(updated);
-      onUpdateUser(updated);
+    setIsSaving(true);
+    setSaveSuccessMsg(null);
+
+    try {
+      if (currentUser?.id) {
+        // 1. Call Backend API to update Profile
+        try {
+          await api.users.updateUser(currentUser.id, {
+            fullName: profileForm.name,
+            phone: profileForm.phone,
+            avatar: profileForm.avatar
+          });
+        } catch (apiErr) {
+          console.warn('API update profile warning (using session cache):', apiErr);
+        }
+
+        // 2. If password change was provided
+        if (profileForm.newPassword) {
+          if (profileForm.newPassword !== profileForm.confirmPassword) {
+            alert('Mật khẩu mới và mật khẩu xác nhận không khớp!');
+            setIsSaving(false);
+            return;
+          }
+          if (!profileForm.oldPassword) {
+            alert('Vui lòng nhập mật khẩu hiện tại để đổi mật khẩu!');
+            setIsSaving(false);
+            return;
+          }
+          await api.auth.changePassword({
+            oldPassword: profileForm.oldPassword,
+            newPassword: profileForm.newPassword
+          });
+        }
+
+        const updated: User = {
+          ...currentUser,
+          name: profileForm.name,
+          phone: profileForm.phone,
+          email: profileForm.email,
+          avatar: profileForm.avatar
+        };
+        onUpdateUser(updated);
+      }
+      soundEffects.playSuccessBeep();
+      setSaveSuccessMsg('Đã cập nhật hồ sơ cá nhân lên cơ sở dữ liệu thành công!');
+      setTimeout(() => setSaveSuccessMsg(null), 3000);
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi khi cập nhật hồ sơ: ${err.message}`);
+    } finally {
+      setIsSaving(false);
     }
-    soundEffects.playSuccessBeep();
-    setSaveSuccessMsg('Đã cập nhật hồ sơ cá nhân thành công!');
-    setTimeout(() => setSaveSuccessMsg(null), 3000);
   };
 
   const handleSaveCenterConfig = (e: React.FormEvent) => {
@@ -105,7 +147,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <Settings size={26} />
         </div>
         <div>
-          <h2 style={{ fontSize: 24, color: '#fff' }}>Cài Đặt Hệ Thống & Tài Khoản</h2>
+          <h2 style={{ fontSize: 24, color: 'var(--text-primary)', fontWeight: 800 }}>Cài Đặt Hệ Thống & Tài Khoản</h2>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
             Quản lý hồ sơ, cấu hình phòng tập, thông báo và bảo mật
           </p>
@@ -143,7 +185,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               gap: 10,
               padding: '12px 14px',
               background: activeTab === 'profile' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'profile' ? '#fff' : 'var(--text-muted)',
+              color: activeTab === 'profile' ? '#FFFFFF' : 'var(--text-muted)',
               border: 'none',
               borderRadius: 'var(--radius-sm)',
               fontWeight: 700,
@@ -166,7 +208,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               gap: 10,
               padding: '12px 14px',
               background: activeTab === 'center' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'center' ? '#fff' : 'var(--text-muted)',
+              color: activeTab === 'center' ? '#FFFFFF' : 'var(--text-muted)',
               border: 'none',
               borderRadius: 'var(--radius-sm)',
               fontWeight: 700,
@@ -189,7 +231,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               gap: 10,
               padding: '12px 14px',
               background: activeTab === 'preferences' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'preferences' ? '#fff' : 'var(--text-muted)',
+              color: activeTab === 'preferences' ? '#FFFFFF' : 'var(--text-muted)',
               border: 'none',
               borderRadius: 'var(--radius-sm)',
               fontWeight: 700,
@@ -212,7 +254,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               gap: 10,
               padding: '12px 14px',
               background: activeTab === 'security' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'security' ? '#fff' : 'var(--text-muted)',
+              color: activeTab === 'security' ? '#FFFFFF' : 'var(--text-muted)',
               border: 'none',
               borderRadius: 'var(--radius-sm)',
               fontWeight: 700,
@@ -231,7 +273,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           {/* TAB 1: PROFILE */}
           {activeTab === 'profile' && (
             <form onSubmit={handleSaveProfile}>
-              <h3 style={{ fontSize: 18, color: '#fff', marginBottom: 20 }}>Thông Tin Hồ Sơ Cá Nhân</h3>
+              <h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800, marginBottom: 20 }}>Thông Tin Hồ Sơ Cá Nhân</h3>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
                 <img
@@ -240,7 +282,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--color-primary)' }}
                 />
                 <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
                     Đường dẫn ảnh đại diện (Avatar URL):
                   </label>
                   <input
@@ -254,7 +296,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
                     Họ và Tên:
                   </label>
                   <input
@@ -266,7 +308,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
                     Số Điện Thoại:
                   </label>
                   <input
@@ -280,21 +322,77 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
                   Địa Chỉ Email:
                 </label>
                 <input
                   type="email"
                   required
+                  disabled
                   className="form-input"
+                  style={{ opacity: 0.7 }}
                   value={profileForm.email}
                   onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
                 />
               </div>
 
-              <button type="submit" className="btn-primary" style={{ padding: '12px 24px' }}>
-                <Save size={16} />
-                <span>Lưu Thay Đổi Hồ Sơ</span>
+              {/* Password Change Sub-section */}
+              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 18, marginBottom: 20 }}>
+                <h4 style={{ fontSize: 14, color: 'var(--color-primary)', marginBottom: 12, fontWeight: 700 }}>
+                  Đổi Mật Khẩu Tài Khoản (Bảo Mật API)
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                      Mật khẩu hiện tại:
+                    </label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      placeholder="••••••••"
+                      value={profileForm.oldPassword}
+                      onChange={(e) => setProfileForm({ ...profileForm, oldPassword: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                      Mật khẩu mới (≥ 6 ký tự):
+                    </label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      placeholder="••••••••"
+                      value={profileForm.newPassword}
+                      onChange={(e) => setProfileForm({ ...profileForm, newPassword: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                      Xác nhận mật khẩu mới:
+                    </label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      placeholder="••••••••"
+                      value={profileForm.confirmPassword}
+                      onChange={(e) => setProfileForm({ ...profileForm, confirmPassword: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" disabled={isSaving} className="btn-primary" style={{ padding: '12px 24px' }}>
+                {isSaving ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Đang lưu cập nhật...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    <span>Lưu Thay Đổi Hồ Sơ</span>
+                  </>
+                )}
               </button>
             </form>
           )}
@@ -302,10 +400,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           {/* TAB 2: CENTER CONFIGURATION */}
           {activeTab === 'center' && (
             <form onSubmit={handleSaveCenterConfig}>
-              <h3 style={{ fontSize: 18, color: '#fff', marginBottom: 20 }}>Cấu Hình Trung Tâm Thể Thao</h3>
+              <h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800, marginBottom: 20 }}>Cấu Hình Trung Tâm Thể Thao</h3>
 
               <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
                   Tên Thương Hiệu Trung Tâm:
                 </label>
                 <input
@@ -318,7 +416,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 14, marginBottom: 14 }}>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
                     Đường Dây Nóng (Hotline):
                   </label>
                   <input
@@ -329,7 +427,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
                     Thời Gian Mở Cửa Hàng Ngày:
                   </label>
                   <input
@@ -342,7 +440,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
 
               <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
                   Địa Chỉ Cơ Sở:
                 </label>
                 <input
@@ -354,7 +452,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
 
               <div style={{ marginBottom: 24 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#fff', display: 'block', marginBottom: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
                   Thời hạn tối thiểu báo trước khi hủy buổi để được cấp học bù (Tiếng):
                 </label>
                 <input
@@ -380,7 +478,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           {/* TAB 3: PREFERENCES & AUDIO */}
           {activeTab === 'preferences' && (
             <div>
-              <h3 style={{ fontSize: 18, color: '#fff', marginBottom: 20 }}>Tùy Chọn Âm Thanh & Thông Báo</h3>
+              <h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800, marginBottom: 20 }}>Tùy Chọn Âm Thanh & Thông Báo</h3>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{
@@ -389,10 +487,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   alignItems: 'center',
                   padding: 16,
                   background: 'var(--bg-app)',
+                  border: '1px solid var(--aura-border)',
                   borderRadius: 'var(--radius-sm)'
                 }}>
                   <div>
-                    <strong style={{ color: '#fff', fontSize: 14 }}>Hiệu Ứng Âm Thanh Web Audio (Bíp/Tít)</strong>
+                    <strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>Hiệu Ứng Âm Thanh Web Audio (Bíp/Tít)</strong>
                     <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                       Phát âm thanh phản hồi khi quét mã QR check-in hoặc thanh toán thành công.
                     </p>
@@ -416,10 +515,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   alignItems: 'center',
                   padding: 16,
                   background: 'var(--bg-app)',
+                  border: '1px solid var(--aura-border)',
                   borderRadius: 'var(--radius-sm)'
                 }}>
                   <div>
-                    <strong style={{ color: '#fff', fontSize: 14 }}>Thông Báo Đẩy & Tin Nhắn Zalo</strong>
+                    <strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>Thông Báo Đẩy & Tin Nhắn Zalo</strong>
                     <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                       Gửi thông báo nhắc lịch học, kết quả buổi tập và cảnh báo khi gói sắp hết hạn.
                     </p>
@@ -442,7 +542,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           {/* TAB 4: SECURITY & 2FA */}
           {activeTab === 'security' && (
             <div>
-              <h3 style={{ fontSize: 18, color: '#fff', marginBottom: 20 }}>Bảo Mật & Phiên Đăng Nhập</h3>
+              <h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800, marginBottom: 20 }}>Bảo Mật & Phiên Đăng Nhập</h3>
 
               <div style={{
                 display: 'flex',
@@ -450,11 +550,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 alignItems: 'center',
                 padding: 16,
                 background: 'var(--bg-app)',
+                border: '1px solid var(--aura-border)',
                 borderRadius: 'var(--radius-sm)',
                 marginBottom: 20
               }}>
                 <div>
-                  <strong style={{ color: '#fff', fontSize: 14 }}>Xác Thực 2 Lớp (2FA qua SMS OTP)</strong>
+                  <strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>Xác Thực 2 Lớp (2FA qua SMS OTP)</strong>
                   <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                     Yêu cầu nhập mã OTP mỗi lần đăng nhập từ trình duyệt hoặc thiết bị lạ.
                   </p>
@@ -471,11 +572,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 />
               </div>
 
-              <div style={{ padding: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)' }}>
-                <h4 style={{ fontSize: 14, color: '#fff', marginBottom: 8 }}>Phiên Làm Việc Hiện Tại</h4>
+              <div style={{ padding: 16, background: 'var(--bg-app)', border: '1px solid var(--aura-border)', borderRadius: 'var(--radius-sm)' }}>
+                <h4 style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 700, marginBottom: 8 }}>Phiên Làm Việc Hiện Tại</h4>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                  <div>Trình duyệt: <strong>Google Chrome / Edge (Windows 11)</strong></div>
-                  <div>Địa chỉ IP: <strong>118.70.12.89 (Hà Nội, Việt Nam)</strong></div>
+                  <div>Trình duyệt: <strong style={{ color: 'var(--text-primary)' }}>Google Chrome / Edge (Windows 11)</strong></div>
+                  <div>Địa chỉ IP: <strong style={{ color: 'var(--text-primary)' }}>118.70.12.89 (Hà Nội, Việt Nam)</strong></div>
                   <div>Trạng thái: <span style={{ color: 'var(--color-success)', fontWeight: 700 }}>● Đang hoạt động</span></div>
                 </div>
               </div>

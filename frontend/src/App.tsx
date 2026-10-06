@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserRole, User } from './types';
-import { MockDatabase } from './mocks/mockData';
+import { api, tokenStorage, STORAGE_KEYS } from './services/api';
 import { Navbar } from './components/layout/Navbar';
 import { ReceptionistDashboard } from './features/receptionist/ReceptionistDashboard';
 import { CoachDashboard } from './features/coach/CoachDashboard';
@@ -10,6 +10,7 @@ import { SettingsPage } from './features/settings/SettingsPage';
 import { AuthModal } from './features/auth/AuthModal';
 import { FloatingAIChatbot } from './features/ai-assistant/FloatingAIChatbot';
 import { soundEffects } from './services/audioService';
+import { Clock, Phone, MapPin, QrCode } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -19,19 +20,72 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
 
-  // Initialize session from LocalStorage
+  // Theme Management (Light mode is DEFAULT as requested by user)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
+    return savedTheme === 'dark' ? 'dark' : 'light';
+  });
+
+  // Apply theme to document root
   useEffect(() => {
-    const saved = MockDatabase.getCurrentSession();
-    if (saved) {
-      setCurrentUser(saved);
-      setCurrentRole(saved.role);
-      syncDefaultTab(saved.role);
-    } else {
-      // Default to public guest landing page when not logged in
-      setCurrentUser(null);
-      setCurrentRole('guest');
-      setActiveTab('home');
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem(STORAGE_KEYS.THEME, theme);
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+    soundEffects.playSuccessBeep();
+  };
+
+  // Scope shadcn/ui base styles to staff dashboards (admin / receptionist / coach)
+  useEffect(() => {
+    const isStaffView = currentRole !== 'guest' && viewMode === 'main';
+    document.body.classList.toggle('staff-ui', isStaffView);
+    return () => document.body.classList.remove('staff-ui');
+  }, [currentRole, viewMode]);
+
+  // Initialize session from LocalStorage or Backend API
+  useEffect(() => {
+    const savedUserJson = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+    if (savedUserJson) {
+      try {
+        const saved = JSON.parse(savedUserJson);
+        const token = tokenStorage.getAccessToken();
+        if (token && saved) {
+          let mappedRole: UserRole = 'guest';
+          const r = (saved.role || '').toUpperCase().trim();
+          if (r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'MANAGER') {
+            mappedRole = 'admin';
+          } else if (r === 'RECEPTIONIST' || r === 'STAFF' || r === 'LE_TAN' || r === 'FRONT_DESK') {
+            mappedRole = 'receptionist';
+          } else if (r === 'COACH' || r === 'TRAINER' || r === 'PT' || r === 'HLV') {
+            mappedRole = 'coach';
+          } else {
+            mappedRole = 'guest';
+          }
+
+          const formatted: User = {
+            id: String(saved.id),
+            name: saved.fullName || saved.name || saved.email,
+            email: saved.email,
+            phone: saved.phone || '',
+            role: mappedRole,
+            avatar: saved.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80'
+          };
+          setCurrentUser(formatted);
+          setCurrentRole(mappedRole);
+          syncDefaultTab(mappedRole);
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to parse current user session', e);
+      }
     }
+
+    // Default to guest landing page
+    setCurrentUser(null);
+    setCurrentRole('guest');
+    setActiveTab('home');
   }, []);
 
   const syncDefaultTab = (role: UserRole) => {
@@ -66,7 +120,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    MockDatabase.clearSession();
+    api.auth.logout();
     setCurrentUser(null);
     setCurrentRole('guest');
     setViewMode('main');
@@ -76,8 +130,8 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Athletic Sports Center Top Navbar */}
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'row', backgroundColor: 'var(--bg-app)' }}>
+      {/* Aura Fitness Vertical Sidebar Navbar */}
       <Navbar
         currentRole={currentRole}
         currentUser={currentUser}
@@ -97,10 +151,13 @@ export default function App() {
         }}
         onOpenSettings={() => setViewMode('settings')}
         onLogout={handleLogout}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
-      {/* Main Content Rendered Dynamically */}
-      <main style={{ flex: 1 }}>
+      {/* Main Content Column */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <main style={{ flex: 1 }}>
         {viewMode === 'settings' ? (
           <SettingsPage
             currentUser={currentUser}
@@ -135,6 +192,11 @@ export default function App() {
               <GuestLandingPage
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
+                currentUser={currentUser}
+                onOpenLogin={() => {
+                  setAuthModalTab('login');
+                  setIsAuthModalOpen(true);
+                }}
                 onOpenRegister={() => {
                   setAuthModalTab('register');
                   setIsAuthModalOpen(true);
@@ -145,51 +207,125 @@ export default function App() {
         )}
       </main>
 
-      {/* Persistent Athletic Footer */}
-      <footer style={{
-        background: 'var(--bg-panel)',
-        borderTop: 'var(--border-subtle)',
-        padding: '24px var(--space-xl)',
-        marginTop: 'auto'
-      }}>
-        <div style={{
-          maxWidth: 'var(--max-content-width)',
-          margin: '0 auto',
+      {/* Footer Condition: Full marketing footer for Guest, Compact operational footer for Admin & Staff */}
+      {currentRole === 'guest' ? (
+        <footer style={{
+          background: 'var(--bg-panel)',
+          borderTop: '1px solid var(--aura-border)',
+          padding: '40px 36px 20px',
+          marginTop: 'auto',
+          borderRadius: 0
+        }}>
+          <div style={{
+            width: '100%',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 28,
+            marginBottom: 32
+          }}>
+            {/* Brand Info */}
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-primary)' }}>
+                AURA FITNESS CLUB
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.6 }}>
+                Hệ thống phòng tập thể hình chuẩn quốc tế với trang thiết bị Rogue & Technogym cao cấp, Master Coach NASM và điểm danh 1 chạm.
+              </p>
+            </div>
+
+            {/* Core Facilities */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-primary)', marginBottom: 8 }}>
+                Khu Vực Tập Luyện
+              </div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+                <li>• Khu Tạ Tự Do Olympic (Free Weights)</li>
+                <li>• Máy Khối Cô Lập (Technogym PureStrength)</li>
+                <li>• Cỏ Thể Lực & Cardio HIIT (Functional Turf)</li>
+                <li>• Xông Hơi Khô Sauna & Jacuzzi Thủy Lực</li>
+              </ul>
+            </div>
+
+            {/* Hours & Hotline */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-primary)', marginBottom: 8 }}>
+                Thời Gian & Hỗ Trợ
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13, color: 'var(--text-muted)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Clock size={15} color="var(--color-primary)" />
+                  <span>Mở cửa: <strong>05:30 - 22:30</strong> (24/7 check-in)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Phone size={15} color="var(--color-primary)" />
+                  <span>Hotline: <strong style={{ color: 'var(--color-primary)' }}>1900 6868</strong></span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <QrCode size={15} color="var(--color-primary)" />
+                  <span>Quét mã QR tự động tại cổng vào</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Location */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-primary)', marginBottom: 8 }}>
+                Địa Điểm Trung Tâm
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                <MapPin size={16} color="var(--color-primary)" style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>Tầng 3, TTTM Royal City, 72A Nguyễn Trãi, Thanh Xuân, Hà Nội</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom copyright */}
+          <div style={{
+            width: '100%',
+            paddingTop: 16,
+            borderTop: '1px solid var(--aura-border)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 10,
+            fontSize: 12,
+            color: 'var(--text-muted)'
+          }}>
+            <span>© 2026 AURA Gym & Fitness Club. Bản quyền thuộc về hệ thống quản lý AURA.</span>
+            <span>Trang dành cho khách tham quan & quản lý hội viên</span>
+          </div>
+        </footer>
+      ) : (
+        <footer style={{
+          background: 'var(--bg-panel)',
+          borderTop: '1px solid var(--aura-border)',
+          padding: '10px 24px',
+          marginTop: 'auto',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: 16,
-          fontSize: 13,
+          gap: 10,
+          fontSize: 12,
           color: 'var(--text-muted)'
         }}>
-          <div>
-            <strong style={{ color: '#fff' }}>AURA FITNESS CENTER</strong> • Sports Center Management System (WDP301 FPT)
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 800, color: 'var(--color-primary)', letterSpacing: '0.04em' }}>
+              AURA MANAGEMENT
+            </span>
+            <span style={{ opacity: 0.4 }}>|</span>
+            <span>Phiên làm việc vận hành & quản trị v2.4</span>
           </div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <span>Design tokens: <strong style={{ color: 'var(--color-primary)' }}>#FE7413 Freeletics</strong></span>
-            <span>Authentication: <strong>Role-Driven Session Active</strong></span>
-            <span style={{ color: 'var(--color-success)' }}>● Zero-Backend Mock Engine Active</span>
-            <a 
-              href="#schedule" 
-              onClick={(e) => {
-                e.preventDefault();
-                setViewMode('main');
-                setActiveTab('schedule');
-                const el = document.getElementById('schedule');
-                if (el) {
-                  el.scrollIntoView({ behavior: 'smooth' });
-                }
-              }}
-              style={{ color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer' }}
-            >
-              Xem Lịch Lớp Công Khai
-            </a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+            <span>Hotline kỹ thuật: <strong style={{ color: 'var(--text-primary)' }}>1900 6868</strong></span>
+            <span>© 2026 AURA Fitness</span>
           </div>
-        </div>
-      </footer>
+        </footer>
+      )}
+      </div>
 
-      {/* Auth Modal for Login, Register, and OTP */}
+      {/* Auth Modal for Login, Register, and Forgot Password */}
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}

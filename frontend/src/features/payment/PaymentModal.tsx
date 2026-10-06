@@ -95,7 +95,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <CreditCard size={20} />
             </div>
             <div>
-              <h3 style={{ fontSize: 18, color: '#fff' }}>
+              <h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800 }}>
                 {completedInvoice ? 'Hóa Đơn Thanh Toán Điện Tử' : 'Cổng Thanh Toán Dịch Vụ'}
               </h3>
               <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -122,7 +122,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 borderRadius: 'var(--radius-sm)',
                 padding: '16px',
                 marginBottom: '20px',
-                border: '1px solid rgba(255,255,255,0.06)'
+                border: '1px solid var(--aura-border)'
               }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-dim)', marginBottom: 10, textTransform: 'uppercase' }}>
                   Chi tiết dịch vụ đăng ký
@@ -135,7 +135,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     marginBottom: 8,
                     fontSize: 14
                   }}>
-                    <span style={{ color: '#fff' }}>{it.name} (x{it.quantity})</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{it.name} (x{it.quantity})</span>
                     <span className="metric-mono" style={{ color: 'var(--color-primary)' }}>
                       {it.amountVND.toLocaleString('vi-VN')} đ
                     </span>
@@ -147,7 +147,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     justifyContent: 'space-between',
                     color: 'var(--color-success)',
                     fontSize: 13,
-                    borderTop: '1px dashed rgba(255,255,255,0.1)',
+                    borderTop: '1px dashed var(--aura-border)',
                     paddingTop: 8,
                     marginTop: 8
                   }}>
@@ -159,12 +159,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  borderTop: '1px solid rgba(255,255,255,0.12)',
+                  borderTop: '1px solid var(--aura-border)',
                   paddingTop: 12,
                   marginTop: 10
                 }}>
-                  <span style={{ fontWeight: 700, fontSize: 15, color: '#fff' }}>Tổng thanh toán:</span>
-                  <span className="metric-mono" style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>Tổng thanh toán:</span>
+                  <span className="metric-mono" style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)' }}>
                     {totalVND.toLocaleString('vi-VN')} <span style={{ fontSize: 14, color: 'var(--color-primary)' }}>VNĐ</span>
                   </span>
                 </div>
@@ -172,7 +172,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
               {/* Payment Method Selector */}
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
                   Chọn Phương Thức Thanh Toán:
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
@@ -181,14 +181,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     onClick={() => setMethod('vietqr')}
                     style={{
                       background: method === 'vietqr' ? 'rgba(254, 116, 19, 0.15)' : 'var(--bg-app)',
-                      border: method === 'vietqr' ? '2px solid var(--color-primary)' : '1px solid rgba(255,255,255,0.1)',
+                      border: method === 'vietqr' ? '2px solid var(--color-primary)' : '1px solid var(--aura-border)',
                       borderRadius: 'var(--radius-sm)',
                       padding: '12px 10px',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       gap: 6,
-                      color: '#fff',
+                      color: 'var(--text-primary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -201,14 +201,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     onClick={() => setMethod('momo')}
                     style={{
                       background: method === 'momo' ? 'rgba(216, 45, 139, 0.15)' : 'var(--bg-app)',
-                      border: method === 'momo' ? '2px solid #D82D8B' : '1px solid rgba(255,255,255,0.1)',
+                      border: method === 'momo' ? '2px solid #D82D8B' : '1px solid var(--aura-border)',
                       borderRadius: 'var(--radius-sm)',
                       padding: '12px 10px',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       gap: 6,
-                      color: '#fff',
+                      color: 'var(--text-primary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -221,14 +221,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     onClick={() => setMethod('cash_cod')}
                     style={{
                       background: method === 'cash_cod' ? 'rgba(0, 200, 83, 0.15)' : 'var(--bg-app)',
-                      border: method === 'cash_cod' ? '2px solid var(--color-success)' : '1px solid rgba(255,255,255,0.1)',
+                      border: method === 'cash_cod' ? '2px solid var(--color-success)' : '1px solid var(--aura-border)',
                       borderRadius: 'var(--radius-sm)',
                       padding: '12px 10px',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       gap: 6,
-                      color: '#fff',
+                      color: 'var(--text-primary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -265,11 +265,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       <span style={{ fontSize: 9, fontWeight: 800, color: '#0054A6' }}>VietQR | Napas247</span>
                     </div>
                   </div>
-                  <div style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
                     Quét mã để chuyển: <span className="metric-mono" style={{ color: 'var(--color-primary)', fontSize: 16 }}>{totalVND.toLocaleString('vi-VN')} đ</span>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                    Nội dung CK: <strong style={{ color: '#fff' }}>FITNESS {invoiceCode}</strong>
+                    Nội dung CK: <strong style={{ color: 'var(--text-primary)' }}>FITNESS {invoiceCode}</strong>
                   </div>
                 </div>
               )}
@@ -283,7 +283,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   border: '1px solid rgba(216, 45, 139, 0.3)',
                   marginBottom: 20
                 }}>
-                  <p style={{ fontSize: 14, color: '#fff', fontWeight: 600 }}>Cổng thanh toán MoMo Sandbox</p>
+                  <p style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>Cổng thanh toán MoMo Sandbox</p>
                   <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
                     Hệ thống sẽ kích hoạt ngay khi nhận được tín hiệu thanh toán từ ví MoMo.
                   </p>
@@ -299,7 +299,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   border: '1px solid rgba(0, 200, 83, 0.3)',
                   marginBottom: 20
                 }}>
-                  <p style={{ fontSize: 14, color: '#fff', fontWeight: 600 }}>Thu Tiền Mặt Trực Tiếp</p>
+                  <p style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>Thu Tiền Mặt Trực Tiếp</p>
                   <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
                     Nhân viên lễ tân nhận đủ số tiền <strong style={{ color: 'var(--color-success)' }}>{totalVND.toLocaleString('vi-VN')} đ</strong> và xác nhận kích hoạt dịch vụ.
                   </p>
@@ -356,7 +356,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 }}>
                   <CheckCircle2 size={36} />
                 </div>
-                <h4 style={{ fontSize: 20, color: '#fff' }}>Giao Dịch Thành Công!</h4>
+                <h4 style={{ fontSize: 20, color: 'var(--text-primary)', fontWeight: 800 }}>Giao Dịch Thành Công!</h4>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
                   Gói dịch vụ đã được kích hoạt thành công trên hệ thống.
                 </p>

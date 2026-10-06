@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5A2314" />
+      <stop offset="60%" stop-color="#7A3320" />
+      <stop offset="100%" stop-color="#8C3E26" />
+    </linearGradient>
+    <linearGradient id="plateGrad" x1="15" y1="20" x2="85" y2="80" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FAF7F2" />
+      <stop offset="50%" stop-color="#EADBCE" />
+      <stop offset="100%" stop-color="#C28E5C" />
+    </linearGradient>
+    <linearGradient id="goldHex" x1="10" y1="10" x2="90" y2="90" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C28E5C" />
+      <stop offset="50%" stop-color="#FAF7F2" />
+      <stop offset="100%" stop-color="#C28E5C" />
+    </linearGradient>
+  </defs>
+
+  <!-- Luxury Squircle Frame -->
+  <rect x="4" y="4" width="92" height="92" rx="26" fill="url(#bgGrad)" stroke="#C28E5C" stroke-width="2.5" />
+
+  <!-- Outer Hexagon Silhouette -->
+  <path d="M50 10 L84 29 V71 L50 90 L16 71 V29 Z" stroke="url(#goldHex)" stroke-width="2" stroke-dasharray="4 5" opacity="0.6" />
+
+  <!-- Left Dumbbell Hex Plate -->
+  <path d="M22 34 L32 28 L35 32 V68 L32 72 L22 66 Z" fill="url(#plateGrad)" stroke="#C28E5C" stroke-width="2" />
+  <path d="M16 38 L22 34 V66 L16 62 Z" fill="#8C3E26" stroke="#C28E5C" stroke-width="1.5" />
+
+  <!-- Right Dumbbell Hex Plate -->
+  <path d="M78 34 L68 28 L65 32 V68 L68 72 L78 66 Z" fill="url(#plateGrad)" stroke="#C28E5C" stroke-width="2" />
+  <path d="M84 38 L78 34 V66 L84 62 Z" fill="#8C3E26" stroke="#C28E5C" stroke-width="1.5" />
+
+  <!-- Center Steel Knurled Barbell Shaft -->
+  <rect x="35" y="44" width="30" height="12" rx="3" fill="#FAF7F2" stroke="#C28E5C" stroke-width="2" />
+  <line x1="42" y1="46" x2="42" y2="54" stroke="#5A2314" stroke-width="2" opacity="0.65" />
+  <line x1="50" y1="46" x2="50" y2="54" stroke="#5A2314" stroke-width="2" opacity="0.65" />
+  <line x1="58" y1="46" x2="58" y2="54" stroke="#5A2314" stroke-width="2" opacity="0.65" />
+</svg>
