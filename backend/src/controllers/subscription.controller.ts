@@ -1,6 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
+import {
+  generateOrderCode,
+  getPayOS,
+  getPayOSRedirectUrls,
+  markPaymentFailed,
+} from '../services/payment.service.js';
 
 const prisma = new PrismaClient();
 
@@ -155,7 +161,8 @@ export class SubscriptionController {
 
   static async updateSubscriptionStatus(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
+      const rawId = req.params.id;
+      const id = Number.parseInt(typeof rawId === 'string' ? rawId : rawId[0] ?? '', 10);
       if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       const { status } = req.body;
@@ -183,84 +190,97 @@ export class SubscriptionController {
   }
 
   static async renewSubscription(req: AuthRequest, res: Response, next: NextFunction) {
+    let orderCode: bigint | null = null;
+    let paymentCreated = false;
     try {
       const userId = req.user?.userId;
-      const { subscriptionId, packageId, paymentMethod } = req.body; 
+      const { subscriptionId, packageId } = req.body;
 
       if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-      if (!subscriptionId || !packageId) {
+      const parsedSubscriptionId = Number(subscriptionId);
+      const parsedPackageId = Number(packageId);
+      if (!Number.isSafeInteger(parsedSubscriptionId) || parsedSubscriptionId <= 0 ||
+          !Number.isSafeInteger(parsedPackageId) || parsedPackageId <= 0) {
         return res.status(400).json({ success: false, message: 'Thiếu thông tin gia hạn' });
       }
 
-      // 1. Kiểm tra gói tập hiện tại của Member
+      const payos = getPayOS();
+      if (!payos) {
+        return res.status(503).json({ success: false, message: 'Cổng thanh toán chưa được cấu hình' });
+      }
+
+      // Make sure the current membership belongs to the caller.
       const currentSub = await prisma.membership.findFirst({
-        where: { id: Number(subscriptionId), userId: Number(userId) },
+        where: { id: parsedSubscriptionId, userId },
       });
 
       if (!currentSub) {
         return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin gói tập' });
       }
 
-      // 2. Lấy thông tin gói cước gia hạn (để biết số ngày và giá)
       const gymPackage = await prisma.package.findUnique({
-        where: { id: Number(packageId) },
+        where: { id: parsedPackageId },
       });
 
-      if (!gymPackage) {
+      if (!gymPackage || !gymPackage.isActive) {
         return res.status(404).json({ success: false, message: 'Gói cước không hợp lệ' });
       }
-
-      // 3. Tính toán ngày hết hạn mới (endDate)
-      const now = new Date();
-      let baseDate = new Date(currentSub.endDate);
-
-      // Nếu gói cũ đã hết hạn thì tính từ thời điểm hiện tại
-      if (baseDate < now) {
-        baseDate = now;
+      const amount = Number(gymPackage.price);
+      if (!Number.isSafeInteger(amount) || amount <= 0) {
+        return res.status(400).json({ success: false, message: 'Giá gói tập phải là số nguyên dương hợp lệ' });
       }
 
-      // Cộng thêm số ngày gia hạn (Sử dụng durationDays theo Schema hiện tại)
-      const newEndDate = new Date(baseDate);
-      newEndDate.setDate(newEndDate.getDate() + gymPackage.durationDays);
+      const orderCodeNumber = generateOrderCode();
+      orderCode = BigInt(orderCodeNumber);
+      await prisma.payment.create({
+        data: {
+          userId,
+          membershipId: currentSub.id,
+          amount,
+          method: 'PAYOS',
+          status: 'PENDING',
+          orderCode,
+          transactionNo: `TXN-${orderCodeNumber}`,
+          renewalDurationDays: gymPackage.durationDays,
+        },
+      });
+      paymentCreated = true;
 
-      // 4. Thực hiện Transaction: Cập nhật hạn gói + Tạo bản ghi Thanh toán
-      const result = await prisma.$transaction(async (tx) => {
-        const updatedSub = await tx.membership.update({
-          where: { id: currentSub.id },
-          data: {
-            endDate: newEndDate,
-            status: 'ACTIVE',
-          },
-        });
-
-        // Schema hiện tại của Payment: method, transactionNo, membershipId
-        const payment = await tx.payment.create({
-          data: {
-            userId: Number(userId),
-            membershipId: currentSub.id,
-            amount: gymPackage.price,
-            method: paymentMethod || 'VNPAY',
-            status: 'SUCCESS',
-            transactionNo: `RENEW_${Date.now()}`,
-          },
-        });
-
-        return { updatedSub, payment };
+      const description = `Renew ${gymPackage.name}`
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9 ]/g, '')
+        .slice(0, 25);
+      const paymentLink = await payos.createPaymentLink({
+        orderCode: orderCodeNumber,
+        amount,
+        description,
+        ...getPayOSRedirectUrls(),
       });
 
       return res.status(200).json({
         success: true,
-        message: 'Gia hạn gói tập thành công!',
+        message: 'Tạo đơn thanh toán gia hạn thành công',
         data: {
-          subscriptionId: result.updatedSub.id,
-          oldEndDate: currentSub.endDate,
-          newEndDate: result.updatedSub.endDate,
-          amountPaid: gymPackage.price,
+          subscriptionId: currentSub.id,
+          orderCode: orderCodeNumber,
+          checkoutUrl: paymentLink.checkoutUrl,
+          qrCode: paymentLink.qrCode,
         },
       });
     } catch (error: any) {
+      if (orderCode !== null && paymentCreated) {
+        try {
+          await markPaymentFailed(orderCode);
+        } catch (cleanupError) {
+          console.error('Could not mark failed renewal payment:', cleanupError);
+        }
+      }
       console.error('Lỗi renewSubscription:', error);
-      next(error);
+      return res.status(orderCode === null || !paymentCreated ? 500 : 502).json({
+        success: false,
+        message: orderCode === null || !paymentCreated ? 'Không thể tạo đơn gia hạn' : 'Không thể tạo link thanh toán PayOS',
+      });
     }
   }
 }

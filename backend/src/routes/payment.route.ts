@@ -33,6 +33,8 @@ router.post('/checkout', authenticateToken, PaymentController.createCheckoutSess
  *   get:
  *     summary: Kiểm tra trạng thái thanh toán PayOS
  *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: orderCode
@@ -45,7 +47,7 @@ router.post('/checkout', authenticateToken, PaymentController.createCheckoutSess
  *       404:
  *         description: Không tìm thấy đơn thanh toán
  */
-router.get('/check-status/:orderCode', PaymentController.checkPaymentStatus);
+router.get('/check-status/:orderCode', authenticateToken, PaymentController.checkPaymentStatus);
 
 /**
  * @swagger
