@@ -1,23 +1,20 @@
 import { Request, Response } from 'express';
-import PayOS from '@payos/node';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
+import {
+  generateOrderCode,
+  getPayOS,
+  getPayOSRedirectUrls,
+  markPaymentFailed,
+  markPaymentPaid,
+} from '../services/payment.service.js';
 
 const prisma = new PrismaClient();
 
-function getPayOS() {
-  if (process.env.PAYOS_CLIENT_ID && process.env.PAYOS_API_KEY && process.env.PAYOS_CHECKSUM_KEY) {
-    return new PayOS(
-      process.env.PAYOS_CLIENT_ID.trim(),
-      process.env.PAYOS_API_KEY.trim(),
-      process.env.PAYOS_CHECKSUM_KEY.trim()
-    );
-  }
-  return null;
-}
-
 export class PaymentController {
   static async createCheckoutSession(req: AuthRequest, res: Response) {
+    let orderCode: bigint | null = null;
+    let paymentCreated = false;
     try {
       const userId = req.user?.userId;
       const { packageId } = req.body;
@@ -38,6 +35,10 @@ export class PaymentController {
       if (!gymPackage || !gymPackage.isActive) {
         return res.status(404).json({ message: 'Gói tập không tồn tại hoặc đã ngừng bán' });
       }
+      const amount = Number(gymPackage.price);
+      if (!Number.isSafeInteger(amount) || amount <= 0) {
+        return res.status(400).json({ message: 'Giá gói tập phải là số nguyên dương hợp lệ' });
+      }
 
       // Tính ngày bắt đầu, kết thúc & số buổi PT
       const startDate = new Date();
@@ -50,8 +51,8 @@ export class PaymentController {
           : gymPackage.totalPtSessions || 0;
 
       // Tạo mã đơn hàng ngẫu nhiên (Số nguyên dương nhỏ hơn Max Safe Integer)
-      const orderCodeNum = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 1000));
-      const orderCode = BigInt(orderCodeNum);
+      const orderCodeNum = generateOrderCode();
+      orderCode = BigInt(orderCodeNum);
 
       // Dùng Prisma Transaction để đảm bảo tính toàn vẹn dữ liệu
       const result = await prisma.$transaction(async (tx) => {
@@ -72,8 +73,8 @@ export class PaymentController {
           data: {
             membershipId: subscription.id,
             userId,
-            amount: gymPackage.price,
-            orderCode: orderCode,
+            amount,
+            orderCode,
             transactionNo: `TXN-${orderCodeNum}`,
             method: 'PAYOS',
             status: 'PENDING',
@@ -82,6 +83,7 @@ export class PaymentController {
 
         return { subscription, payment };
       });
+      paymentCreated = true;
 
       // Chuẩn hoá description theo chuẩn PayOS (Không dấu, không đặc biệt, max 25 ký tự)
       const rawDescription = `Gym ${gymPackage.name}`;
@@ -94,10 +96,9 @@ export class PaymentController {
       // Tạo Link/QR thanh toán PayOS
       const paymentData = {
         orderCode: orderCodeNum,
-        amount: Number(gymPackage.price),
+        amount,
         description: description,
-        cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment-cancel`,
-        returnUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment-success`,
+        ...getPayOSRedirectUrls(),
       };
 
       const payOsResponse = await payos.createPaymentLink(paymentData);
@@ -110,12 +111,19 @@ export class PaymentController {
         qrCode: payOsResponse.qrCode,
       });
     } catch (error: any) {
+      if (orderCode !== null && paymentCreated) {
+        try {
+          await markPaymentFailed(orderCode);
+        } catch (cleanupError) {
+          console.error('Could not mark failed checkout:', cleanupError);
+        }
+      }
       console.error('Checkout error:', error);
       return res.status(500).json({ message: 'Lỗi khởi tạo thanh toán', error: error.message });
     }
   }
 
-  static async checkPaymentStatus(req: Request, res: Response) {
+  static async checkPaymentStatus(req: AuthRequest, res: Response) {
     try {
       const orderCode = req.params.orderCode;
       if (typeof orderCode !== 'string' || !/^\d+$/.test(orderCode)) {
@@ -133,8 +141,11 @@ export class PaymentController {
       }
 
       const orderCodeBigInt = BigInt(orderCode);
-      const payment = await prisma.payment.findUnique({
-        where: { orderCode: orderCodeBigInt },
+      const userId = req.user?.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      const payment = await prisma.payment.findFirst({
+        where: { orderCode: orderCodeBigInt, userId },
       });
 
       if (!payment) {
@@ -144,27 +155,22 @@ export class PaymentController {
       const paymentLinkInfo = await payos.getPaymentLinkInformation(orderCodeNumber);
 
       if (paymentLinkInfo.status === 'PAID') {
-        if (payment.status === 'PENDING') {
-          await prisma.$transaction(async (tx) => {
-            const updateResult = await tx.payment.updateMany({
-              where: { id: payment.id, status: 'PENDING' },
-              data: { status: 'PAID' },
-            });
-
-            if (updateResult.count > 0 && payment.membershipId !== null) {
-              await tx.membership.update({
-                where: { id: payment.membershipId },
-                data: { status: 'ACTIVE' },
-              });
-            }
-          });
+        const result = await markPaymentPaid(orderCodeBigInt, paymentLinkInfo.amountPaid);
+        if (result.result === 'AMOUNT_MISMATCH') {
+          console.error(`PayOS amount mismatch for order ${orderCode}`);
+          return res.status(409).json({ message: 'Số tiền thanh toán không khớp với đơn hàng' });
         }
+        if (result.result === 'NOT_FOUND') return res.status(404).json({ message: 'Không tìm thấy đơn thanh toán' });
 
         return res.status(200).json({
           success: true,
           status: 'PAID',
           message: 'Thanh toán thành công',
         });
+      }
+
+      if (paymentLinkInfo.status === 'CANCELLED') {
+        await markPaymentFailed(orderCodeBigInt);
       }
 
       return res.status(200).json({
@@ -202,38 +208,25 @@ export class PaymentController {
         const webhookData = payos.verifyPaymentWebhookData(req.body);
 
         if (webhookData && req.body.code === '00') {
-          const orderCodeStr = webhookData.orderCode;
-          const orderCode = BigInt(orderCodeStr);
+          if (!Number.isSafeInteger(webhookData.orderCode) || !Number.isFinite(webhookData.amount)) {
+            return res.status(400).json({ success: false, message: 'Dữ liệu webhook không hợp lệ' });
+          }
 
-          // Tìm giao dịch thanh toán
-          const payment = await prisma.payment.findUnique({
-            where: { orderCode },
-          });
-
-          if (payment && payment.status === 'PENDING') {
-            console.log(`🎉 [WEBHOOK] Đã nhận thanh toán thành công cho đơn hàng: ${orderCodeStr}`);
-            
-            // Cập nhật trạng thái Payment -> PAID và Membership -> ACTIVE
-            await prisma.$transaction([
-              prisma.payment.update({
-                where: { id: payment.id },
-                data: { status: 'PAID' },
-              }),
-              prisma.membership.update({
-                where: { id: Number(payment.membershipId) },
-                data: { status: 'ACTIVE' },
-              }),
-            ]);
+          const result = await markPaymentPaid(BigInt(webhookData.orderCode), webhookData.amount);
+          if (result.result === 'AMOUNT_MISMATCH') {
+            console.error(`PayOS webhook amount mismatch for order ${webhookData.orderCode}`);
+            return res.status(400).json({ success: false, message: 'Số tiền webhook không khớp đơn hàng' });
+          }
+          if (result.result === 'NOT_FOUND') {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
           }
         }
       }
 
-      // Luôn trả về 200 cho payOS để tránh lỗi trên webhook
       return res.status(200).json({ success: true, message: 'Nhận webhook thành công' });
     } catch (error: any) {
       console.error('Webhook error:', error.message);
-      // Vẫn trả về 200 kèm success: false để payOS không báo lỗi ngắt kết nối
-      return res.status(200).json({ success: false, message: error.message });
+      return res.status(500).json({ success: false, message: 'Không thể xử lý webhook' });
     }
   }
 }

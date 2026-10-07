@@ -15,6 +15,11 @@ Starter monorepo for a fitness application.
 npm install
 ```
 
+**Backend Setup (Required for Payment / Database):**
+1. Navigate to the `backend` folder.
+2. Copy `.env.example` to `.env` and fill in your PayOS API keys and Database URL.
+3. Run database migrations: `npx prisma db push` or `npx prisma migrate dev`.
+
 Run each service in a separate terminal:
 
 ```bash

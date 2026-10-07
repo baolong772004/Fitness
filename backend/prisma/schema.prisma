@@ -308,6 +308,7 @@ model Payment {
   status        String        @default("PENDING")
   orderCode     BigInt?       @unique
   transactionNo String?       @unique
+  renewalDurationDays Int?
   createdAt     DateTime      @default(now())
 }
 
