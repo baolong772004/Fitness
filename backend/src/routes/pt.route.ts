@@ -1,8 +1,23 @@
 import { Router } from 'express';
 import { PtController } from '../controllers/pt.controller.js';
+import { PaymentController } from '../controllers/payment.controller.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 
 const router = Router();
+
+/**
+ * @swagger
+ * /pt/trainers:
+ *   get:
+ *     summary: Lấy danh sách huấn luyện viên đang hoạt động
+ *     tags: [PersonalTrainer]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Danh sách huấn luyện viên
+ */
+router.get('/trainers', authenticateToken, PtController.getAvailableTrainers);
 
 /**
  * @swagger
@@ -15,7 +30,7 @@ const router = Router();
  * @swagger
  * /pt/buy:
  *   post:
- *     summary: Mua gói PT (Yêu cầu phải có Membership ACTIVE)
+ *     summary: Tạo đơn PayOS mua gói PT (cần Membership ACTIVE)
  *     tags: [PersonalTrainer]
  *     security:
  *       - bearerAuth: []
@@ -31,12 +46,12 @@ const router = Router();
  *               trainerId:
  *                 type: integer
  *     responses:
- *       201:
- *         description: Đăng ký thành công
+ *       200:
+ *         description: Trả về link và QR PayOS; gói được kích hoạt sau khi thanh toán
  *       403:
  *         description: Chưa có Membership
  */
-router.post('/buy', authenticateToken, PtController.buyPtPackage);
+router.post('/buy', authenticateToken, PaymentController.createPtCheckoutSession);
 
 /**
  * @swagger
@@ -88,7 +103,7 @@ router.get('/trainers/:trainerId/slots', authenticateToken, PtController.getTrai
  *                 type: string
  *     responses:
  *       201:
- *         description: Đặt lịch thành công
+ *         description: Đã gửi yêu cầu; lịch ở trạng thái PENDING đến khi HLV xác nhận
  */
 router.post('/booking', authenticateToken, PtController.createBooking);
 
@@ -96,7 +111,7 @@ router.post('/booking', authenticateToken, PtController.createBooking);
  * @swagger
  * /pt/booking/{id}/status:
  *   patch:
- *     summary: Cập nhật trạng thái lịch tập (CONFIRMED / COMPLETED / CANCELLED)
+ *     summary: HLV xác nhận hoặc từ chối lịch tập
  *     tags: [PersonalTrainer]
  *     security:
  *       - bearerAuth: []
@@ -115,7 +130,7 @@ router.post('/booking', authenticateToken, PtController.createBooking);
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [CONFIRMED, COMPLETED, CANCELLED]
+ *                 enum: [CONFIRMED, REJECTED]
  *     responses:
  *       200:
  *         description: Thành công

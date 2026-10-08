@@ -12,6 +12,9 @@ export class PackageController {
       if (type !== 'MEMBERSHIP' && type !== 'PT') {
         return res.status(400).json({ success: false, message: 'Package type must be either MEMBERSHIP or PT' });
       }
+      if (type === 'PT' && (!Number.isSafeInteger(Number(totalPtSessions)) || Number(totalPtSessions) <= 0)) {
+        return res.status(400).json({ success: false, message: 'PT packages must have a positive totalPtSessions value' });
+      }
 
       const newPackage = await prisma.package.create({
         data: {
@@ -77,6 +80,12 @@ export class PackageController {
 
       const pkgExists = await prisma.package.findUnique({ where: { id } });
       if (!pkgExists) return res.status(404).json({ success: false, message: 'Package not found' });
+
+      const effectiveType = type ?? pkgExists.type;
+      const effectivePtSessions = totalPtSessions ?? pkgExists.totalPtSessions;
+      if (effectiveType === 'PT' && (!Number.isSafeInteger(Number(effectivePtSessions)) || Number(effectivePtSessions) <= 0)) {
+        return res.status(400).json({ success: false, message: 'PT packages must have a positive totalPtSessions value' });
+      }
 
       const updatedPackage = await prisma.package.update({
         where: { id },

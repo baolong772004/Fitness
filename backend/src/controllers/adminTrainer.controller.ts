@@ -121,13 +121,19 @@ export const setupTrainerProfile = async (req: AuthRequest, res: Response) => {
           where: { coachProfileId: profile.id },
         });
 
-        const schedulesData = workingSchedules.map((schedule: any) => ({
-          coachProfileId: profile.id,
-          dayOfWeek: Number(schedule.dayOfWeek),
-          startTime: schedule.startTime,
-          endTime: schedule.endTime,
-          isAvailable: schedule.isAvailable ?? true,
-        }));
+        const schedulesData = workingSchedules.map((schedule: any) => {
+          const day = Number(schedule.dayOfWeek);
+          if (day < 1 || day > 7) {
+            throw new Error(`dayOfWeek phải nằm trong khoảng từ 1 (Thứ Hai) đến 7 (Chủ Nhật). Giá trị hiện tại: ${day}`);
+          }
+          return {
+            coachProfileId: profile.id,
+            dayOfWeek: day,
+            startTime: schedule.startTime,
+            endTime: schedule.endTime,
+            isAvailable: schedule.isAvailable ?? true,
+          };
+        });
 
         if (schedulesData.length > 0) {
             await tx.coachSchedule.createMany({

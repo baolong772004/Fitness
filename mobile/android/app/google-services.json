@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "64327623006",
+    "project_id": "fitness-ddcb7",
+    "storage_bucket": "fitness-ddcb7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:64327623006:android:c3c0b1951fadd495c3afcf",
+        "android_client_info": {
+          "package_name": "com.cafefit.cafe_fit_mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "64327623006-tfsgmlctu4a6jg7kio65t3sm4gjfpuqs.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.cafefit.cafe_fit_mobile",
+            "certificate_hash": "6ac85528f13556b8257e6f87d1bca47e452f72a5"
+          }
+        },
+        {
+          "client_id": "64327623006-atl8dp6tgs3g650ts542b8ig0f9p54n2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD_zGKu9y3e4wus_mUBRj78_zpDKSSeILw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "64327623006-atl8dp6tgs3g650ts542b8ig0f9p54n2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,5 +1,4 @@
 import dotenv from 'dotenv';
-import { exec } from 'child_process';
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
@@ -14,9 +13,6 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-// Connect to Database
-connectDB();
 
 // Global Middlewares
 app.use(cors({ origin: '*' }));
@@ -45,9 +41,16 @@ app.use((req, res, next) => {
 // Global Error Handler
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    if (process.env.NODE_ENV !== 'production') {
-        exec(`start http://localhost:${PORT}/api-docs`);
-    }
+const startServer = async () => {
+    await connectDB();
+
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+        console.log(`API docs: http://localhost:${PORT}/api-docs`);
+    });
+};
+
+startServer().catch((error) => {
+    console.error('Backend startup failed:', error.message);
+    process.exitCode = 1;
 });
