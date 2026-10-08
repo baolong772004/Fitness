@@ -249,7 +249,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   marginBottom: 20
                 }}>
                   <div style={{ display: 'inline-block', background: '#fff', padding: 12, borderRadius: 12, marginBottom: 12 }}>
-                    {/* Visual Mock VietQR code with Napas styling */}
+                    {/* Visual VietQR code with Napas styling */}
                     <div style={{
                       width: 140,
                       height: 140,

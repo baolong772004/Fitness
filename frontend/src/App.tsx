@@ -9,6 +9,7 @@ import { GuestLandingPage } from './features/guest/GuestLandingPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { AuthModal } from './features/auth/AuthModal';
 import { FloatingAIChatbot } from './features/ai-assistant/FloatingAIChatbot';
+import { ToastContainer, toast, installGlobalAlertOverride } from './components/common/ToastNotification';
 import { soundEffects } from './services/audioService';
 import { Clock, Phone, MapPin, QrCode } from 'lucide-react';
 
@@ -38,6 +39,10 @@ export default function App() {
   };
 
   // Scope shadcn/ui base styles to staff dashboards (admin / receptionist / coach)
+  useEffect(() => {
+    installGlobalAlertOverride();
+  }, []);
+
   useEffect(() => {
     const isStaffView = currentRole !== 'guest' && viewMode === 'main';
     document.body.classList.toggle('staff-ui', isStaffView);
@@ -126,7 +131,7 @@ export default function App() {
     setViewMode('main');
     setActiveTab('home');
     soundEffects.playSuccessBeep();
-    alert('Bạn đã đăng xuất tài khoản thành công!');
+    toast.success('Bạn đã đăng xuất tài khoản thành công! Hẹn gặp lại bạn tại AURA Fitness.', 'Đăng Xuất');
   };
 
   return (
@@ -335,6 +340,9 @@ export default function App() {
 
       {/* AI Assistant Chatbot Floating Bubble */}
       <FloatingAIChatbot />
+
+      {/* Global Toast Notification Container */}
+      <ToastContainer />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api, ApiPackage } from '../../services/api';
+import { api, ApiPackage, ApiGroupClassSchedule, ApiCoachProfile } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import {
   QrCode,
@@ -15,7 +15,8 @@ import {
   Check,
   Dumbbell,
   MapPin,
-  Phone
+  Phone,
+  Loader2
 } from 'lucide-react';
 
 interface GuestLandingPageProps {
@@ -27,6 +28,7 @@ interface GuestLandingPageProps {
 }
 
 export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
+  activeTab,
   onTabChange,
   onOpenLogin,
   onOpenRegister,
@@ -37,6 +39,10 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
   const [isLoadingPackages, setIsLoadingPackages] = useState(false);
   const [checkoutLoadingId, setCheckoutLoadingId] = useState<number | null>(null);
 
+  // Live Schedules and Trainers from Backend API
+  const [liveSchedules, setLiveSchedules] = useState<ApiGroupClassSchedule[]>([]);
+  const [liveTrainers, setLiveTrainers] = useState<ApiCoachProfile[]>([]);
+
   // QR Check-in Modal
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [qrData, setQrData] = useState<{ token: string; qrCodeImage: string } | null>(null);
@@ -46,72 +52,69 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
   // Interactive Class Schedule State
   const [selectedDayIndex, setSelectedDayIndex] = useState(3); // Default T5
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-  const [bookedSessions, setBookedSessions] = useState<Set<string>>(new Set(['session-strength']));
+  const [bookedSessions, setBookedSessions] = useState<Set<string>>(new Set<string>());
 
-  // Fetch Live Packages from Backend API
-  const fetchLivePackages = async () => {
+  // Fetch Live Data from Backend API
+  const fetchLiveData = async () => {
     setIsLoadingPackages(true);
     try {
-      const data = await api.packages.getPackages();
-      if (data && data.length > 0) {
-        setLivePackages(data);
-      } else {
-        setLivePackages(defaultPackages);
-      }
-    } catch {
-      setLivePackages(defaultPackages);
+      const pkgs = await api.packages.getPackages();
+      setLivePackages(pkgs || []);
+    } catch (e) {
+      console.warn('API packages fetch warning:', e);
+      setLivePackages([]);
     } finally {
       setIsLoadingPackages(false);
+    }
+
+    try {
+      const schedules = await api.groupClasses.getSchedules();
+      setLiveSchedules(schedules || []);
+    } catch (e) {
+      console.warn('API group classes fetch warning:', e);
+      setLiveSchedules([]);
+    }
+
+    try {
+      const trainersRes = await api.adminTrainers.getTrainers();
+      if (trainersRes && trainersRes.data) {
+        setLiveTrainers(trainersRes.data);
+      } else {
+        setLiveTrainers([]);
+      }
+    } catch (e) {
+      console.warn('API trainers fetch warning:', e);
+      setLiveTrainers([]);
     }
   };
 
   useEffect(() => {
-    fetchLivePackages();
+    fetchLiveData();
   }, []);
 
-  const defaultPackages: ApiPackage[] = [
-    {
-      id: 1,
-      name: 'Gói Cơ Bản (Starter Member)',
-      type: 'MEMBERSHIP',
-      description: 'Toàn quyền sử dụng hệ thống máy tập mọi khung giờ, phòng tắm nóng lạnh, nước ion kiềm miễn phí và 1 buổi định hướng thể lực.',
-      price: 500000,
-      durationDays: 30,
-      trialPtSessions: 1,
-      isActive: true
-    },
-    {
-      id: 2,
-      name: 'Gói Nâng Cao (Pro Fitness)',
-      type: 'MEMBERSHIP',
-      description: 'Đặc quyền Starter kèm khăn tập kháng khuẩn mỗi buổi, tủ đồ cá nhân riêng và 3 buổi huấn luyện 1-1 chuyên sâu cùng Coach.',
-      price: 1200000,
-      durationDays: 90,
-      trialPtSessions: 3,
-      isActive: true
-    },
-    {
-      id: 3,
-      name: 'Gói VIP Hoàng Gia (Royal Elite VIP)',
-      type: 'MEMBERSHIP',
-      description: 'Truy cập toàn bộ khu vực VIP, phòng xông hơi khô Sauna & Jacuzzi thủy lực, nước điện giải bổ sung năng lượng và tủ đồ riêng 365 ngày.',
-      price: 3600000,
-      durationDays: 365,
-      trialPtSessions: 5,
-      isActive: true
-    },
-    {
-      id: 4,
-      name: 'Khóa Huấn Luyện PT 1-1 Chuyên Nghiệp',
-      type: 'PT',
-      description: 'Lộ trình cá nhân hóa 100%: Tăng cơ giảm mỡ chuẩn y khoa, đo quét chỉ số InBody 3D hàng tuần và thực đơn dinh dưỡng riêng.',
-      price: 2500000,
-      durationDays: 60,
-      trialPtSessions: 0,
-      totalPtSessions: 12,
-      isActive: true
+  // Listen to tab changes or navbar event for QR Check-in
+  useEffect(() => {
+    if (activeTab === 'checkin-portal') {
+      handleOpenLiveQR();
     }
-  ];
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handleOpenQRFromEvent = () => {
+      handleOpenLiveQR();
+    };
+    window.addEventListener('aura:open-checkin-qr', handleOpenQRFromEvent);
+    return () => {
+      window.removeEventListener('aura:open-checkin-qr', handleOpenQRFromEvent);
+    };
+  }, []);
+
+  const handleCloseQRModal = () => {
+    setIsQRModalOpen(false);
+    if (activeTab === 'checkin-portal') {
+      onTabChange('home');
+    }
+  };
 
   // PayOS Checkout Session Trigger
   const handleCheckoutPackage = async (pkg: ApiPackage) => {
@@ -178,123 +181,111 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
     }
   };
 
-  // Schedule Days
-  const weekDays = [
-    { day: 'T2', date: '06', label: 'Thứ Hai' },
-    { day: 'T3', date: '07', label: 'Thứ Ba' },
-    { day: 'T4', date: '08', label: 'Thứ Tư' },
-    { day: 'T5', date: '09', label: 'Thứ Năm' },
-    { day: 'T6', date: '10', label: 'Thứ Sáu' },
-    { day: 'T7', date: '11', label: 'Thứ Bảy' },
-    { day: 'CN', date: '12', label: 'Chủ Nhật' }
-  ];
+  // Dynamic Current Week Days
+  const weekDays = React.useMemo(() => {
+    const today = new Date();
+    const currentDay = today.getDay(); // 0 is Sun, 1 is Mon
+    const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayOffset);
+
+    const labels = [
+      { day: 'T2', label: 'Thứ Hai' },
+      { day: 'T3', label: 'Thứ Ba' },
+      { day: 'T4', label: 'Thứ Tư' },
+      { day: 'T5', label: 'Thứ Năm' },
+      { day: 'T6', label: 'Thứ Sáu' },
+      { day: 'T7', label: 'Thứ Bảy' },
+      { day: 'CN', label: 'Chủ Nhật' }
+    ];
+
+    return labels.map((l, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return {
+        day: l.day,
+        date: String(d.getDate()).padStart(2, '0'),
+        label: l.label,
+        fullDate: d.toISOString().slice(0, 10)
+      };
+    });
+  }, []);
 
   const categories = ['ALL', 'STRENGTH', 'HYPERTROPHY', 'HIIT', 'CARDIO', 'POWERLIFTING'];
 
-  const classesList = [
-    {
-      id: 'session-strength',
-      category: 'STRENGTH',
-      title: 'Barbell Squat & Lower Body Power',
-      time: '07:30 - 08:45',
-      coach: 'Coach David Vũ',
-      avatar: 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=120&auto=format&fit=crop&q=80',
-      room: 'Khu Tạ Tự Do (Free Weights)',
-      spots: 12,
-      maxSpots: 15,
-      level: 'Mọi cấp độ'
-    },
-    {
-      id: 'session-hypertrophy',
-      category: 'HYPERTROPHY',
-      title: 'Chest & Upper Body Hypertrophy',
-      time: '09:30 - 10:45',
-      coach: 'Coach Alex Trần',
-      avatar: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=120&auto=format&fit=crop&q=80',
-      room: 'Khu Máy Khối (Resistance Machines)',
-      spots: 10,
-      maxSpots: 12,
-      level: 'Trung bình'
-    },
-    {
-      id: 'session-hiit',
-      category: 'HIIT',
-      title: 'Metabolic Conditioning & Fat Burn HIIT',
-      time: '17:30 - 18:30',
-      coach: 'Coach Minh Anh',
-      avatar: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=120&auto=format&fit=crop&q=80',
-      room: 'Khu Cỏ Thể Lực (Functional Turf)',
-      spots: 18,
-      maxSpots: 20,
-      level: 'Nâng cao'
-    },
-    {
-      id: 'session-power',
-      category: 'POWERLIFTING',
-      title: 'Deadlift & Bench Press Masterclass',
-      time: '19:00 - 20:00',
-      coach: 'Coach Tuấn Kiệt',
-      avatar: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=120&auto=format&fit=crop&q=80',
-      room: 'Khu Bục Nâng Tạ (Deadlift Platform)',
-      spots: 8,
-      maxSpots: 10,
-      level: 'Mọi cấp độ'
-    }
-  ];
+  // Dynamic mapped classes strictly from live backend
+  const classesList = liveSchedules.map((s) => ({
+    id: `live-session-${s.id}`,
+    scheduleId: s.id,
+    category: (s.groupClass?.name?.toUpperCase().includes('HIIT') ? 'HIIT' :
+      s.groupClass?.name?.toUpperCase().includes('POWER') ? 'POWERLIFTING' :
+        s.groupClass?.name?.toUpperCase().includes('STRENGTH') ? 'STRENGTH' : 'HYPERTROPHY'),
+    title: s.groupClass?.name || `Lớp Nhóm #${s.classId}`,
+    time: `${new Date(s.startTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - ${new Date(s.endTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`,
+    coach: s.trainer?.fullName ? `Coach ${s.trainer.fullName}` : 'Coach Chuyên Nghiệp',
+    avatar: s.trainer?.avatar || 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=120&auto=format&fit=crop&q=80',
+    room: s.room?.name || 'Phòng Tập Đa Năng',
+    spots: Math.max(0, s.capacity - (s.bookedCount || 0)),
+    maxSpots: s.capacity,
+    level: 'Mọi cấp độ'
+  }));
 
   const filteredClasses = classesList.filter(c => {
     if (selectedCategory !== 'ALL' && c.category !== selectedCategory) return false;
     return true;
   });
 
-  const toggleBookSession = (id: string) => {
-    setBookedSessions(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
+  const [bookingLoadingId, setBookingLoadingId] = useState<string | null>(null);
+
+  const toggleBookSession = async (session: { id: string; scheduleId?: number; title: string }) => {
+    if (bookedSessions.has(session.id)) {
+      setBookedSessions(prev => {
+        const next = new Set(prev);
+        next.delete(session.id);
+        return next;
+      });
+      return;
+    }
+
+    if (!api.auth.getToken()) {
+      soundEffects.playErrorBeep();
+      alert('Vui lòng đăng nhập tài khoản để đặt chỗ tham gia lớp học nhóm!');
+      onOpenLogin?.();
+      return;
+    }
+
+    if (session.scheduleId) {
+      setBookingLoadingId(session.id);
+      try {
+        await api.groupClasses.book(session.scheduleId);
         soundEffects.playSuccessBeep();
+        setBookedSessions(prev => new Set(prev).add(session.id));
+        alert(`Đặt chỗ thành công lớp "${session.title}"! Vui lòng có mặt trước giờ tập 10 phút.`);
+        // Reload live schedules to update spots
+        api.groupClasses.getSchedules().then(res => {
+          if (res) setLiveSchedules(res);
+        }).catch(() => { });
+      } catch (err: any) {
+        soundEffects.playErrorBeep();
+        alert(`Không thể đặt chỗ: ${err.message || 'Lỗi hệ thống'}`);
+      } finally {
+        setBookingLoadingId(null);
       }
-      return next;
-    });
+    } else {
+      setBookedSessions(prev => new Set(prev).add(session.id));
+      soundEffects.playSuccessBeep();
+    }
   };
 
-  // Master Gym Coaches List
-  const coaches = [
-    {
-      name: 'David Vũ',
-      role: 'Master Coach Strength & Hypertrophy',
-      experience: '10+ năm kinh nghiệm',
-      certs: 'NASM-CPT • CSCS Specialist',
-      image: 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=600&auto=format&fit=crop&q=80',
-      rating: '5.0'
-    },
-    {
-      name: 'Alex Trần',
-      role: 'Senior Coach Body Recomposition & Fat Loss',
-      experience: '8+ năm kinh nghiệm',
-      certs: 'ACE Certified Personal Trainer',
-      image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600&auto=format&fit=crop&q=80',
-      rating: '4.98'
-    },
-    {
-      name: 'Trần Minh Anh',
-      role: 'Coach Functional Fitness & Mobility',
-      experience: '6+ năm kinh nghiệm',
-      certs: 'ISSA Fitness & Rehab Specialist',
-      image: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=600&auto=format&fit=crop&q=80',
-      rating: '4.95'
-    },
-    {
-      name: 'Hoàng Tuấn Kiệt',
-      role: 'Olympic Weightlifting & Powerlifting',
-      experience: '9+ năm kinh nghiệm',
-      certs: 'USAW Sports Performance Coach',
-      image: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=600&auto=format&fit=crop&q=80',
-      rating: '4.96'
-    }
-  ];
+  // Master Gym Coaches List strictly from live backend
+  const coaches = liveTrainers.map((t) => ({
+    name: t.user?.fullName || `Coach #${t.userId}`,
+    role: t.specialization || 'Chuyên Gia Huấn Luyện Thể Hình',
+    experience: t.experience ? `${t.experience}+ năm kinh nghiệm` : 'Nhiều năm kinh nghiệm',
+    certs: t.bio || 'Chứng chỉ Quốc Tế CPT & Khoa Học Vận Động',
+    image: t.user?.avatar || 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=600&auto=format&fit=crop&q=80',
+    rating: t.rating ? t.rating.toFixed(1) : '5.0'
+  }));
 
   // 4 Core Gym Pillars for the Freeletics Interactive Reveal Grid
   const gymPillars = [
@@ -338,6 +329,7 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
 
   return (
     <div style={{ position: 'relative', overflow: 'hidden' }}>
+      <div id="checkin-portal" style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, pointerEvents: 'none', opacity: 0 }} />
       {/* =========================================================================
           1. FREELETICS-INSPIRED FULL-BLEED ATHLETIC HERO (No Border Radius)
           ========================================================================= */}
@@ -582,34 +574,38 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
       <div className="luminous-divider" />
 
       {/* =========================================================================
-          3. FREELETICS SHARP PRICING MATRIX (Live SQL Database Data)
+          3. FREELETICS SHARP PRICING MATRIX
           ========================================================================= */}
       <section
         id="pricing"
-        className="section-atmosphere"
         style={{
-          padding: '52px 44px 60px',
+          padding: '64px 44px 72px',
           width: '100%',
-          position: 'relative'
+          position: 'relative',
+          backgroundImage: `linear-gradient(180deg, rgba(16, 7, 3, 0.88) 0%, rgba(28, 12, 5, 0.91) 50%, rgba(14, 6, 2, 0.95) 100%), url('https://images.unsplash.com/photo-1540497077202-7c8a3999166f?w=1920&auto=format&fit=crop&q=80')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center center',
+          backgroundRepeat: 'no-repeat',
+          overflow: 'hidden'
         }}
       >
         {/* Atmospheric Aura Glow, Athletic Dot Grid & Watermark */}
         <div className="aura-glow-top-right" />
         <div className="aura-glow-bottom-left" />
-        <div className="athletic-dot-grid" />
-        <div className="athletic-watermark" style={{ top: 20, right: 30 }}>
+        <div className="athletic-dot-grid" style={{ opacity: 0.15 }} />
+        <div className="athletic-watermark" style={{ top: 20, right: 30, color: 'rgba(255, 255, 255, 0.05)' }}>
           MEMBERSHIP
         </div>
 
         <div style={{ width: '100%', position: 'relative', zIndex: 1 }}>
-          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <div
               style={{
                 fontSize: 11,
                 fontWeight: 800,
                 textTransform: 'uppercase',
                 letterSpacing: '0.18em',
-                color: 'var(--color-primary)',
+                color: '#FFA050',
                 marginBottom: 6
               }}
             >
@@ -621,16 +617,37 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                 fontWeight: 900,
                 textTransform: 'uppercase',
                 letterSpacing: '-0.02em',
-                margin: 0
+                margin: 0,
+                color: '#FFFFFF'
               }}
             >
               Lựa Chọn Gói Tập Phù Hợp
             </h2>
+            <p style={{ color: 'rgba(255, 255, 255, 0.75)', fontSize: 14, marginTop: 8 }}>
+              Tất cả gói tập bao gồm quyền sử dụng toàn bộ trang thiết bị và dịch vụ tiện ích cao cấp.
+            </p>
           </div>
 
           {isLoadingPackages ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(255, 255, 255, 0.7)' }}>
               Đang tải danh sách gói tập từ máy chủ...
+            </div>
+          ) : livePackages.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '48px 24px',
+              background: 'rgba(26, 11, 5, 0.82)',
+              backdropFilter: 'blur(16px)',
+              border: '1px dashed rgba(255, 255, 255, 0.2)',
+              color: 'rgba(255, 255, 255, 0.7)'
+            }}>
+              <CreditCard size={36} color="var(--color-primary)" style={{ margin: '0 auto 12px' }} />
+              <h4 style={{ fontSize: 16, fontWeight: 800, color: '#FFFFFF', marginBottom: 4 }}>
+                Chưa có gói tập nào khả dụng trên hệ thống
+              </h4>
+              <p style={{ fontSize: 13, margin: 0, color: 'rgba(255, 255, 255, 0.7)' }}>
+                Vui lòng quay lại sau hoặc liên hệ quầy lễ tân để được hỗ trợ đăng ký thẻ tập.
+              </p>
             </div>
           ) : (
             <div
@@ -655,10 +672,13 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
-                      padding: '24px 20px',
+                      padding: '28px 22px',
                       borderRadius: 0,
-                      background: 'var(--bg-app)',
-                      border: isPopular ? '2px solid var(--color-primary)' : '1px solid var(--border-subtle)',
+                      background: isPopular ? 'rgba(38, 16, 7, 0.88)' : 'rgba(24, 10, 4, 0.82)',
+                      backdropFilter: 'blur(16px)',
+                      WebkitBackdropFilter: 'blur(16px)',
+                      border: isPopular ? '2px solid var(--color-primary)' : '1px solid rgba(255, 255, 255, 0.16)',
+                      boxShadow: isPopular ? '0 16px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(224, 90, 43, 0.25)' : '0 12px 32px rgba(0, 0, 0, 0.45)',
                       position: 'relative'
                     }}
                   >
@@ -687,7 +707,7 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                         style={{
                           fontSize: 11,
                           fontWeight: 800,
-                          color: 'var(--aura-caramel)',
+                          color: '#FFB87A',
                           textTransform: 'uppercase',
                           letterSpacing: '0.1em'
                         }}
@@ -700,7 +720,8 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                           fontWeight: 900,
                           marginTop: 6,
                           letterSpacing: '-0.01em',
-                          textTransform: 'uppercase'
+                          textTransform: 'uppercase',
+                          color: '#FFFFFF'
                         }}
                       >
                         {pkg.name}
@@ -708,7 +729,7 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                       <p
                         style={{
                           fontSize: 13,
-                          color: 'var(--text-muted)',
+                          color: 'rgba(255, 255, 255, 0.76)',
                           marginTop: 8,
                           lineHeight: 1.5,
                           minHeight: 40
@@ -719,23 +740,23 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                     </div>
 
                     {/* Price Block */}
-                    <div style={{ padding: '16px 0', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)', marginBottom: 24 }}>
+                    <div style={{ padding: '16px 0', borderTop: '1px solid rgba(255, 255, 255, 0.14)', borderBottom: '1px solid rgba(255, 255, 255, 0.14)', marginBottom: 24 }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                         <span
                           style={{
                             fontSize: 32,
                             fontWeight: 900,
                             fontFamily: 'var(--font-display)',
-                            color: 'var(--color-primary)'
+                            color: '#FF7A30'
                           }}
                         >
                           {formattedPrice} ₫
                         </span>
-                        <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}>
+                        <span style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.65)', fontWeight: 600 }}>
                           / {pkg.durationDays} ngày
                         </span>
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--aura-caramel)', fontWeight: 700, marginTop: 4 }}>
+                      <div style={{ fontSize: 12, color: '#FFC58D', fontWeight: 700, marginTop: 4 }}>
                         {pkg.type === 'PT'
                           ? `Bao gồm ${pkg.totalPtSessions || 12} buổi kèm riêng 1:1`
                           : `Tặng ${pkg.trialPtSessions || 1} buổi định hướng cùng Coach`}
@@ -744,20 +765,20 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
 
                     {/* Feature Bullets */}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 22 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5 }}>
-                        <Check size={15} color="var(--aura-green)" strokeWidth={2.5} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#FAF7F2' }}>
+                        <Check size={15} color="#4ADE80" strokeWidth={2.5} />
                         <span>Sử dụng máy tập Rogue & Technogym 24/7</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5 }}>
-                        <Check size={15} color="var(--aura-green)" strokeWidth={2.5} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#FAF7F2' }}>
+                        <Check size={15} color="#4ADE80" strokeWidth={2.5} />
                         <span>Xông hơi Sauna & Tủ đồ riêng</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5 }}>
-                        <Check size={15} color="var(--aura-green)" strokeWidth={2.5} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#FAF7F2' }}>
+                        <Check size={15} color="#4ADE80" strokeWidth={2.5} />
                         <span>Điểm danh bằng mã QR không chạm</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5 }}>
-                        <Check size={15} color="var(--aura-green)" strokeWidth={2.5} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#FAF7F2' }}>
+                        <Check size={15} color="#4ADE80" strokeWidth={2.5} />
                         <span>Đo quét chỉ số InBody 3D định kỳ</span>
                       </div>
                     </div>
@@ -794,197 +815,239 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
           ========================================================================= */}
       <section
         id="schedule"
-        className="section-atmosphere-dark"
         style={{
-          padding: '52px 44px 60px',
+          padding: '64px 44px 72px',
           width: '100%',
-          position: 'relative'
+          position: 'relative',
+          backgroundImage: `linear-gradient(180deg, rgba(14, 6, 2, 0.88) 0%, rgba(26, 11, 4, 0.91) 50%, rgba(12, 5, 2, 0.95) 100%), url('https://images.unsplash.com/photo-1518611012118-696072aa579a?w=1920&auto=format&fit=crop&q=80')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center center',
+          backgroundRepeat: 'no-repeat',
+          overflow: 'hidden'
         }}
       >
         {/* Atmospheric Aura Glow, Athletic Dot Grid & Watermark */}
         <div className="aura-glow-center" />
-        <div className="athletic-dot-grid" />
-        <div className="athletic-watermark" style={{ top: 20, left: 30 }}>
+        <div className="athletic-dot-grid" style={{ opacity: 0.15 }} />
+        <div className="athletic-watermark" style={{ top: 20, left: 30, color: 'rgba(255, 255, 255, 0.05)' }}>
           TIMETABLE
         </div>
 
         <div style={{ width: '100%', position: 'relative', zIndex: 1 }}>
-        <div style={{ textAlign: 'center', marginBottom: 26 }}>
+          <div style={{ textAlign: 'center', marginBottom: 30 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.18em',
+                color: '#FFA050',
+                marginBottom: 6
+              }}
+            >
+              Thời Khóa Biểu Tập Luyện
+            </div>
+            <h2
+              style={{
+                fontSize: 'clamp(24px, 3.2vw, 36px)',
+                fontWeight: 900,
+                textTransform: 'uppercase',
+                letterSpacing: '-0.02em',
+                margin: 0,
+                color: '#FFFFFF'
+              }}
+            >
+              Khung Giờ Tập Luyện Tuần Này
+            </h2>
+            <p style={{ color: 'rgba(255, 255, 255, 0.75)', fontSize: 14, marginTop: 8 }}>
+              Đăng ký giữ chỗ trước lớp học nhóm yêu thích cùng đội ngũ Master Coach.
+            </p>
+          </div>
+
+          {/* Day Selector Rounded Bar */}
           <div
             style={{
-              fontSize: 11,
-              fontWeight: 800,
-              textTransform: 'uppercase',
-              letterSpacing: '0.18em',
-              color: 'var(--color-primary)',
-              marginBottom: 6
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 8,
+              overflowX: 'auto',
+              paddingBottom: 10,
+              marginBottom: 20
             }}
           >
-            Thời Khóa Biểu Tập Luyện
+            {weekDays.map((w, index) => {
+              const isSelected = selectedDayIndex === index;
+              return (
+                <button
+                  key={w.day}
+                  onClick={() => {
+                    setSelectedDayIndex(index);
+                    soundEffects.playSuccessBeep();
+                  }}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    padding: '12px 20px',
+                    borderRadius: 16,
+                    border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid rgba(255, 255, 255, 0.18)',
+                    background: isSelected ? 'var(--color-primary)' : 'rgba(28, 12, 5, 0.82)',
+                    backdropFilter: 'blur(12px)',
+                    color: isSelected ? '#FFFFFF' : '#FAF7F2',
+                    cursor: 'pointer',
+                    transition: 'all 0.18s ease',
+                    minWidth: 76,
+                    boxShadow: isSelected ? '0 4px 14px var(--color-primary-glow)' : '0 4px 12px rgba(0, 0, 0, 0.35)'
+                  }}
+                >
+                  <span style={{ fontSize: 11, fontWeight: 800, opacity: isSelected ? 0.95 : 0.7 }}>{w.day}</span>
+                  <span style={{ fontSize: 19, fontWeight: 900, marginTop: 2 }}>{w.date}</span>
+                </button>
+              );
+            })}
           </div>
-          <h2
-            style={{
-              fontSize: 'clamp(24px, 3.2vw, 36px)',
-              fontWeight: 900,
-              textTransform: 'uppercase',
-              letterSpacing: '-0.02em',
-              margin: 0
-            }}
-          >
-            Khung Giờ Tập Luyện Tuần Này
-          </h2>
-        </div>
 
-        {/* Day Selector Rounded Bar */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: 8,
-            overflowX: 'auto',
-            paddingBottom: 10,
-            marginBottom: 20
-          }}
-        >
-          {weekDays.map((w, index) => {
-            const isSelected = selectedDayIndex === index;
-            return (
-              <button
-                key={w.day}
-                onClick={() => {
-                  setSelectedDayIndex(index);
-                  soundEffects.playSuccessBeep();
-                }}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  padding: '12px 20px',
-                  borderRadius: 16,
-                  border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--border-subtle)',
-                  background: isSelected ? 'var(--color-primary)' : 'var(--bg-card)',
-                  color: isSelected ? '#FFFFFF' : 'var(--text-primary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.18s ease',
-                  minWidth: 76,
-                  boxShadow: isSelected ? '0 4px 14px var(--color-primary-glow)' : 'var(--shadow-sm)'
-                }}
-              >
-                <span style={{ fontSize: 11, fontWeight: 800, opacity: isSelected ? 0.9 : 0.6 }}>{w.day}</span>
-                <span style={{ fontSize: 19, fontWeight: 900, marginTop: 2 }}>{w.date}</span>
-              </button>
-            );
-          })}
-        </div>
+          {/* Category Pills (Làm tròn hoàn toàn dạng Pill) */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 28 }}>
+            {categories.map(cat => {
+              const isCatActive = selectedCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => {
+                    setSelectedCategory(cat);
+                    soundEffects.playSuccessBeep();
+                  }}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 9999,
+                    border: isCatActive ? '1.5px solid var(--color-primary)' : '1px solid rgba(255, 255, 255, 0.15)',
+                    background: isCatActive ? 'var(--color-primary)' : 'rgba(28, 12, 5, 0.72)',
+                    color: isCatActive ? '#FFFFFF' : 'rgba(255, 255, 255, 0.78)',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    transition: 'all 0.18s ease',
+                    boxShadow: isCatActive ? '0 4px 12px var(--color-primary-glow)' : 'none'
+                  }}
+                >
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
 
-        {/* Category Pills (Làm tròn hoàn toàn dạng Pill) */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 26 }}>
-          {categories.map(cat => {
-            const isCatActive = selectedCategory === cat;
-            return (
-              <button
-                key={cat}
-                onClick={() => {
-                  setSelectedCategory(cat);
-                  soundEffects.playSuccessBeep();
-                }}
-                style={{
-                  padding: '8px 18px',
-                  borderRadius: 9999,
-                  border: isCatActive ? '1.5px solid var(--color-primary)' : '1px solid var(--border-subtle)',
-                  background: isCatActive ? 'var(--color-primary)' : 'var(--bg-card)',
-                  color: isCatActive ? '#FFFFFF' : 'var(--text-muted)',
-                  fontSize: 12,
-                  fontWeight: 800,
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  cursor: 'pointer',
-                  transition: 'all 0.18s ease',
-                  boxShadow: isCatActive ? '0 4px 12px var(--color-primary-glow)' : 'none'
-                }}
-              >
-                {cat}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Classes List Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20, width: '100%' }}>
-          {filteredClasses.map(session => {
-            const isBooked = bookedSessions.has(session.id);
-            return (
-              <div
-                key={session.id}
-                style={{
-                  padding: '20px 20px',
-                  borderRadius: 0,
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between'
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 800,
-                        background: 'var(--color-primary-light)',
-                        color: 'var(--color-primary)',
-                        padding: '4px 10px',
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase'
-                      }}
-                    >
-                      {session.category}
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{session.level}</span>
-                  </div>
-
-                  <h4 style={{ fontSize: 18, fontWeight: 900, marginTop: 12, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
-                    {session.title}
-                  </h4>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
-                    <img
-                      src={session.avatar}
-                      alt={session.coach}
-                      style={{ width: 38, height: 38, borderRadius: 0, objectFit: 'cover', border: '1px solid var(--border-subtle)' }}
-                    />
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 800 }}>{session.coach}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{session.room}</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 16, fontSize: 12, color: 'var(--text-muted)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Clock size={14} color="var(--color-primary)" />
-                      <span>{session.time}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Users size={14} color="var(--aura-caramel)" />
-                      <span>Còn {session.spots} / {session.maxSpots} chỗ</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 24 }}>
-                  <button
-                    onClick={() => toggleBookSession(session.id)}
-                    className={isBooked ? 'btn-secondary' : 'btn-primary'}
-                    style={{ width: '100%', padding: '11px 0', fontSize: 12 }}
+          {/* Classes List Cards */}
+          {filteredClasses.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '48px 24px',
+              background: 'rgba(26, 11, 5, 0.82)',
+              backdropFilter: 'blur(16px)',
+              border: '1px dashed rgba(255, 255, 255, 0.2)',
+              color: 'rgba(255, 255, 255, 0.7)'
+            }}>
+              <Calendar size={36} color="var(--color-primary)" style={{ margin: '0 auto 12px' }} />
+              <h4 style={{ fontSize: 16, fontWeight: 800, color: '#FFFFFF', marginBottom: 4 }}>
+                Chưa có lịch lớp học nhóm trong ngày này
+              </h4>
+              <p style={{ fontSize: 13, margin: 0, color: 'rgba(255, 255, 255, 0.7)' }}>
+                Hệ thống đang cập nhật lịch tập tuần mới. Vui lòng chọn ngày khác hoặc liên hệ hotline 1900 6868.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20, width: '100%' }}>
+              {filteredClasses.map(session => {
+                const isBooked = bookedSessions.has(session.id);
+                return (
+                  <div
+                    key={session.id}
+                    style={{
+                      padding: '22px 22px',
+                      borderRadius: 0,
+                      background: 'rgba(26, 11, 5, 0.84)',
+                      backdropFilter: 'blur(16px)',
+                      WebkitBackdropFilter: 'blur(16px)',
+                      border: '1px solid rgba(255, 255, 255, 0.16)',
+                      boxShadow: '0 12px 32px rgba(0, 0, 0, 0.45)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between'
+                    }}
                   >
-                    {isBooked ? '✓ ĐÃ ĐẶT CHỖ THÀNH CÔNG' : 'ĐẶT CHỖ THAM GIA'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 800,
+                            background: 'rgba(224, 90, 43, 0.22)',
+                            color: '#FFA066',
+                            border: '1px solid rgba(224, 90, 43, 0.4)',
+                            padding: '4px 10px',
+                            letterSpacing: '0.08em',
+                            textTransform: 'uppercase'
+                          }}
+                        >
+                          {session.category}
+                        </span>
+                        <span style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.65)', fontWeight: 600 }}>{session.level}</span>
+                      </div>
+
+                      <h4 style={{ fontSize: 18, fontWeight: 900, marginTop: 12, letterSpacing: '-0.01em', textTransform: 'uppercase', color: '#FFFFFF' }}>
+                        {session.title}
+                      </h4>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
+                        <img
+                          src={session.avatar}
+                          alt={session.coach}
+                          style={{ width: 40, height: 40, borderRadius: 0, objectFit: 'cover', border: '1px solid rgba(255, 255, 255, 0.2)' }}
+                        />
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: '#FFFFFF' }}>{session.coach}</div>
+                          <div style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.65)' }}>{session.room}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 16, fontSize: 12, color: 'rgba(255, 255, 255, 0.8)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Clock size={14} color="#FF7A30" />
+                          <span>{session.time}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Users size={14} color="#FFB87A" />
+                          <span>Còn {session.spots} / {session.maxSpots} chỗ</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 24 }}>
+                      <button
+                        disabled={bookingLoadingId === session.id}
+                        onClick={() => toggleBookSession(session)}
+                        className={isBooked ? 'btn-secondary' : 'btn-primary'}
+                        style={{ width: '100%', padding: '11px 0', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                      >
+                        {bookingLoadingId === session.id ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>Đang xử lý đặt chỗ...</span>
+                          </>
+                        ) : isBooked ? (
+                          '✓ ĐÃ ĐẶT CHỖ THÀNH CÔNG'
+                        ) : (
+                          'ĐẶT CHỖ THAM GIA'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 
@@ -996,30 +1059,34 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
           ========================================================================= */}
       <section
         id="coaches"
-        className="section-atmosphere"
         style={{
-          padding: '52px 44px 60px',
+          padding: '64px 44px 72px',
           width: '100%',
-          position: 'relative'
+          position: 'relative',
+          backgroundImage: `linear-gradient(180deg, rgba(14, 6, 2, 0.88) 0%, rgba(28, 12, 5, 0.91) 50%, rgba(14, 6, 2, 0.95) 100%), url('https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=1920&auto=format&fit=crop&q=80')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center center',
+          backgroundRepeat: 'no-repeat',
+          overflow: 'hidden'
         }}
       >
         {/* Atmospheric Aura Glow, Athletic Dot Grid & Watermark */}
         <div className="aura-glow-bottom-left" />
         <div className="aura-glow-top-right" />
-        <div className="athletic-dot-grid" />
-        <div className="athletic-watermark" style={{ top: 20, right: 30 }}>
+        <div className="athletic-dot-grid" style={{ opacity: 0.15 }} />
+        <div className="athletic-watermark" style={{ top: 20, right: 30, color: 'rgba(255, 255, 255, 0.05)' }}>
           ATHLETES
         </div>
 
         <div style={{ width: '100%', position: 'relative', zIndex: 1 }}>
-          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <div
               style={{
                 fontSize: 11,
                 fontWeight: 800,
                 textTransform: 'uppercase',
                 letterSpacing: '0.18em',
-                color: 'var(--color-primary)',
+                color: '#FFA050',
                 marginBottom: 6
               }}
             >
@@ -1031,126 +1098,167 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                 fontWeight: 900,
                 textTransform: 'uppercase',
                 letterSpacing: '-0.02em',
-                margin: 0
+                margin: 0,
+                color: '#FFFFFF'
               }}
             >
               Master Coach Đồng Hành 1-1
             </h2>
+            <p style={{ color: 'rgba(255, 255, 255, 0.75)', fontSize: 14, marginTop: 8 }}>
+              100% huấn luyện viên sở hữu chứng chỉ quốc tế và kinh nghiệm thi đấu thể hình đỉnh cao.
+            </p>
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-              gap: 20,
-              width: '100%'
-            }}
-          >
-            {coaches.map((c, i) => (
-              <div
-                key={i}
-                style={{
-                  borderRadius: 0,
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border-subtle)',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column'
-                }}
-              >
-                <div style={{ height: 230, position: 'relative', overflow: 'hidden' }}>
-                  <img
-                    src={c.image}
-                    alt={c.name}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover'
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      background: 'rgba(20, 8, 3, 0.88)',
-                      color: '#FFFFFF',
-                      padding: '4px 10px',
-                      borderRadius: 0,
-                      fontSize: 10.5,
-                      fontWeight: 800,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4
-                    }}
-                  >
-                    <Star size={11} color="#FFB300" fill="#FFB300" />
-                    <span>{c.rating} / 5.0</span>
-                  </div>
-                </div>
-
-                <div style={{ padding: '16px 16px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                  <div>
-                    <h4 style={{ fontSize: 18, fontWeight: 900, textTransform: 'uppercase' }}>{c.name}</h4>
-                    <p style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 800, marginTop: 4, textTransform: 'uppercase' }}>
-                      {c.role}
-                    </p>
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-                      {c.certs} • {c.experience}
-                    </p>
-                  </div>
-
-                  <div style={{ marginTop: 20 }}>
-                    <button
-                      className="btn-outline"
-                      onClick={() => {
-                        alert(`Đăng ký buổi tư vấn thể lực 1-1 miễn phí cùng ${c.name}`);
+          {coaches.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '48px 24px',
+              background: 'rgba(26, 11, 5, 0.82)',
+              backdropFilter: 'blur(16px)',
+              border: '1px dashed rgba(255, 255, 255, 0.2)',
+              color: 'rgba(255, 255, 255, 0.7)'
+            }}>
+              <Award size={36} color="var(--color-primary)" style={{ margin: '0 auto 12px' }} />
+              <h4 style={{ fontSize: 16, fontWeight: 800, color: '#FFFFFF', marginBottom: 4 }}>
+                Đội ngũ Huấn Luyện Viên đang được cập nhật
+              </h4>
+              <p style={{ fontSize: 13, margin: 0, color: 'rgba(255, 255, 255, 0.7)' }}>
+                Hệ thống đang đồng bộ danh sách HLV chuyên nghiệp. Vui lòng liên hệ quầy lễ tân để được tư vấn gói tập PT 1-1.
+              </p>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                gap: 20,
+                width: '100%'
+              }}
+            >
+              {coaches.map((c, i) => (
+                <div
+                  key={i}
+                  style={{
+                    borderRadius: 0,
+                    background: 'rgba(26, 11, 5, 0.84)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255, 255, 255, 0.16)',
+                    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.45)',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}
+                >
+                  <div style={{ height: 230, position: 'relative', overflow: 'hidden' }}>
+                    <img
+                      src={c.image}
+                      alt={c.name}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover'
                       }}
-                      style={{ width: '100%', padding: '9px 0', fontSize: 11 }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        background: 'rgba(20, 8, 3, 0.92)',
+                        color: '#FFFFFF',
+                        padding: '4px 10px',
+                        borderRadius: 0,
+                        fontSize: 10.5,
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
                     >
-                      ĐĂNG KÝ TẬP THỬ 1-1
-                    </button>
+                      <Star size={11} color="#FFB300" fill="#FFB300" />
+                      <span>{c.rating} / 5.0</span>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '18px 18px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div>
+                      <h4 style={{ fontSize: 18, fontWeight: 900, textTransform: 'uppercase', color: '#FFFFFF' }}>{c.name}</h4>
+                      <p style={{ fontSize: 12, color: '#FFA050', fontWeight: 800, marginTop: 4, textTransform: 'uppercase' }}>
+                        {c.role}
+                      </p>
+                      <p style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.72)', marginTop: 6, lineHeight: 1.5 }}>
+                        {c.certs} • {c.experience}
+                      </p>
+                    </div>
+
+                    <div style={{ marginTop: 22 }}>
+                      <button
+                        className="btn-outline"
+                        onClick={() => {
+                          soundEffects.playSuccessBeep();
+                          if (!api.auth.getToken()) {
+                            alert(`Vui lòng đăng ký tài khoản thành viên để nhận 01 buổi tư vấn thể lực 1-1 miễn phí cùng ${c.name}!`);
+                            onOpenRegister?.();
+                          } else {
+                            alert(`Đã ghi nhận yêu cầu tư vấn thể lực 1-1 miễn phí cùng ${c.name}. Huấn luyện viên sẽ liên hệ với bạn trong 15 phút!`);
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '10px 0',
+                          fontSize: 11,
+                          borderColor: 'rgba(255, 255, 255, 0.3)',
+                          color: '#FFFFFF'
+                        }}
+                      >
+                        ĐĂNG KÝ TẬP THỬ 1-1
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
       {/* =========================================================================
-          6. SHARP QR CHECK-IN MODAL (Góc vuông, không bo tròn container)
+          6. SHARP QR CHECK-IN MODAL (Góc vuông, Luxury High-Tech Style)
           ========================================================================= */}
       {isQRModalOpen && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.7)',
-            backdropFilter: 'blur(8px)',
+            background: 'rgba(0, 0, 0, 0.82)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
             padding: 20
           }}
-          onClick={() => setIsQRModalOpen(false)}
+          onClick={handleCloseQRModal}
         >
           <div
             style={{
               width: '100%',
-              maxWidth: 440,
+              maxWidth: 460,
               padding: '36px 32px',
               borderRadius: 0,
-              background: 'var(--bg-card)',
+              background: 'rgba(28, 12, 6, 0.95)',
+              backdropFilter: 'blur(20px)',
               border: '2px solid var(--color-primary)',
+              boxShadow: '0 24px 64px rgba(0, 0, 0, 0.75), 0 0 32px rgba(224, 90, 43, 0.3)',
               textAlign: 'center',
               position: 'relative'
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              onClick={() => setIsQRModalOpen(false)}
+              onClick={handleCloseQRModal}
               style={{
                 position: 'absolute',
                 top: 14,
@@ -1158,13 +1266,13 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                 width: 32,
                 height: 32,
                 borderRadius: 0,
-                background: 'var(--bg-app)',
-                border: '1px solid var(--border-subtle)',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                color: 'var(--text-muted)'
+                color: 'rgba(255, 255, 255, 0.7)'
               }}
             >
               <X size={16} />
@@ -1180,35 +1288,43 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                margin: '0 auto 16px'
+                margin: '0 auto 16px',
+                boxShadow: '0 4px 16px var(--color-primary-glow)'
               }}
             >
               <QrCode size={26} />
             </div>
 
-            <h3 style={{ fontSize: 22, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.01em' }}>
+            <h3 style={{ fontSize: 22, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.01em', color: '#FFFFFF' }}>
               Mã QR Điểm Danh Cá Nhân
             </h3>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>
-              Quét mã tại cổng xoay ra vào phòng tập
+            <p style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.75)', marginTop: 6 }}>
+              {api.auth.getToken()
+                ? `Hội Viên: ${currentUser?.name || 'Khách Hàng'} • Quét tại cổng xoay thông minh`
+                : 'Cổng xoay kiểm soát ra vào thông minh Aura Fitness'}
             </p>
 
+            {/* QR Card Container */}
             <div
               style={{
-                margin: '26px auto',
-                width: 220,
-                height: 220,
+                margin: '24px auto',
+                width: 230,
+                height: 230,
                 borderRadius: 0,
                 background: '#FFFFFF',
                 padding: 16,
                 border: '2px dashed var(--color-primary)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
               }}
             >
               {qrLoading ? (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Đang tạo mã QR...</div>
+                <div style={{ fontSize: 13, color: '#333333', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <Loader2 size={28} className="animate-spin" color="var(--color-primary)" />
+                  <span>Đang tạo mã QR...</span>
+                </div>
               ) : qrData?.qrCodeImage ? (
                 <img
                   src={qrData.qrCodeImage}
@@ -1218,11 +1334,13 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
               ) : (
                 <div style={{ textAlign: 'center', padding: 12 }}>
                   <QrCode size={64} color="var(--color-primary)" style={{ margin: '0 auto 8px' }} />
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Mã cá nhân bảo mật</div>
+                  <div style={{ fontSize: 12, color: '#444444', fontWeight: 700 }}>Mã QR Hội Viên</div>
+                  <div style={{ fontSize: 11, color: '#777777', marginTop: 4 }}>Mở cổng xoay tự động</div>
                 </div>
               )}
             </div>
 
+            {/* Messages / Status */}
             {selfCheckinMsg && (
               <div
                 style={{
@@ -1231,11 +1349,12 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                   padding: '10px 14px',
                   borderRadius: 0,
                   background: selfCheckinMsg.includes('✅')
-                    ? 'var(--color-success-bg)'
-                    : 'var(--color-primary-light)',
+                    ? 'rgba(34, 197, 94, 0.15)'
+                    : 'rgba(239, 68, 68, 0.15)',
                   color: selfCheckinMsg.includes('✅')
-                    ? 'var(--color-success)'
-                    : 'var(--color-primary)',
+                    ? '#4ade80'
+                    : '#f87171',
+                  border: `1px solid ${selfCheckinMsg.includes('✅') ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
                   marginBottom: 18
                 }}
               >
@@ -1243,13 +1362,64 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
               </div>
             )}
 
-            <button
-              className="btn-primary"
-              onClick={handleSelfCheckIn}
-              style={{ width: '100%', padding: '12px 0', fontSize: 12 }}
-            >
-              Mô Phỏng Quét Cổng Vào
-            </button>
+            {/* Action Buttons for Logged-in Member vs Guest */}
+            {api.auth.getToken() ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <button
+                  className="btn-primary"
+                  onClick={handleSelfCheckIn}
+                  style={{ width: '100%', padding: '12px 0', fontSize: 13, fontWeight: 800 }}
+                >
+                  Mô Phỏng Quét Cổng Vào (Tự Check-in)
+                </button>
+                <button
+                  onClick={handleOpenLiveQR}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: 'rgba(255, 255, 255, 0.85)',
+                    padding: '9px 0',
+                    fontSize: 12,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Làm Mới Mã QR (1 Phút)
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <p style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 4px' }}>
+                  Bạn cần đăng nhập tài khoản Hội Viên để hiển thị mã QR ra/vào phòng tập:
+                </p>
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    handleCloseQRModal();
+                    onOpenLogin?.();
+                  }}
+                  style={{ width: '100%', padding: '12px 0', fontSize: 13, fontWeight: 800 }}
+                >
+                  Đăng Nhập Tài Khoản Ngay
+                </button>
+                <button
+                  onClick={() => {
+                    handleCloseQRModal();
+                    onOpenRegister?.();
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: '#FFA050',
+                    padding: '9px 0',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    fontWeight: 700
+                  }}
+                >
+                  Chưa Có Tài Khoản? Đăng Ký Hội Viên Mới
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

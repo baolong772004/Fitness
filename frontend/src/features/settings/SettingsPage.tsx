@@ -1,24 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { User, UserRole } from '../../types';
-import { MockDatabase, SystemSettings, DEFAULT_SYSTEM_SETTINGS } from '../../mocks/mockData';
+import { User } from '../../types';
 import { api } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import { 
   Settings, 
   User as UserIcon, 
-  Building2, 
-  Bell, 
-  ShieldCheck, 
   Volume2, 
-  Save, 
   ArrowLeft, 
-  Check, 
+  Check,
   LogOut,
-  Lock,
-  Smartphone,
+  Loader2,
+  CreditCard,
+  Calendar,
+  Clock,
   Sparkles,
-  Loader2
+  Save
 } from 'lucide-react';
+import { ApiSubscription } from '../../services/api';
 
 interface SettingsPageProps {
   currentUser: User | null;
@@ -33,8 +31,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onLogout,
   onUpdateUser
 }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'center' | 'preferences' | 'security'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'subscriptions' | 'preferences'>('profile');
   const [isSaving, setIsSaving] = useState(false);
+  const [mySubscriptions, setMySubscriptions] = useState<ApiSubscription[]>([]);
+  const [isLoadingSubs, setIsLoadingSubs] = useState(false);
+  const [soundEffectsEnabled, setSoundEffectsEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('aura_sound_effects_enabled') !== 'false';
+  });
 
   // Profile Form State
   const [profileForm, setProfileForm] = useState({
@@ -47,14 +50,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     confirmPassword: ''
   });
 
-  // Center Settings State
-  const [centerSettings, setCenterSettings] = useState<SystemSettings>(DEFAULT_SYSTEM_SETTINGS);
-
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    setCenterSettings(MockDatabase.getSettings());
-  }, []);
+    if (activeTab === 'subscriptions') {
+      setIsLoadingSubs(true);
+      api.subscriptions.getMySubscriptions()
+        .then(subs => {
+          setMySubscriptions(subs || []);
+        })
+        .catch(err => {
+          console.warn('Lỗi tải gói tập cá nhân:', err);
+          setMySubscriptions([]);
+        })
+        .finally(() => {
+          setIsLoadingSubs(false);
+        });
+    }
+  }, [activeTab]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,20 +125,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  const handleSaveCenterConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    MockDatabase.saveSettings(centerSettings);
-    MockDatabase.logAction(
-      currentUser?.name || 'Quản trị viên',
-      currentUser?.role || 'admin',
-      'Cập nhật cấu hình trung tâm',
-      'Hệ thống AURA Fitness',
-      `Giờ mở cửa: ${centerSettings.operatingHours} - Giới hạn báo vắng: ${centerSettings.makeupNoticeHours}h`
-    );
-    soundEffects.playSuccessBeep();
-    setSaveSuccessMsg('Đã lưu cấu hình trung tâm thể thao thành công!');
-    setTimeout(() => setSaveSuccessMsg(null), 3000);
-  };
 
   return (
     <div style={{ padding: 'var(--space-xxl) var(--space-xl)', maxWidth: 1080, margin: '0 auto' }}>
@@ -147,9 +146,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <Settings size={26} />
         </div>
         <div>
-          <h2 style={{ fontSize: 24, color: 'var(--text-primary)', fontWeight: 800 }}>Cài Đặt Hệ Thống & Tài Khoản</h2>
+          <h2 style={{ fontSize: 24, color: 'var(--text-primary)', fontWeight: 800 }}>Cài Đặt Tài Khoản & Gói Tập</h2>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Quản lý hồ sơ, cấu hình phòng tập, thông báo và bảo mật
+            Quản lý hồ sơ cá nhân, đổi mật khẩu, theo dõi gói tập hội viên và tùy chọn âm thanh
           </p>
         </div>
       </div>
@@ -200,15 +199,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('center')}
+            onClick={() => setActiveTab('subscriptions')}
             style={{
               width: '100%',
               display: 'flex',
               alignItems: 'center',
               gap: 10,
               padding: '12px 14px',
-              background: activeTab === 'center' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'center' ? '#FFFFFF' : 'var(--text-muted)',
+              background: activeTab === 'subscriptions' ? 'var(--color-primary)' : 'transparent',
+              color: activeTab === 'subscriptions' ? '#FFFFFF' : 'var(--text-muted)',
               border: 'none',
               borderRadius: 'var(--radius-sm)',
               fontWeight: 700,
@@ -218,8 +217,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               textAlign: 'left'
             }}
           >
-            <Building2 size={16} />
-            <span>Cấu Hình Trung Tâm</span>
+            <CreditCard size={16} />
+            <span>Gói Tập & Thẻ Hội Viên</span>
           </button>
 
           <button
@@ -242,29 +241,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             }}
           >
             <Volume2 size={16} />
-            <span>Thông Báo & Âm Thanh</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('security')}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '12px 14px',
-              background: activeTab === 'security' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'security' ? '#FFFFFF' : 'var(--text-muted)',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              textAlign: 'left'
-            }}
-          >
-            <ShieldCheck size={16} />
-            <span>Bảo Mật & 2FA</span>
+            <span>Tùy Chọn Âm Thanh</span>
           </button>
         </div>
 
@@ -397,88 +374,174 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             </form>
           )}
 
-          {/* TAB 2: CENTER CONFIGURATION */}
-          {activeTab === 'center' && (
-            <form onSubmit={handleSaveCenterConfig}>
-              <h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800, marginBottom: 20 }}>Cấu Hình Trung Tâm Thể Thao</h3>
-
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
-                  Tên Thương Hiệu Trung Tâm:
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={centerSettings.centerName}
-                  onChange={(e) => setCenterSettings({ ...centerSettings, centerName: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 14, marginBottom: 14 }}>
+          {/* TAB: MY SUBSCRIPTIONS (HỘI VIÊN & GÓI TẬP) */}
+          {activeTab === 'subscriptions' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
-                    Đường Dây Nóng (Hotline):
-                  </label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={centerSettings.hotline}
-                    onChange={(e) => setCenterSettings({ ...centerSettings, hotline: e.target.value })}
-                  />
+                  <h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800 }}>Gói Tập & Thẻ Hội Viên Của Tôi</h3>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                    Thông tin thẻ tập, ngày hết hạn và số buổi huấn luyện cá nhân (PT) còn lại
+                  </p>
                 </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
-                    Thời Gian Mở Cửa Hàng Ngày:
-                  </label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={centerSettings.operatingHours}
-                    onChange={(e) => setCenterSettings({ ...centerSettings, operatingHours: e.target.value })}
-                  />
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setIsLoadingSubs(true);
+                    api.subscriptions.getMySubscriptions()
+                      .then(subs => setMySubscriptions(subs || []))
+                      .finally(() => setIsLoadingSubs(false));
+                  }}
+                  style={{ padding: '8px 14px', fontSize: 12 }}
+                >
+                  Làm Mới
+                </button>
+              </div>
+
+              {isLoadingSubs ? (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>
+                  <Loader2 size={28} className="animate-spin" style={{ margin: '0 auto 12px' }} />
+                  <div>Đang tải thông tin gói tập của bạn...</div>
                 </div>
-              </div>
+              ) : mySubscriptions.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '48px 24px',
+                  background: 'var(--bg-app)',
+                  border: '1px dashed var(--aura-border)',
+                  borderRadius: 'var(--radius-sm)'
+                }}>
+                  <CreditCard size={40} color="var(--color-primary)" style={{ margin: '0 auto 12px' }} />
+                  <h4 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 6 }}>
+                    Bạn chưa có gói tập nào đang hoạt động
+                  </h4>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 440, margin: '0 auto 20px' }}>
+                    Khám phá bảng giá niêm yết trên hệ thống và đăng ký gói tập phù hợp để bắt đầu tập luyện cùng trang thiết bị chuẩn Olympic!
+                  </p>
+                  <button className="btn-primary" onClick={onBack} style={{ padding: '10px 20px', fontSize: 13 }}>
+                    Khám Phá Gói Tập Tại Trang Chủ
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {mySubscriptions.map(sub => {
+                    const isActive = sub.status === 'ACTIVE';
+                    const isPt = sub.package?.type === 'PT';
+                    const startDateStr = new Date(sub.startDate).toLocaleDateString('vi-VN');
+                    const endDateStr = new Date(sub.endDate).toLocaleDateString('vi-VN');
 
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
-                  Địa Chỉ Cơ Sở:
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={centerSettings.address}
-                  onChange={(e) => setCenterSettings({ ...centerSettings, address: e.target.value })}
-                />
-              </div>
+                    return (
+                      <div
+                        key={sub.id}
+                        style={{
+                          padding: 20,
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'var(--bg-app)',
+                          border: isActive ? '1.5px solid var(--color-primary)' : '1px solid var(--aura-border)',
+                          position: 'relative'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <span style={{
+                                fontSize: 10,
+                                fontWeight: 800,
+                                padding: '3px 8px',
+                                borderRadius: 4,
+                                textTransform: 'uppercase',
+                                background: isPt ? 'rgba(254, 116, 19, 0.15)' : 'rgba(0, 200, 83, 0.15)',
+                                color: isPt ? 'var(--color-primary)' : 'var(--color-success)'
+                              }}>
+                                {isPt ? 'Huấn Luyện 1:1 (PT)' : 'Hội Viên Gym'}
+                              </span>
 
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
-                  Thời hạn tối thiểu báo trước khi hủy buổi để được cấp học bù (Tiếng):
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="24"
-                  className="form-input"
-                  value={centerSettings.makeupNoticeHours}
-                  onChange={(e) => setCenterSettings({ ...centerSettings, makeupNoticeHours: parseInt(e.target.value) || 4 })}
-                />
-                <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4, display: 'block' }}>
-                  * Nếu học viên báo trước số giờ này, hệ thống sẽ bảo lưu 01 buổi học bù (Makeup session).
-                </span>
-              </div>
+                              <span style={{
+                                fontSize: 10,
+                                fontWeight: 800,
+                                padding: '3px 8px',
+                                borderRadius: 4,
+                                textTransform: 'uppercase',
+                                background: isActive ? 'var(--color-success-bg)' : 'rgba(150, 150, 150, 0.15)',
+                                color: isActive ? 'var(--color-success)' : 'var(--text-muted)'
+                              }}>
+                                {isActive ? 'Đang Hoạt Động' : sub.status}
+                              </span>
+                            </div>
 
-              <button type="submit" className="btn-primary" style={{ padding: '12px 24px' }}>
-                <Save size={16} />
-                <span>Lưu Cấu Hình Trung Tâm</span>
-              </button>
-            </form>
+                            <h4 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', margin: '4px 0' }}>
+                              {sub.package?.name || `Gói tập #${sub.packageId}`}
+                            </h4>
+                            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
+                              {sub.package?.description || 'Quyền lợi tập luyện đầy đủ tại hệ thống AURA Fitness.'}
+                            </p>
+                          </div>
+
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                              Mã Đăng Ký
+                            </div>
+                            <div className="metric-mono" style={{ fontSize: 15, fontWeight: 800, color: 'var(--color-primary)' }}>
+                              #SUB-{sub.id}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{
+                          marginTop: 18,
+                          paddingTop: 14,
+                          borderTop: '1px solid var(--aura-border)',
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                          gap: 16
+                        }}>
+                          <div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <Calendar size={13} color="var(--color-primary)" />
+                              <span>Thời Hạn Sử Dụng</span>
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4 }}>
+                              {startDateStr} - {endDateStr}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <Clock size={13} color="var(--aura-caramel)" />
+                              <span>Buổi Kèm PT Còn Lại</span>
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-primary)', marginTop: 4 }}>
+                              {sub.remainingSessions !== undefined && sub.remainingSessions !== null
+                                ? `${sub.remainingSessions} buổi`
+                                : `${sub.package?.trialPtSessions || 0} buổi định hướng`}
+                            </div>
+                          </div>
+
+                          {sub.coach && (
+                            <div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <Sparkles size={13} color="var(--color-primary)" />
+                                <span>HLV Phụ Trách</span>
+                              </div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4 }}>
+                                {sub.coach.fullName}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
           {/* TAB 3: PREFERENCES & AUDIO */}
           {activeTab === 'preferences' && (
             <div>
-              <h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800, marginBottom: 20 }}>Tùy Chọn Âm Thanh & Thông Báo</h3>
+              <h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800, marginBottom: 20 }}>Tùy Chọn Âm Thanh</h3>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{
@@ -491,93 +554,22 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   borderRadius: 'var(--radius-sm)'
                 }}>
                   <div>
-                    <strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>Hiệu Ứng Âm Thanh Web Audio (Bíp/Tít)</strong>
+                    <strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>Hiệu Ứng Âm Thanh Web Audio (Bíp/Tít Phản Hồi)</strong>
                     <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                      Phát âm thanh phản hồi khi quét mã QR check-in hoặc thanh toán thành công.
+                      Phát âm thanh phản hồi khi quẹt mã QR, chuyển đổi chế độ hoặc thực hiện các thao tác thành công.
                     </p>
                   </div>
                   <input
                     type="checkbox"
-                    checked={centerSettings.soundEffectsEnabled}
+                    checked={soundEffectsEnabled}
                     onChange={(e) => {
-                      const updated = { ...centerSettings, soundEffectsEnabled: e.target.checked };
-                      setCenterSettings(updated);
-                      MockDatabase.saveSettings(updated);
-                      if (e.target.checked) soundEffects.playSuccessBeep();
+                      const val = e.target.checked;
+                      setSoundEffectsEnabled(val);
+                      localStorage.setItem('aura_sound_effects_enabled', String(val));
+                      if (val) soundEffects.playSuccessBeep();
                     }}
                     style={{ transform: 'scale(1.4)', cursor: 'pointer' }}
                   />
-                </div>
-
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: 16,
-                  background: 'var(--bg-app)',
-                  border: '1px solid var(--aura-border)',
-                  borderRadius: 'var(--radius-sm)'
-                }}>
-                  <div>
-                    <strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>Thông Báo Đẩy & Tin Nhắn Zalo</strong>
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                      Gửi thông báo nhắc lịch học, kết quả buổi tập và cảnh báo khi gói sắp hết hạn.
-                    </p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={centerSettings.notificationsEnabled}
-                    onChange={(e) => {
-                      const updated = { ...centerSettings, notificationsEnabled: e.target.checked };
-                      setCenterSettings(updated);
-                      MockDatabase.saveSettings(updated);
-                    }}
-                    style={{ transform: 'scale(1.4)', cursor: 'pointer' }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: SECURITY & 2FA */}
-          {activeTab === 'security' && (
-            <div>
-              <h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800, marginBottom: 20 }}>Bảo Mật & Phiên Đăng Nhập</h3>
-
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: 16,
-                background: 'var(--bg-app)',
-                border: '1px solid var(--aura-border)',
-                borderRadius: 'var(--radius-sm)',
-                marginBottom: 20
-              }}>
-                <div>
-                  <strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>Xác Thực 2 Lớp (2FA qua SMS OTP)</strong>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                    Yêu cầu nhập mã OTP mỗi lần đăng nhập từ trình duyệt hoặc thiết bị lạ.
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={centerSettings.twoFactorEnabled}
-                  onChange={(e) => {
-                    const updated = { ...centerSettings, twoFactorEnabled: e.target.checked };
-                    setCenterSettings(updated);
-                    MockDatabase.saveSettings(updated);
-                  }}
-                  style={{ transform: 'scale(1.4)', cursor: 'pointer' }}
-                />
-              </div>
-
-              <div style={{ padding: 16, background: 'var(--bg-app)', border: '1px solid var(--aura-border)', borderRadius: 'var(--radius-sm)' }}>
-                <h4 style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 700, marginBottom: 8 }}>Phiên Làm Việc Hiện Tại</h4>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                  <div>Trình duyệt: <strong style={{ color: 'var(--text-primary)' }}>Google Chrome / Edge (Windows 11)</strong></div>
-                  <div>Địa chỉ IP: <strong style={{ color: 'var(--text-primary)' }}>118.70.12.89 (Hà Nội, Việt Nam)</strong></div>
-                  <div>Trạng thái: <span style={{ color: 'var(--color-success)', fontWeight: 700 }}>● Đang hoạt động</span></div>
                 </div>
               </div>
             </div>
