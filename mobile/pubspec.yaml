@@ -4,13 +4,17 @@ publish_to: none
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.13.3
+  sdk: '>=3.11.5 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  google_sign_in: ^7.2.0
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.4.2
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
@@ -19,3 +23,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/

@@ -1,20 +1,30 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-import '../services/demo_auth.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
+import '../widgets/home_editorial.dart';
 import '../widgets/home_sections.dart';
+import '../widgets/home_showcase.dart';
 import 'auth_screen.dart';
+import 'change_password_screen.dart';
+import 'checkin_history_screen.dart';
+import 'my_subscriptions_screen.dart';
+import 'package_store_screen.dart';
+import 'pt_journey_screen.dart';
 
 class MemberShell extends StatefulWidget {
   const MemberShell({super.key, required this.auth});
-  final DemoAuth auth;
+  final AuthService auth;
 
   @override
   State<MemberShell> createState() => _MemberShellState();
 }
 
 class _MemberShellState extends State<MemberShell> {
-  int _tab = 0; // 0: Trang chu, 1: Dat lich, 2: Quet ma, 3: Hop thu, 4: Tai khoan
+  int _tab =
+      0; // 0: Trang chu, 1: Dat lich, 2: Quet ma, 3: Hop thu, 4: Tai khoan
   int _checkinSubTab = 1; // 0: Lich tap, 1: Check in, 2: PT
   int _day = 3; // Default T5 (07)
   int _segmentIndex = 0; // 0: Danh sach, 1: Lich doi xac nhan, 2: Lich da Book
@@ -22,11 +32,67 @@ class _MemberShellState extends State<MemberShell> {
   final _search = TextEditingController();
   final _bookings = <String, Set<String>>{};
   final _today = DateUtils.dateOnly(DateTime.now());
+  CheckInQr? _checkInQr;
+  Timer? _qrRefreshTimer;
+  int _qrRequestId = 0;
+  bool _isLoadingQr = false;
+  String? _qrError;
 
   @override
   void dispose() {
+    _qrRefreshTimer?.cancel();
     _search.dispose();
     super.dispose();
+  }
+
+  Future<void> _openCheckInQr() async {
+    _qrRefreshTimer?.cancel();
+    setState(() {
+      _tab = 2;
+      _checkinSubTab = 1;
+      _qrError = null;
+    });
+    if (widget.auth.currentMember == null) {
+      final signedIn = await _openAuth();
+      if (!signedIn || !mounted) {
+        if (mounted) {
+          setState(() => _qrError = 'Đăng nhập để tạo mã QR điểm danh.');
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
+    await _loadCheckInQr();
+    _qrRefreshTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      if (mounted && _tab == 2 && _checkinSubTab == 1) {
+        unawaited(_loadCheckInQr());
+      }
+    });
+  }
+
+  Future<void> _loadCheckInQr() async {
+    final requestId = ++_qrRequestId;
+    setState(() {
+      _isLoadingQr = true;
+      _qrError = null;
+    });
+    try {
+      final qr = await widget.auth.generateCheckInQr();
+      if (!mounted || requestId != _qrRequestId) return;
+      setState(() => _checkInQr = qr);
+    } on AuthApiException catch (error) {
+      if (!mounted || requestId != _qrRequestId) return;
+      setState(() => _qrError = error.message);
+    } finally {
+      if (mounted && requestId == _qrRequestId) {
+        setState(() => _isLoadingQr = false);
+      }
+    }
+  }
+
+  void _selectTab(int index) {
+    if (index != 2) _qrRefreshTimer?.cancel();
+    setState(() => _tab = index);
   }
 
   DateTime get _selectedDate => _today.add(Duration(days: _day));
@@ -38,14 +104,37 @@ class _MemberShellState extends State<MemberShell> {
       '${_selectedDate.toIso8601String()}/${session.id}';
 
   Future<bool> _openAuth({bool register = false}) async {
-    final success = await Navigator.of(context).push<bool>(
+    final result = await Navigator.of(context).push<AuthCompletion>(
       MaterialPageRoute(
         builder: (_) => AuthScreen(auth: widget.auth, register: register),
       ),
     );
-    if (!mounted) return false;
+    if (!mounted || result == null) return false;
     setState(() {});
-    return success == true;
+    final message = result == AuthCompletion.loggedIn
+        ? 'Đăng nhập thành công. Chào mừng ${widget.auth.currentMember?.name ?? 'bạn'}!'
+        : 'Tạo tài khoản thành công. Chào mừng bạn đến với Aura Fitness!';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(child: Text(message)),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AuraColors.darkCoffee,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    return true;
   }
 
   Future<void> _book(FitnessClass session) async {
@@ -99,6 +188,15 @@ class _MemberShellState extends State<MemberShell> {
     );
   }
 
+  void _openScheduleFor([String category = '']) {
+    setState(() {
+      _tab = 1;
+      _segmentIndex = 0;
+      _query = category;
+      _search.text = category;
+    });
+  }
+
   Widget _buildScheduleSection() {
     final classes = fitnessClasses.where((session) {
       final matches = '${session.title} ${session.coach} ${session.room}'
@@ -147,17 +245,16 @@ class _MemberShellState extends State<MemberShell> {
       color: AuraColors.darkCoffee,
       child: Stack(
         children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: PolygonBgPainter(),
-            ),
-          ),
+          Positioned.fill(child: CustomPaint(painter: PolygonBgPainter())),
           SafeArea(
             child: Column(
               children: [
                 // Header Top Bar
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -165,7 +262,11 @@ class _MemberShellState extends State<MemberShell> {
                         onTap: () => setState(() => _tab = 0),
                         child: const Row(
                           children: [
-                            Icon(Icons.chevron_left, color: Colors.white, size: 28),
+                            Icon(
+                              Icons.chevron_left,
+                              color: Colors.white,
+                              size: 28,
+                            ),
                             Text(
                               'Quay lại',
                               style: TextStyle(
@@ -177,17 +278,24 @@ class _MemberShellState extends State<MemberShell> {
                           ],
                         ),
                       ),
-                      const Icon(Icons.lightbulb_outline, color: Colors.white, size: 24),
+                      const Icon(
+                        Icons.lightbulb_outline,
+                        color: Colors.white,
+                        size: 24,
+                      ),
                     ],
                   ),
                 ),
 
                 // Segmented Sub-Tab Switcher: Lịch tập | Check in | PT
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -203,45 +311,30 @@ class _MemberShellState extends State<MemberShell> {
 
                 // Body depending on sub-tab
                 Expanded(
-                  child: SingleChildScrollView(
-                    child: switch (_checkinSubTab) {
-                      0 => _buildScheduleSection(),
-                      1 => TicketQRCard(
-                          memberName: widget.auth.currentMember?.name ?? 'Chewy Chewbaca',
-                          packageName: 'Gói Lorem Ipsum - ${widget.auth.currentMember?.balance ?? "\$6000"}',
-                        ),
-                      _ => Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
+                  child: _checkinSubTab == 2
+                      ? PtJourneyScreen(
+                          auth: widget.auth,
+                          onBrowsePackages: _openPackageStore,
+                          onLoginRequired: _openAuth,
+                        )
+                      : SingleChildScrollView(
+                          child: switch (_checkinSubTab) {
+                            0 => _buildScheduleSection(),
+                            1 => TicketQRCard(
+                              memberName:
+                                  widget.auth.currentMember?.name ??
+                                  'Hội viên Aura',
+                              packageName: 'Thẻ hội viên Aura Fitness',
+                              qrCodeImage: _checkInQr?.imageData,
+                              isLoading: _isLoadingQr,
+                              isSignedIn: widget.auth.currentMember != null,
+                              errorMessage: _qrError,
+                              onRefresh: _loadCheckInQr,
+                              onSignIn: _openCheckInQr,
                             ),
-                            child: const Column(
-                              children: [
-                                Icon(Icons.fitness_center, size: 48, color: AuraColors.darkCoffee),
-                                SizedBox(height: 16),
-                                Text(
-                                  'Huấn luyện viên cá nhân (PT)',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: AuraColors.darkCoffee,
-                                  ),
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Liên hệ lễ tân Aura Fitness để đăng ký gói tập 1-on-1 cùng HLV.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ),
+                            _ => const SizedBox.shrink(),
+                          },
                         ),
-                    },
-                  ),
                 ),
               ],
             ),
@@ -276,156 +369,412 @@ class _MemberShellState extends State<MemberShell> {
     );
   }
 
+  Future<void> _openChangePassword() async {
+    if (widget.auth.currentMember == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ChangePasswordScreen(auth: widget.auth),
+      ),
+    );
+  }
+
+  Future<void> _openCheckInHistory() async {
+    if (widget.auth.currentMember == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CheckInHistoryScreen(auth: widget.auth),
+      ),
+    );
+  }
+
+  Future<void> _openPackageStore() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => PackageStoreScreen(
+          auth: widget.auth,
+          onLoginRequired: () => _openAuth(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMySubscriptions() async {
+    if (widget.auth.currentMember == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MySubscriptionsScreen(
+          auth: widget.auth,
+          onBrowsePackages: _openPackageStore,
+        ),
+      ),
+    );
+  }
+
+  void _openPtTab() {
+    _qrRefreshTimer?.cancel();
+    setState(() {
+      _tab = 2;
+      _checkinSubTab = 2;
+    });
+  }
+
+  Widget _accountMenuItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) => Container(
+    margin: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AuraColors.border.withValues(alpha: 0.65)),
+      boxShadow: [
+        BoxShadow(
+          color: AuraColors.espresso.withValues(alpha: 0.07),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: ListTile(
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 4),
+      leading: Icon(icon, color: AuraColors.caramel, size: 22),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: AuraColors.ink,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      trailing: const Icon(
+        Icons.chevron_right_rounded,
+        color: AuraColors.muted,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
+  );
+
   Widget _buildAccountView() {
     final member = widget.auth.currentMember;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 24),
-          const CircleAvatar(
-            radius: 44,
-            backgroundColor: AuraColors.latte,
-            child: Icon(Icons.person, size: 50, color: AuraColors.coffee),
-          ),
-          const SizedBox(height: 20),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              member?.name ?? 'Chào mừng đến Aura Fitness',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                color: AuraColors.darkCoffee,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            member?.email ?? 'Đăng nhập để quản lý lịch tập của bạn.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AuraColors.muted),
-          ),
-          const SizedBox(height: 28),
-          if (member == null) ...[
-            FilledButton(
-              onPressed: _openAuth,
-              child: const Text('Đăng nhập'),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () => _openAuth(register: true),
-              child: const Text('Đăng ký'),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AuraColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.key, color: AuraColors.darkCoffee, size: 20),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Tài khoản đăng nhập dùng thử:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: AuraColors.darkCoffee,
+    final name = member?.name.trim().isNotEmpty == true
+        ? member!.name
+        : 'Chào mừng đến Aura Fitness';
+    final balance = member?.balance?.trim().isNotEmpty == true
+        ? member!.balance!
+        : 'Chưa cập nhật';
+    final phone = member?.phone?.trim().isNotEmpty == true
+        ? member!.phone!
+        : 'Chưa cập nhật';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 292,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 222,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AuraColors.espresso, AuraColors.darkCoffee],
+                    ),
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(34),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 30, 22, 50),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 66,
+                          height: 66,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.34),
+                              width: 2,
+                            ),
                           ),
-                          overflow: TextOverflow.ellipsis,
+                          child: const Icon(
+                            Icons.person_rounded,
+                            color: Colors.white,
+                            size: 39,
+                          ),
+                        ),
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                member == null
+                                    ? 'Đăng nhập để xem hồ sơ hội viên'
+                                    : 'Mã tài khoản: ${member.id ?? member.email}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFFE8D8CF),
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                member?.email ?? 'Hồ sơ ›',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 165,
+                left: 18,
+                right: 18,
+                child: Container(
+                  padding: const EdgeInsets.all(19),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AuraColors.caramel, AuraColors.darkCoffee],
+                    ),
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AuraColors.espresso.withValues(alpha: 0.2),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'AURA FITNESS  •  HỘI VIÊN',
+                              style: TextStyle(
+                                color: Color(0xFFEAD8C7),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.workspace_premium_rounded,
+                            color: Colors.white.withValues(alpha: 0.9),
+                            size: 21,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 11),
+                      Text(
+                        member == null
+                            ? 'Bắt đầu hành trình khỏe hơn'
+                            : 'Xin chào, ${member.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 17,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        member == null
+                            ? 'Đăng nhập để quản lý quyền lợi hội viên.'
+                            : 'Số dư tài khoản: $balance',
+                        style: const TextStyle(
+                          color: Color(0xFFF4E9DF),
+                          fontSize: 12,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: const Text('• Email: chewy@aura.fit | Pass: 123456'),
-                  ),
-                  const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: const Text('• Email: demo@aura.fit | Pass: 123456'),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AuraColors.border),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Số dư tài khoản:',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        if (member == null) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FilledButton(
+                  onPressed: _openAuth,
+                  child: const Text('Đăng nhập'),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  onPressed: () => _openAuth(register: true),
+                  child: const Text('Tạo tài khoản hội viên'),
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: _openPackageStore,
+                  icon: const Icon(Icons.local_offer_outlined),
+                  label: const Text('Xem các gói tập'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AuraColors.darkCoffee,
                   ),
-                  Text(
-                    member.balance,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: AuraColors.darkCoffee,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(Icons.calendar_month, color: AuraColors.darkCoffee),
-              title: const Text('Lịch tập đã đặt'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => setState(() {
-                _tab = 2;
-                _checkinSubTab = 0;
-              }),
+          ),
+          const SizedBox(height: 16),
+        ] else ...[
+          _accountMenuItem(
+            icon: Icons.card_membership_rounded,
+            title: 'Gói tập của tôi',
+            onTap: _openMySubscriptions,
+          ),
+          _accountMenuItem(
+            icon: Icons.sports_gymnastics_rounded,
+            title: 'Lịch tập PT',
+            onTap: _openPtTab,
+          ),
+          _accountMenuItem(
+            icon: Icons.local_offer_rounded,
+            title: 'Mua gói tập',
+            onTap: _openPackageStore,
+          ),
+          _accountMenuItem(
+            icon: Icons.local_offer_outlined,
+            title: 'Ưu đãi hội viên',
+            onTap: () => _info(
+              'Ưu đãi hội viên',
+              'Các chương trình ưu đãi sẽ được cập nhật tại đây.',
             ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.history, color: AuraColors.darkCoffee),
-              title: const Text('Lịch sử case'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => setState(() => _tab = 3),
+          ),
+          _accountMenuItem(
+            icon: Icons.menu_book_outlined,
+            title: 'Hướng dẫn sử dụng',
+            onTap: () => _info(
+              'Hướng dẫn sử dụng',
+              'Bạn có thể xem lịch tập, đặt lớp và quét mã hội viên trong các mục bên dưới.',
             ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
+          ),
+          _accountMenuItem(
+            icon: Icons.support_agent_rounded,
+            title: 'Liên hệ Aura Fitness',
+            onTap: () => _info(
+              'Liên hệ',
+              'Liên hệ hotline 1900 1234 hoặc quầy lễ tân để được hỗ trợ.',
+            ),
+          ),
+          _accountMenuItem(
+            icon: Icons.description_outlined,
+            title: 'Hợp đồng hội viên',
+            onTap: () => _info(
+              'Hợp đồng hội viên',
+              'Thông tin hợp đồng hiện chưa được đồng bộ vào ứng dụng.',
+            ),
+          ),
+          _accountMenuItem(
+            icon: Icons.fact_check_outlined,
+            title: 'Lịch sử điểm danh',
+            onTap: _openCheckInHistory,
+          ),
+          _accountMenuItem(
+            icon: Icons.history_rounded,
+            title: 'Lịch sử chăm sóc khách hàng',
+            onTap: () => setState(() => _tab = 3),
+          ),
+          _accountMenuItem(
+            icon: Icons.security_rounded,
+            title: 'Cài đặt đăng nhập',
+            onTap: _openChangePassword,
+          ),
+          _accountMenuItem(
+            icon: Icons.person_add_alt_1_rounded,
+            title: 'Bổ sung hồ sơ',
+            onTap: () => _info(
+              'Hồ sơ hội viên',
+              'Email: ${member.email}\nSố điện thoại: $phone',
+            ),
+          ),
+          _accountMenuItem(
+            icon: Icons.translate_rounded,
+            title: 'Đổi ngôn ngữ',
+            onTap: () =>
+                _info('Ngôn ngữ', 'Ứng dụng hiện đang sử dụng tiếng Việt.'),
+          ),
+          _accountMenuItem(
+            icon: Icons.lock_reset_rounded,
+            title: 'Thay mật khẩu',
+            onTap: _openChangePassword,
+          ),
+          _accountMenuItem(
+            icon: Icons.no_accounts_outlined,
+            title: 'Vô hiệu hóa tài khoản',
+            onTap: () => _info(
+              'Vô hiệu hóa tài khoản',
+              'Vui lòng liên hệ quầy lễ tân để được hỗ trợ yêu cầu này.',
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
+            child: OutlinedButton.icon(
               key: const Key('logout'),
-              icon: const Icon(Icons.logout),
               onPressed: () => setState(() {
                 widget.auth.logout();
                 _tab = 0;
                 _query = '';
                 _search.clear();
               }),
-              label: const FittedBox(child: Text('Đăng xuất')),
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Đăng xuất'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AuraColors.caramel,
+                side: const BorderSide(color: AuraColors.border),
+                minimumSize: const Size.fromHeight(50),
+              ),
             ),
-          ],
+          ),
         ],
-      ),
+        const SizedBox(height: 96),
+      ],
     );
   }
 
@@ -443,77 +792,70 @@ class _MemberShellState extends State<MemberShell> {
             // Main Body View per Tab
             switch (_tab) {
               0 => ListView(
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                  children: [
-                    HomeHero(
-                      memberName: member?.name,
-                      balance: member?.balance,
-                      onLogin: _openAuth,
-                      onRegister: () => _openAuth(register: true),
-                      onNotifications: () => setState(() => _tab = 3),
-                      showSearchAndFilter: false,
-                    ),
-                    const SizedBox(height: 12),
-                    UpcomingCard(
-                      onTap: () => setState(() {
-                        _tab = 2;
-                        _checkinSubTab = 1;
-                      }),
-                    ),
-                    FeatureCardsGrid(
-                      onSelectFeature: (feature) => _info('Aura Fitness', feature),
-                    ),
-                    CategoryGrid(
-                      onSelectCategory: (cat) => setState(() {
-                        _query = cat;
-                        _tab = 1;
-                      }),
-                    ),
-                    const PromoBanner(),
-                    const NutritionSection(),
-                    const SizedBox(height: 90), // Space for bottom nav
-                  ],
-                ),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                children: [
+                  HomeHero(
+                    memberName: member?.name,
+                    balance: member?.balance,
+                    onLogin: _openAuth,
+                    onRegister: () => _openAuth(register: true),
+                    onNotifications: () => setState(() => _tab = 3),
+                    showSearchAndFilter: false,
+                  ),
+                  HomePhotoHero(onExplore: _openScheduleFor),
+                  UpcomingCard(onTap: _openCheckInQr),
+                  FeatureCardsGrid(
+                    onSelectFeature: (feature) =>
+                        _info('Aura Fitness', feature),
+                  ),
+                  ClassSpotlight(onSelectCategory: _openScheduleFor),
+                  CategoryGrid(onSelectCategory: _openScheduleFor),
+                  const PromoBanner(),
+                  NutritionSection(onSelectCategory: _openScheduleFor),
+                  const HomeEditorial(),
+                  const SizedBox(height: 90), // Space for bottom nav
+                ],
+              ),
               1 => ListView(
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                children: [
+                  HomeHero(
+                    memberName: member?.name,
+                    balance: member?.balance,
+                    onLogin: _openAuth,
+                    onRegister: () => _openAuth(register: true),
+                    onNotifications: () => setState(() => _tab = 3),
+                    showSearchAndFilter: true,
+                    search: _search,
+                    onSearch: (value) => setState(() => _query = value),
+                    segmentIndex: _segmentIndex,
+                    onSegmentChanged: (idx) =>
+                        setState(() => _segmentIndex = idx),
+                    selectedDayIndex: _day,
+                    onDayChanged: (day) => setState(() => _day = day),
+                    today: _today,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildScheduleSection(),
+                  const SizedBox(height: 90),
+                ],
+              ),
+              2 => _buildQRCheckinView(),
+              3 => SingleChildScrollView(
+                child: Column(
                   children: [
-                    HomeHero(
-                      memberName: member?.name,
-                      balance: member?.balance,
-                      onLogin: _openAuth,
-                      onRegister: () => _openAuth(register: true),
-                      onNotifications: () => setState(() => _tab = 3),
-                      showSearchAndFilter: true,
-                      search: _search,
-                      onSearch: (value) => setState(() => _query = value),
-                      segmentIndex: _segmentIndex,
-                      onSegmentChanged: (idx) => setState(() => _segmentIndex = idx),
-                      selectedDayIndex: _day,
-                      onDayChanged: (day) => setState(() => _day = day),
-                      today: _today,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildScheduleSection(),
+                    CaseHistoryList(onBack: () => setState(() => _tab = 0)),
                     const SizedBox(height: 90),
                   ],
                 ),
-              2 => _buildQRCheckinView(),
-              3 => SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      CaseHistoryList(onBack: () => setState(() => _tab = 0)),
-                      const SizedBox(height: 90),
-                    ],
-                  ),
-                ),
+              ),
               _ => SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      _buildAccountView(),
-                      const SizedBox(height: 90),
-                    ],
-                  ),
+                child: Column(
+                  children: [_buildAccountView(), const SizedBox(height: 90)],
                 ),
+              ),
             },
 
             // Floating Envelope Contact Action Button (Matching Screenshots)
@@ -549,11 +891,8 @@ class _MemberShellState extends State<MemberShell> {
       ),
       bottomNavigationBar: AuraBottomNavBar(
         selectedIndex: _tab,
-        onDestinationSelected: (index) => setState(() => _tab = index),
-        onQRClick: () => setState(() {
-          _tab = 2;
-          _checkinSubTab = 1;
-        }),
+        onDestinationSelected: _selectTab,
+        onQRClick: _openCheckInQr,
       ),
     );
   }
@@ -567,11 +906,11 @@ class PolygonBgPainter extends CustomPainter {
     final h = size.height;
 
     final darkPaint = Paint()
-      ..color = Colors.black.withOpacity(0.12)
+      ..color = Colors.black.withValues(alpha: 0.12)
       ..style = PaintingStyle.fill;
 
     final lightPaint = Paint()
-      ..color = Colors.white.withOpacity(0.06)
+      ..color = Colors.white.withValues(alpha: 0.06)
       ..style = PaintingStyle.fill;
 
     // Top-left dark polygon accent

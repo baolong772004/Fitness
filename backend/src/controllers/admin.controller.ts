@@ -12,6 +12,7 @@ export const getMembersList = async (req: AuthRequest, res: Response) => {
   try {
     const { search, page = 1, limit = 10 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
+    const now = new Date();
 
     // Điều kiện tìm kiếm theo Tên, Email hoặc Số điện thoại
     let whereCondition: Prisma.UserWhereInput = { role: 'MEMBER' };
@@ -35,6 +36,28 @@ export const getMembersList = async (req: AuthRequest, res: Response) => {
           avatar: true, // avatar, not avatarUrl in DB
           status: true, // PENDING | ACTIVE | INACTIVE | BLOCKED
           createdAt: true,
+          memberships: {
+            where: {
+              status: 'ACTIVE',
+              startDate: { lte: now },
+              endDate: { gte: now },
+            },
+            include: {
+              package: true,
+              coach: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true,
+                  phone: true,
+                },
+              },
+            },
+            orderBy: [{ endDate: 'desc' }, { createdAt: 'desc' }],
+          },
+          _count: {
+            select: { checkIns: true },
+          },
         },
         skip: Number(skip),
         take: Number(limit),

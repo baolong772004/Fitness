@@ -96,7 +96,8 @@ export class SubscriptionController {
       const subscriptions = await prisma.membership.findMany({
         where: { userId },
         include: {
-          package: true
+          package: true,
+          coach: { select: { id: true, fullName: true } },
         },
         orderBy: { createdAt: 'desc' }
       });
@@ -216,6 +217,13 @@ export class SubscriptionController {
 
       if (!currentSub) {
         return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin gói tập' });
+      }
+
+      if (currentSub.packageId !== parsedPackageId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Chỉ có thể gia hạn đúng gói tập của membership này',
+        });
       }
 
       const gymPackage = await prisma.package.findUnique({

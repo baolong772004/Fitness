@@ -35,16 +35,19 @@ Sau đó chạy `flutter doctor --android-licenses` và đọc/chấp nhận cá
 - Thanh điều hướng Trang chủ / Lịch tập / Khám phá / Tài khoản.
 - Tìm lớp, chọn ngày, đặt/hủy chỗ và đăng xuất.
 
-## Dữ liệu hiện tại
+## Kết nối backend
 
-Backend hiện chưa có API tài khoản hoặc đặt lịch. `lib/services/demo_auth.dart` là dịch vụ mô phỏng trong bộ nhớ:
+Đăng ký và đăng nhập gọi `POST /api/auth/register` và `POST /api/auth/login`. Đăng ký thành công sẽ gọi đăng nhập để nhận access token. Phiên và token được giữ trong bộ nhớ ứng dụng; đăng xuất sẽ xóa chúng.
 
-- Đăng ký trước, sau đó đăng xuất và đăng nhập lại trong cùng lần mở app.
-- Tài khoản, phiên đăng nhập và lịch đặt được xóa khi khởi động lại app.
-- Không lưu mật khẩu vào file hay bộ nhớ thiết bị.
-- Các lớp là dữ liệu mẫu lặp lại cho 7 ngày tiếp theo. Đặt chỗ chỉ thay đổi dữ liệu trong lần chạy hiện tại, chưa gửi về server.
+Mặc định app dùng `http://10.0.2.2:5000/api` cho Android Emulator và `http://localhost:5000/api` cho iOS Simulator. Khi chạy trên điện thoại thật, truyền địa chỉ LAN của máy chạy backend:
 
-Khi kết nối backend, thay dịch vụ mô phỏng bằng API xác thực và API đặt lịch; lưu token phiên bằng kho lưu trữ bảo mật của thiết bị.
+```sh
+flutter run --dart-define=API_BASE_URL=http://192.168.1.10:5000/api
+```
+
+Thay `192.168.1.10` bằng địa chỉ IP của máy bạn. Điện thoại và máy chạy backend cần cùng mạng. Android cho phép HTTP trong debug build để dùng với server local; bản phát hành nên dùng HTTPS.
+
+Các lớp và lịch đặt vẫn là dữ liệu mẫu trong bộ nhớ, chưa kết nối API lịch tập.
 
 ## Mã nguồn
 
@@ -54,7 +57,7 @@ lib/
   theme.dart                  Bảng màu và theme Material
   screens/auth_screen.dart    Đăng ký / đăng nhập
   screens/member_shell.dart   Trang chủ, lịch tập, khám phá, tài khoản
-  services/demo_auth.dart     Tài khoản mô phỏng
+  services/auth_service.dart  Kết nối đăng ký / đăng nhập với backend
   widgets/home_sections.dart Các thành phần giao diện dùng trong mobile
 ```
 

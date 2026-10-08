@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import 'aura_loader.dart';
 
 class FitnessClass {
   const FitnessClass({
@@ -831,9 +835,22 @@ class CategoryGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 0, 4, 12),
+            child: Text(
+              'KHÁM PHÁ BỘ MÔN',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: AuraColors.darkCoffee,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
           Row(
             children: categories
                 .take(4)
@@ -855,24 +872,25 @@ class CategoryGrid extends StatelessWidget {
   Widget _buildCategoryButton(String category) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3),
-      child: GestureDetector(
-        onTap: () => onSelectCategory(category),
-        child: Container(
-          height: 48,
-          decoration: BoxDecoration(
-            color: AuraColors.darkCoffee,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                category,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.5,
+      child: Material(
+        color: AuraColors.darkCoffee,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => onSelectCategory(category),
+          child: SizedBox(
+            height: 48,
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  category,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
             ),
@@ -1119,7 +1137,9 @@ class _PromoBannerState extends State<PromoBanner> {
 
 /// "ĐỪNG BỎ LỠ" Section matching Image 2 & 7
 class NutritionSection extends StatelessWidget {
-  const NutritionSection({super.key});
+  const NutritionSection({super.key, required this.onSelectCategory});
+
+  final ValueChanged<String> onSelectCategory;
 
   @override
   Widget build(BuildContext context) {
@@ -1130,16 +1150,20 @@ class NutritionSection extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'ĐỪNG BỎ LỠ',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  color: AuraColors.darkCoffee,
+              const Expanded(
+                child: Text(
+                  'ĐỪNG BỎ LỠ',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: AuraColors.darkCoffee,
+                  ),
                 ),
               ),
               TextButton(
-                onPressed: () {},
+                onPressed: () => onSelectCategory(''),
                 child: const Text(
                   'Xem tất cả',
                   style: TextStyle(
@@ -1153,14 +1177,17 @@ class NutritionSection extends StatelessWidget {
           ),
         ),
         SizedBox(
-          height: 150,
+          height: 178,
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              _buildNutritionCard('Dinh dưỡng cho tập luyện', 'Chế độ ăn cân bằng protein'),
-              _buildNutritionCard('Lộ trình tập Gym 30 ngày', 'Tối ưu hóa sức bền cơ bắp'),
-              _buildNutritionCard('Yoga & Thiền định', 'Thư giãn tâm trí và cơ thể'),
+              _buildNutritionCard('Yoga & thư giãn', 'Lấy lại sự cân bằng',
+                  'assets/images/yoga.jpg', 'YOGA'),
+              _buildNutritionCard('Sức mạnh mỗi ngày', 'Bền bỉ qua từng buổi tập',
+                  'assets/images/strength.jpg', 'GYM'),
+              _buildNutritionCard('Bắt đầu hành trình', 'Tìm lớp tập dành cho bạn',
+                  'assets/images/home-hero.jpg', ''),
             ],
           ),
         ),
@@ -1168,60 +1195,55 @@ class NutritionSection extends StatelessWidget {
     );
   }
 
-  Widget _buildNutritionCard(String title, String subtitle) {
-    return Container(
-      width: 200,
-      margin: const EdgeInsets.only(right: 12),
-      decoration: BoxDecoration(
+  Widget _buildNutritionCard(
+      String title, String subtitle, String image, String category) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 12),
+      child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 85,
-            decoration: const BoxDecoration(
-              color: AuraColors.latte,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: const Center(
-              child: Icon(Icons.restaurant_menu, size: 36, color: AuraColors.coffee),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => onSelectCategory(category),
+          child: SizedBox(
+            width: 210,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black87,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                SizedBox(
+                  height: 112,
+                  width: double.infinity,
+                  child: Image.asset(image, fit: BoxFit.cover),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: AuraColors.darkCoffee,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, color: AuraColors.muted),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1304,13 +1326,34 @@ class TicketQRCard extends StatelessWidget {
     super.key,
     required this.memberName,
     required this.packageName,
+    required this.onRefresh,
+    this.qrCodeImage,
+    this.isLoading = false,
+    this.isSignedIn = true,
+    this.errorMessage,
+    this.onSignIn,
   });
 
   final String memberName;
   final String packageName;
+  final String? qrCodeImage;
+  final bool isLoading;
+  final bool isSignedIn;
+  final String? errorMessage;
+  final VoidCallback onRefresh;
+  final VoidCallback? onSignIn;
 
   @override
   Widget build(BuildContext context) {
+    Uint8List? qrBytes;
+    if (qrCodeImage != null && qrCodeImage!.isNotEmpty) {
+      try {
+        qrBytes = base64Decode(qrCodeImage!.split(',').last);
+      } on FormatException {
+        qrBytes = null;
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
@@ -1415,22 +1458,86 @@ class TicketQRCard extends StatelessWidget {
                 SizedBox(
                   width: 180,
                   height: 180,
-                  child: CustomPaint(
-                    painter: QRMatrixPainter(
-                      data: '$memberName-$packageName',
-                      color: AuraColors.ink,
-                    ),
-                  ),
+                  child: qrBytes != null
+                      ? Image.memory(
+                          qrBytes,
+                          fit: BoxFit.contain,
+                          gaplessPlayback: true,
+                          errorBuilder: (_, _, _) => const Icon(
+                            Icons.qr_code_2_rounded,
+                            size: 100,
+                            color: AuraColors.muted,
+                          ),
+                        )
+                      : Center(
+                          child: isLoading
+                              ? const AuraLoader(size: 58)
+                              : Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.qr_code_2_rounded,
+                                      size: 54,
+                                      color: AuraColors.muted,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      errorMessage ?? 'Chưa có mã QR',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AuraColors.muted,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    TextButton(
+                                      onPressed: isSignedIn
+                                          ? onRefresh
+                                          : onSignIn,
+                                      child: Text(
+                                        isSignedIn ? 'Thử lại' : 'Đăng nhập',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'Scan your QR code for checking in',
-                  style: TextStyle(
+                Text(
+                  qrBytes != null
+                      ? 'Mã có hiệu lực 1 phút • Tự cập nhật'
+                      : 'Mở mã QR để nhân viên quét điểm danh',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
                     fontSize: 13,
                     color: Colors.black87,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                if (qrBytes != null) ...[
+                  const SizedBox(height: 6),
+                  TextButton.icon(
+                    onPressed: isLoading ? null : onRefresh,
+                    icon: isLoading
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh_rounded, size: 18),
+                    label: Text(isLoading ? 'Đang làm mới mã...' : 'Làm mới mã'),
+                  ),
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ],
                 const SizedBox(height: 16),
 
                 // Indicator line dashes

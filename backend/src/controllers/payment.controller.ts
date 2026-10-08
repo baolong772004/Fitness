@@ -12,12 +12,20 @@ import {
 const prisma = new PrismaClient();
 
 export class PaymentController {
+  static async createPtCheckoutSession(req: AuthRequest, res: Response) {
+    req.body = {
+      packageId: req.body?.ptPackageId,
+      trainerId: req.body?.trainerId,
+    };
+    return PaymentController.createCheckoutSession(req, res);
+  }
+
   static async createCheckoutSession(req: AuthRequest, res: Response) {
     let orderCode: bigint | null = null;
     let paymentCreated = false;
     try {
       const userId = req.user?.userId;
-      const { packageId } = req.body;
+      const { packageId, trainerId } = req.body;
 
       if (!userId) return res.status(401).json({ message: 'Unauthorized' });
       if (!packageId) return res.status(400).json({ message: 'packageId is required' });
@@ -35,6 +43,66 @@ export class PaymentController {
       if (!gymPackage || !gymPackage.isActive) {
         return res.status(404).json({ message: 'Gói tập không tồn tại hoặc đã ngừng bán' });
       }
+
+      let ptCoachId: number | null = null;
+      if (gymPackage.type === 'PT') {
+        const parsedTrainerId = Number(trainerId);
+        if (!Number.isSafeInteger(parsedTrainerId) || parsedTrainerId <= 0) {
+          return res.status(400).json({ message: 'trainerId is required for a PT package' });
+        }
+        if (!Number.isSafeInteger(gymPackage.totalPtSessions) || (gymPackage.totalPtSessions ?? 0) <= 0) {
+          return res.status(400).json({ message: 'PT package is missing a valid totalPtSessions value' });
+        }
+
+        const activeMembership = await prisma.membership.findFirst({
+          where: {
+            userId,
+            status: 'ACTIVE',
+            startDate: { lte: new Date() },
+            endDate: { gte: new Date() },
+            package: { type: 'MEMBERSHIP' },
+          },
+          select: { id: true },
+        });
+        if (!activeMembership) {
+          return res.status(403).json({ message: 'An active membership is required to buy a PT package' });
+        }
+
+        const coach = await prisma.user.findFirst({
+          where: {
+            id: parsedTrainerId,
+            role: { in: ['COACH', 'TRAINER'] },
+            coachProfile: { is: { status: 'ACTIVE' } },
+          },
+          select: { id: true },
+        });
+        if (!coach) return res.status(404).json({ message: 'Active PT trainer was not found' });
+        ptCoachId = coach.id;
+      } else if (trainerId !== undefined && trainerId !== null) {
+        return res.status(400).json({ message: 'trainerId can only be used with a PT package' });
+      }
+
+      // Repeat purchases of an existing package must use /subscriptions/renew
+      // so payment extends the existing membership instead of creating a parallel one.
+      const existingMembership = await prisma.membership.findFirst({
+        where: {
+          userId,
+          packageId: gymPackage.id,
+          status: { in: ['ACTIVE', 'PENDING', 'EXPIRED'] },
+        },
+        select: { id: true, status: true, remainingSessions: true },
+      });
+      const blocksPurchase = existingMembership &&
+        (gymPackage.type !== 'PT' || existingMembership.status === 'PENDING' ||
+          (existingMembership.remainingSessions ?? 0) > 0);
+      if (blocksPurchase && existingMembership) {
+        return res.status(409).json({
+          message: 'Bạn đã có gói tập này. Vui lòng gia hạn membership hiện tại.',
+          subscriptionId: existingMembership.id,
+          status: existingMembership.status,
+        });
+      }
+
       const amount = Number(gymPackage.price);
       if (!Number.isSafeInteger(amount) || amount <= 0) {
         return res.status(400).json({ message: 'Giá gói tập phải là số nguyên dương hợp lệ' });
@@ -48,7 +116,7 @@ export class PaymentController {
       const remainingPtSessions =
         gymPackage.type === 'MEMBERSHIP'
           ? gymPackage.trialPtSessions
-          : gymPackage.totalPtSessions || 0;
+          : gymPackage.totalPtSessions!;
 
       // Tạo mã đơn hàng ngẫu nhiên (Số nguyên dương nhỏ hơn Max Safe Integer)
       const orderCodeNum = generateOrderCode();
@@ -61,6 +129,7 @@ export class PaymentController {
           data: {
             userId,
             packageId: gymPackage.id,
+            coachId: ptCoachId,
             startDate,
             endDate,
             remainingSessions: remainingPtSessions,

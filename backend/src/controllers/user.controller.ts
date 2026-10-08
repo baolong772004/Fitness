@@ -164,16 +164,30 @@ export class UserController {
       const userExists = await prisma.user.findUnique({ where: { id } });
       if (!userExists) return res.status(404).json({ success: false, message: 'User not found' });
 
-      const updatedUser = await prisma.user.update({
-        where: { id },
-        data: { role },
-        select: {
-          id: true,
-          email: true,
-          fullName: true,
-          role: true,
-          updatedAt: true
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.update({
+          where: { id },
+          data: { role },
+          select: {
+            id: true,
+            email: true,
+            fullName: true,
+            role: true,
+            updatedAt: true
+          }
+        });
+
+        if (role === 'COACH') {
+          // Changing the role alone does not create the related profile row.
+          // Keep an existing profile intact, or create its default profile once.
+          await tx.coachProfile.upsert({
+            where: { userId: id },
+            update: {},
+            create: { userId: id }
+          });
         }
+
+        return user;
       });
 
       res.status(200).json({ success: true, message: 'Role updated successfully', data: updatedUser });

@@ -31,6 +31,41 @@ Future<void> fillRegistration(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('Home editorial cards open details and the guide list on a small phone',
+      (tester) async {
+    await launch(tester, size: const Size(320, 640));
+    final homeScroll = find.byType(Scrollable).first;
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('home-news-card-0')),
+      420,
+      scrollable: homeScroll,
+    );
+    await tester.ensureVisible(find.byKey(const Key('home-news-card-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-news-card-0')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Hình ảnh chỉ mang tính minh họa.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('home-guides-view-all')),
+      420,
+      scrollable: homeScroll,
+    );
+    await tester.ensureVisible(find.byKey(const Key('home-guides-view-all')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-guides-view-all')));
+    await tester.pumpAndSettle();
+    expect(find.text('HƯỚNG DẪN ĐẶT LỊCH'), findsWidgets);
+    await tester.tap(find.widgetWithText(ListTile, 'HƯỚNG DẪN ĐẶT LỊCH'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Mở tab Đặt lịch'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Guest home renders on a small phone and opens both auth screens',
     (tester) async {

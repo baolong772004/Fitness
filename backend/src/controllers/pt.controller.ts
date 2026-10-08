@@ -7,86 +7,41 @@ import QRCode from 'qrcode';
 const prisma = new PrismaClient();
 
 export class PtController {
-  /**
-   * 1. Mua gói PT (Yêu cầu phải có Membership ACTIVE)
-   * @route POST /api/pt/buy
-   */
-  static async buyPtPackage(req: AuthRequest, res: Response) {
+  /** @route GET /api/pt/trainers */
+  static async getAvailableTrainers(req: AuthRequest, res: Response) {
     try {
-      const userId = req.user?.userId;
-      const { ptPackageId, trainerId } = req.body;
-
-      if (!ptPackageId || !trainerId) {
-        return res.status(400).json({ success: false, message: 'Vui lòng cung cấp ptPackageId và trainerId' });
-      }
-
-      if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-      const now = new Date();
-
-      // BƯỚC 1: Kiểm tra Membership ACTIVE (ĐIỀU KIỆN TIÊN QUYẾT)
-      const activeMembership = await prisma.membership.findFirst({
+      const trainers = await prisma.coachProfile.findMany({
         where: {
-          userId,
           status: 'ACTIVE',
-          startDate: { lte: now },
-          endDate: { gte: now },
+          user: { role: { in: ['COACH', 'TRAINER'] } },
         },
-      });
-
-      if (!activeMembership) {
-        return res.status(403).json({
-          success: false,
-          message: 'Bạn phải có gói tập hội viên (Membership) còn hiệu lực mới được phép mua dịch vụ PT!',
-        });
-      }
-
-      // BƯỚC 2: Kiểm tra Gói PT & PT có tồn tại không
-      const ptPackage = await prisma.package.findUnique({
-        where: { id: Number(ptPackageId) },
-      });
-
-      if (!ptPackage || ptPackage.type !== 'PT') {
-        return res.status(404).json({ success: false, message: 'Gói PT không tồn tại' });
-      }
-
-      const trainer = await prisma.user.findFirst({
-        where: { id: Number(trainerId) }, // Có thể kiểm tra role TRAINER/COACH ở đây
-      });
-
-      if (!trainer) {
-        return res.status(404).json({ success: false, message: 'Không tìm thấy Huấn luyện viên' });
-      }
-
-      // BƯỚC 3: Kích hoạt Gói PT (Tạo Membership mới với type PT và gán coachId)
-      // Thời hạn gói PT tính từ bây giờ + durationDays
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + ptPackage.durationDays);
-
-      const newPtSub = await prisma.membership.create({
-        data: {
-          userId,
-          packageId: Number(ptPackageId),
-          coachId: Number(trainerId),
-          startDate: now,
-          endDate,
-          remainingSessions: ptPackage.totalPtSessions || 0,
-          status: 'ACTIVE',
+        select: {
+          userId: true,
+          bio: true,
+          specialization: true,
+          rating: true,
+          hourlyRate: true,
+          user: {
+            select: { fullName: true, avatar: true },
+          },
         },
-        include: {
-          package: true,
-          coach: { select: { fullName: true, email: true } },
-        },
+        orderBy: { createdAt: 'desc' },
       });
 
-      return res.status(201).json({
+      return res.status(200).json({
         success: true,
-        message: 'Đăng ký gói PT thành công!',
-        data: newPtSub,
+        data: trainers.map(({ user, ...trainer }) => ({
+          ...trainer,
+          fullName: user.fullName,
+          avatar: user.avatar,
+        })),
       });
     } catch (error: any) {
-      console.error('Lỗi mua gói PT:', error);
-      return res.status(500).json({ success: false, message: 'Lỗi máy chủ', error: error.message });
+      console.error('Lỗi lấy danh sách PT:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Không thể tải danh sách huấn luyện viên',
+      });
     }
   }
 
@@ -99,61 +54,82 @@ export class PtController {
       const trainerId = Number(req.params.trainerId);
       const dateStr = req.query.date as string;
 
-      if (!trainerId || !dateStr) {
+      if (!Number.isSafeInteger(trainerId) || trainerId <= 0 ||
+          !dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
         return res.status(400).json({ success: false, message: 'Vui lòng cung cấp trainerId và date (YYYY-MM-DD)' });
       }
 
-      const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
-      const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
+      const calendarDate = new Date(`${dateStr}T00:00:00.000Z`);
+      if (Number.isNaN(calendarDate.getTime()) || calendarDate.toISOString().slice(0, 10) !== dateStr) {
+        return res.status(400).json({ success: false, message: 'Ngày không hợp lệ' });
+      }
+      // CoachSchedule HH:mm values are gym local time (Vietnam, UTC+07).
+      const startOfDay = new Date(`${dateStr}T00:00:00+07:00`);
+      const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+      const coachProfile = await prisma.coachProfile.findUnique({
+        where: { userId: trainerId },
+        select: { id: true, status: true },
+      });
+      if (!coachProfile || coachProfile.status !== 'ACTIVE') {
+        return res.status(404).json({ success: false, message: 'Không tìm thấy huấn luyện viên đang hoạt động' });
+      }
 
-      // Lấy tất cả lịch đã đặt của Trainer trong ngày đó
+      // Coach schedules use 1=Monday ... 7=Sunday (JavaScript UTC uses 0=Sunday).
+      const jsWeekday = calendarDate.getUTCDay();
+      const dayOfWeek = jsWeekday === 0 ? 7 : jsWeekday;
+      const workingSchedules = await prisma.coachSchedule.findMany({
+        where: { coachProfileId: coachProfile.id, dayOfWeek, isAvailable: true },
+        select: { startTime: true, endTime: true },
+      });
+
       const bookedSlots = await prisma.booking.findMany({
         where: {
           coachId: trainerId,
-          status: { in: ['UPCOMING', 'CONFIRMED'] },
-          startTime: {
-            gte: startOfDay,
-            lte: endOfDay,
-          },
+          status: { in: ['PENDING', 'UPCOMING', 'CONFIRMED', 'IN_PROGRESS'] },
+          startTime: { lt: endOfDay },
+          endTime: { gt: startOfDay },
         },
-        select: { startTime: true },
+        select: { startTime: true, endTime: true },
       });
-
-      const bookedHours = bookedSlots.map((b) => {
-        const h = new Date(b.startTime).getUTCHours();
-        return `${h < 10 ? '0' : ''}${h}:00`;
-      });
-
-      const fixedTimeSlots = [
-        '08:00', '09:00', '10:00', '11:00',
-        '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'
-      ];
 
       const now = new Date();
-
-      const slotsResult = fixedTimeSlots.map((time) => {
-        const slotDateTime = new Date(`${dateStr}T${time}:00.000Z`);
-        const isBooked = bookedHours.includes(time);
-        const isPast = slotDateTime < now;
-
-        let status = 'AVAILABLE';
-        let isAvailable = true;
-
-        if (isBooked) {
-          status = 'BOOKED';
-          isAvailable = false;
-        } else if (isPast) {
-          status = 'EXPIRED';
-          isAvailable = false;
-        }
-
-        return {
-          startTime: time,
-          endTime: `${Number(time.split(':')[0]) + 1}:00`,
-          status: status,
-          isAvailable: isAvailable,
+      const slotsResult: { startTime: string; endTime: string; status: string; isAvailable: boolean }[] = [];
+      for (const schedule of workingSchedules) {
+        const toMinutes = (time: string) => {
+          const match = /^(\d{2}):(\d{2})$/.exec(time);
+          if (!match) return null;
+          const hour = Number(match[1]);
+          const minute = Number(match[2]);
+          if (hour > 23 || minute > 59) return null;
+          return hour * 60 + minute;
         };
-      });
+        const startMinutes = toMinutes(schedule.startTime);
+        const endMinutes = toMinutes(schedule.endTime);
+        if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) continue;
+
+        for (let start = startMinutes; start + 60 <= endMinutes; start += 60) {
+          const end = start + 60;
+          const startHour = Math.floor(start / 60);
+          const endHour = Math.floor(end / 60);
+          const startTime = `${String(startHour).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`;
+          const endTime = `${String(endHour).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+          const slotStart = new Date(`${dateStr}T${startTime}:00+07:00`);
+          const slotEnd = new Date(`${dateStr}T${endTime}:00+07:00`);
+          const isBooked = bookedSlots.some((booking) =>
+            booking.startTime < slotEnd && booking.endTime > slotStart,
+          );
+          const isPast = slotStart <= now;
+          const status = isBooked ? 'BOOKED' : isPast ? 'EXPIRED' : 'AVAILABLE';
+
+          slotsResult.push({
+            startTime,
+            endTime,
+            status,
+            isAvailable: status === 'AVAILABLE',
+          });
+        }
+      }
+      slotsResult.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
       return res.status(200).json({
         success: true,
@@ -210,7 +186,7 @@ export class PtController {
       const existingBooking = await prisma.booking.findFirst({
         where: {
           coachId: ptSub.coachId,
-          status: { in: ['UPCOMING', 'CONFIRMED'] },
+          status: { in: ['PENDING', 'UPCOMING', 'CONFIRMED', 'IN_PROGRESS'] },
           startTime: {
             gte: startTimeWindow,
             lte: endTimeWindow,
@@ -232,7 +208,7 @@ export class PtController {
           membershipId: ptSub.id,
           startTime: targetDate,
           endTime: endDate,
-          status: 'UPCOMING',
+          status: 'PENDING',
           absenceReason: note || '',
         },
       });
@@ -252,10 +228,17 @@ export class PtController {
    * 4. PT/Admin Cập nhật Trạng thái Lịch
    * @route PATCH /api/pt/booking/:id/status
    */
-  static async updateBookingStatus(req: Request, res: Response) {
+  static async updateBookingStatus(req: AuthRequest, res: Response) {
     try {
       const bookingId = Number(req.params.id);
-      const { status } = req.body; // 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
+      const userId = req.user?.userId;
+      const role = req.user?.role;
+      const { status } = req.body;
+
+      if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+      if (status !== 'CONFIRMED' && status !== 'REJECTED') {
+        return res.status(400).json({ success: false, message: 'Trạng thái cần là CONFIRMED hoặc REJECTED' });
+      }
 
       const booking = await prisma.booking.findUnique({
         where: { id: bookingId },
@@ -266,36 +249,14 @@ export class PtController {
         return res.status(404).json({ success: false, message: 'Lịch tập không tồn tại' });
       }
 
-      // Nếu xác nhận HOÀN THÀNH buổi tập -> Trừ 1 lượt tập
-      if (status === 'COMPLETED' && booking.status !== 'COMPLETED') {
-        const result = await prisma.$transaction(async (tx) => {
-          const updatedBooking = await tx.booking.update({
-            where: { id: bookingId },
-            data: { status: 'COMPLETED' },
-          });
-
-          if (booking.membership && booking.membership.remainingSessions !== null) {
-            const newRemaining = booking.membership.remainingSessions - 1;
-            const updatedSub = await tx.membership.update({
-              where: { id: booking.membershipId! },
-              data: {
-                remainingSessions: newRemaining,
-                status: newRemaining <= 0 ? 'COMPLETED' : 'ACTIVE',
-              },
-            });
-            return { updatedBooking, updatedSub };
-          }
-          return { updatedBooking };
-        });
-
-        return res.status(200).json({
-          success: true,
-          message: 'Hoàn thành buổi tập! Đã tự động trừ 1 lượt trong gói PT.',
-          data: result,
-        });
+      if (!['COACH', 'TRAINER', 'ADMIN'].includes(role ?? '') ||
+          (role !== 'ADMIN' && booking.coachId !== userId)) {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền duyệt lịch hẹn này' });
+      }
+      if (!['PENDING', 'UPCOMING'].includes(booking.status)) {
+        return res.status(409).json({ success: false, message: 'Lịch hẹn này đã được xử lý' });
       }
 
-      // Cập nhật trạng thái thông thường
       const updated = await prisma.booking.update({
         where: { id: bookingId },
         data: { status },
@@ -303,7 +264,7 @@ export class PtController {
 
       return res.status(200).json({
         success: true,
-        message: `Đã cập nhật trạng thái lịch tập thành: ${status}`,
+        message: status === 'CONFIRMED' ? 'Đã xác nhận lịch tập' : 'Đã từ chối lịch tập',
         data: updated,
       });
     } catch (error: any) {
@@ -363,7 +324,7 @@ export class PtController {
         return res.status(403).json({ success: false, message: 'Bạn không có quyền thao tác trên lịch hẹn này' });
       }
 
-      if (booking.status !== 'UPCOMING' && booking.status !== 'CONFIRMED') {
+      if (booking.status !== 'CONFIRMED') {
         return res.status(400).json({ success: false, message: `Không thể tạo mã QR cho lịch hẹn trạng thái: ${booking.status}` });
       }
 
@@ -422,6 +383,10 @@ export class PtController {
 
       if (!booking || booking.memberId !== memberId) {
         return res.status(403).json({ success: false, message: 'Mã QR này không dành cho lịch hẹn của bạn' });
+      }
+
+      if (booking.status !== 'CONFIRMED') {
+        return res.status(400).json({ success: false, message: 'Lịch tập cần được PT xác nhận trước khi điểm danh' });
       }
 
       // Check replay attack or token matching
@@ -535,7 +500,7 @@ export class PtController {
         return res.status(403).json({ success: false, message: 'Không có quyền thao tác trên lịch hẹn này' });
       }
 
-      if (booking.status !== 'UPCOMING' && booking.status !== 'CONFIRMED') {
+      if (booking.status !== 'CONFIRMED') {
         return res.status(400).json({ success: false, message: 'Chỉ có thể báo vắng lịch hẹn sắp diễn ra' });
       }
 
@@ -697,7 +662,7 @@ export class PtController {
        const existingBooking = await prisma.booking.findFirst({
          where: {
            coachId: coachId,
-           status: { in: ['UPCOMING', 'CONFIRMED'] },
+           status: { in: ['PENDING', 'UPCOMING', 'CONFIRMED', 'IN_PROGRESS'] },
            startTime: {
              gte: startTimeWindow,
              lte: endTimeWindow,
@@ -721,7 +686,7 @@ export class PtController {
              membershipId: makeUpReq.originalBooking.membershipId,
              startTime: targetDate,
              endTime: endDate,
-             status: 'UPCOMING',
+             status: 'PENDING',
              isMakeup: true,
              makeupFromId: Number(originalBookingId)
            }

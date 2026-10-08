@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'services/auth_service.dart';
 import 'screens/member_shell.dart';
-import 'services/demo_auth.dart';
 import 'theme.dart';
 
 void main() => runApp(const AuraFitApp());
@@ -15,7 +15,7 @@ class AuraFitApp extends StatefulWidget {
 }
 
 class _AuraFitAppState extends State<AuraFitApp> {
-  final _auth = DemoAuth();
+  final _auth = AuthService();
 
   @override
   Widget build(BuildContext context) => MaterialApp(
