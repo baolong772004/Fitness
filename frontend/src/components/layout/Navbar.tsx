@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserRole, User } from '../../types';
 import {
   Dumbbell,
@@ -23,7 +23,9 @@ import {
   Settings,
   LogOut,
   ChevronDown,
-  GripVertical
+  GripVertical,
+  Wrench,
+  Layers
 } from 'lucide-react';
 import { AuraLogo } from '../common/AuraLogo';
 
@@ -74,6 +76,32 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close user dropdown menu when clicking outside or pressing Escape
+  useEffect(() => {
+    if (!showUserMenu) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowUserMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showUserMenu]);
 
   // Sync collapsed state to localStorage
   useEffect(() => {
@@ -138,6 +166,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           { id: 'tickets-management', label: 'Xử Lý Yêu Cầu', icon: LifeBuoy },
           { id: 'coaches-config', label: 'Quản Lý HLV', icon: UserCheck },
           { id: 'packages-engine', label: 'Gói Tập & Dịch Vụ', icon: Package },
+          { id: 'facilities', label: 'Cơ Sở Vật Chất', icon: Wrench },
+          { id: 'group-classes', label: 'Lớp Nhóm & Lịch', icon: Layers },
           { id: 'audit-rbac', label: 'Nhật Ký Hệ Thống', icon: FileText }
         ];
       case 'guest':
@@ -157,6 +187,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleTabClick = (tabId: string) => {
     onTabChange(tabId);
+    if (tabId === 'checkin-portal') {
+      window.dispatchEvent(new CustomEvent('aura:open-checkin-qr'));
+      return;
+    }
     if (currentRole === 'guest') {
       const el = document.getElementById(tabId);
       if (el) {
@@ -505,7 +539,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* User Profile or Guest Login/Register */}
         {currentUser ? (
-          <div style={{ position: 'relative' }}>
+          <div ref={userMenuRef} style={{ position: 'relative' }}>
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
               style={{
@@ -515,11 +549,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 gap: 10,
                 padding: isCollapsed ? '6px 0' : '6px 8px',
                 justifyContent: isCollapsed ? 'center' : 'flex-start',
-                background: 'var(--bg-card)',
-                border: '1px solid var(--aura-border)',
+                background: showUserMenu ? 'var(--color-primary-light)' : 'var(--bg-card)',
+                border: showUserMenu ? '1px solid var(--color-primary)' : '1px solid var(--aura-border)',
                 borderRadius: 'var(--radius-sm)',
                 cursor: 'pointer',
-                transition: 'border-color 0.15s'
+                transition: 'all 0.18s ease'
               }}
               title={currentUser.name}
             >
@@ -549,7 +583,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                       {roleLabels[currentUser.role] || currentUser.role.toUpperCase()}
                     </span>
                   </div>
-                  <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+                  <ChevronDown
+                    size={14}
+                    style={{
+                      color: 'var(--text-muted)',
+                      transform: showUserMenu ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s ease'
+                    }}
+                  />
                 </>
               )}
             </button>
@@ -560,20 +601,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                 style={{
                   position: 'absolute',
                   left: isCollapsed ? 'calc(100% + 10px)' : 0,
-                  bottom: isCollapsed ? 0 : '110%',
-                  width: 230,
+                  bottom: isCollapsed ? 0 : '115%',
+                  width: 240,
                   background: 'var(--bg-panel)',
                   border: '1px solid var(--aura-border)',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: 'var(--shadow-lg)',
-                  padding: 8,
-                  zIndex: 300
+                  borderRadius: 'var(--radius-md, 12px)',
+                  boxShadow: '0 12px 36px -4px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+                  padding: 10,
+                  zIndex: 999,
+                  backdropFilter: 'blur(16px)',
+                  WebkitBackdropFilter: 'blur(16px)',
+                  animation: 'auraToastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
                 }}
               >
-                <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--aura-border)', marginBottom: 6 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{currentUser.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{currentUser.email}</div>
-                  <span className="badge badge-primary" style={{ fontSize: 9, marginTop: 4 }}>
+                <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--aura-border)', marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)' }}>{currentUser.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{currentUser.email}</div>
+                  <span className="badge badge-primary" style={{ fontSize: 9.5, marginTop: 6, display: 'inline-block' }}>
                     {roleLabels[currentUser.role]}
                   </span>
                 </div>
@@ -587,19 +631,29 @@ export const Navbar: React.FC<NavbarProps> = ({
                     width: '100%',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
-                    padding: '8px 10px',
+                    gap: 10,
+                    padding: '9px 12px',
                     background: 'transparent',
                     border: 'none',
-                    borderRadius: 6,
+                    borderRadius: 'var(--radius-sm, 6px)',
                     color: 'var(--text-primary)',
-                    fontSize: 12,
+                    fontSize: 12.5,
+                    fontWeight: 600,
                     cursor: 'pointer',
-                    textAlign: 'left'
+                    textAlign: 'left',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--color-primary-light)';
+                    e.currentTarget.style.color = 'var(--color-primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = 'var(--text-primary)';
                   }}
                 >
-                  <Settings size={15} color="var(--color-primary)" />
-                  <span>Cài Đặt & Cấu Hình</span>
+                  <Settings size={16} color="var(--color-primary)" />
+                  <span>Cài Đặt & Tài Khoản</span>
                 </button>
 
                 <button
@@ -611,18 +665,27 @@ export const Navbar: React.FC<NavbarProps> = ({
                     width: '100%',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
-                    padding: '8px 10px',
+                    gap: 10,
+                    padding: '9px 12px',
                     background: 'transparent',
                     border: 'none',
-                    borderRadius: 6,
+                    borderRadius: 'var(--radius-sm, 6px)',
                     color: 'var(--color-danger)',
-                    fontSize: 12,
+                    fontSize: 12.5,
+                    fontWeight: 600,
                     cursor: 'pointer',
-                    textAlign: 'left'
+                    textAlign: 'left',
+                    marginTop: 4,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--color-danger-bg)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  <LogOut size={15} />
+                  <LogOut size={16} />
                   <span>Đăng Xuất Tài Khoản</span>
                 </button>
               </div>

@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Coach, Member, BookingSession, WorkoutLogEntry, NutritionTarget } from '../../types';
-import { MockDatabase } from '../../mocks/mockData';
+import { Coach, Member, BookingSession, WorkoutLogEntry } from '../../types';
+import { api, ApiBooking, ApiCoachProfile, ApiUser } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
-import { 
-  Calendar, 
-  Users, 
-  Sparkles, 
-  Clock, 
-  CheckCircle2, 
-  XCircle, 
-  Dumbbell, 
-  Flame, 
-  ChevronRight, 
-  Award, 
-  Plus, 
-  Save, 
+import {
+  Calendar,
+  Users,
+  Sparkles,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Dumbbell,
+  Flame,
+  ChevronRight,
+  Award,
+  Plus,
+  Save,
   AlertCircle,
   FileText,
   Activity,
@@ -22,7 +22,8 @@ import {
   Camera,
   QrCode,
   Play,
-  ShieldCheck
+  ShieldCheck,
+  Loader2
 } from 'lucide-react';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,10 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [bookings, setBookings] = useState<BookingSession[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // QR Session token popup
+  const [sessionQrModal, setSessionQrModal] = useState<{ open: boolean; qrImage: string; token: string; bookingTitle: string } | null>(null);
 
   // Session execution state (Luồng 5)
   const [activeSession, setActiveSession] = useState<BookingSession | null>(null);
@@ -101,14 +106,139 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
     notes: 'Bổ sung Whey Protein sau tập và ăn nhiều rau xanh trong bữa tối.'
   });
 
-  const reloadData = () => {
-    const allCoaches = MockDatabase.getCoaches();
-    setCoaches(allCoaches);
-    // Default to Master Trainer (Coach 1)
-    const coach1 = allCoaches.find(c => c.id === 'coach-1') || allCoaches[0];
-    setCurrentCoach(coach1);
-    setBookings(MockDatabase.getBookings());
-    setMembers(MockDatabase.getMembers());
+  const mapStatusToSessionStatus = (status: string): BookingSession['status'] => {
+    switch (status) {
+      case 'IN_PROGRESS': return 'in_progress';
+      case 'COMPLETED': return 'completed';
+      case 'ABSENT_ELIGIBLE':
+      case 'MAKEUP_BOOKED': return 'absent_excused';
+      case 'ABSENT_NO_REFUND': return 'absent_unexcused';
+      case 'CANCELLED': return 'cancelled';
+      case 'UPCOMING':
+      case 'CONFIRMED':
+      default: return 'scheduled';
+    }
+  };
+
+  const reloadData = async () => {
+    setIsLoading(true);
+    try {
+      // 1. Fetch Coach Profile & Coaches List from Backend
+      const trainersRes = await api.adminTrainers.getTrainers({ limit: 20 });
+      const trainerList = trainersRes.data || [];
+      const currentUser = api.auth.getCurrentUser();
+
+      const mappedCoaches: Coach[] = trainerList.map((t, idx) => ({
+        id: String(t.id),
+        code: `COACH-${t.id}`,
+        name: t.user?.fullName || `Coach #${t.id}`,
+        email: t.user?.email || `coach${t.id}@aurafitness.vn`,
+        phone: t.user?.phone || '0901234567',
+        avatar: t.user?.avatar || 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=400&auto=format&fit=crop&q=80',
+        rank: idx === 0 ? 'master' : 'senior',
+        specialties: t.specialization ? t.specialization.split(',').map(s => s.trim()) : ['Fitness & Hypertrophy'],
+        rating: t.rating || 5.0,
+        reviewCount: 24,
+        bio: t.bio || 'Huấn luyện viên chuyên sâu AURA Fitness Club',
+        certifications: ['NASM-CPT', 'CSCS Specialist'],
+        hourlyRateVND: t.hourlyRate || 350000,
+        commissionPercent: 45,
+        workingHours: {
+          shift: 'Toàn thời gian (Full-time)',
+          start: '07:00',
+          end: '21:00',
+          daysOfWeek: [1, 2, 3, 4, 5, 6]
+        },
+        isAcceptingBookings: t.status === 'ACTIVE',
+        activeTraineeCount: 8
+      }));
+
+      setCoaches(mappedCoaches);
+
+      // Find current active coach or fallback
+      const matchingCoach = mappedCoaches.find(c => String(c.id) === String(currentUser?.id)) || mappedCoaches[0];
+      if (matchingCoach) {
+        setCurrentCoach(matchingCoach);
+      }
+
+      // 2. Fetch Live Bookings for Coach
+      try {
+        const liveBookings = await api.pt.getMyBookings();
+        if (liveBookings && liveBookings.length > 0) {
+          const mapped: BookingSession[] = liveBookings.map(b => {
+            const startDate = new Date(b.startTime);
+            const endDate = new Date(b.endTime);
+            const timeStr = `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')}`;
+            const endStr = `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`;
+
+            return {
+              id: String(b.id),
+              memberId: String(b.memberId),
+              memberName: b.member?.fullName || `Hội viên #${b.memberId}`,
+              memberPhone: b.member?.phone || '0900000000',
+              memberAvatar: b.member?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+              coachId: String(b.coachId),
+              coachName: b.coach?.fullName || matchingCoach?.name || 'HLV',
+              coachAvatar: b.coach?.avatar || matchingCoach?.avatar || '',
+              type: 'pt_individual',
+              title: b.membership?.package?.name ? `Buổi tập ${b.membership.package.name}` : 'Buổi tập Huấn Luyện Viên 1-1',
+              room: 'Khu vực PT / Gym Floor',
+              date: startDate.toISOString().slice(0, 10),
+              startTime: timeStr,
+              endTime: endStr,
+              status: mapStatusToSessionStatus(b.status),
+              isMakeupSession: b.isMakeup || false,
+              pricePaidVND: 350000
+            };
+          });
+          setBookings(mapped);
+        } else {
+          setBookings([]);
+        }
+      } catch (err) {
+        console.warn('Lỗi lấy lịch bookings của coach:', err);
+      }
+
+      // 3. Fetch Live Members
+      try {
+        const usersRes = await api.users.getUsers({ role: 'MEMBER', limit: 50 });
+        if (usersRes.data) {
+          const mappedMembers: Member[] = usersRes.data.map(u => ({
+            id: String(u.id),
+            code: 'MEM-' + u.id,
+            name: u.fullName || u.email,
+            phone: u.phone || '0900000000',
+            email: u.email,
+            avatar: u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+            cccd: '0012026' + u.id,
+            gender: (u.gender === 'female' ? 'female' : 'male') as any,
+            birthYear: 1996,
+            emergencyContact: { name: 'Người thân', phone: u.phone || '', relationship: 'Gia đình' },
+            status: 'active',
+            activePackageId: 'pkg-standard',
+            packageName: 'Gói Tiêu Chuẩn',
+            packageType: 'standard_gym',
+            packageStartDate: new Date().toISOString().slice(0, 10),
+            packageEndDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+            daysRemaining: 30,
+            ptSessionsTotal: 10,
+            ptSessionsRemaining: 6,
+            totalCheckIns: 5,
+            inBodyHistory: [
+              { id: 'inb-' + u.id, date: '2026-10-01', weightKg: 70, muscleMassKg: 32, bodyFatPercent: 18, bmi: 22.5, visceralFatLevel: 4 }
+            ]
+          }));
+          setMembers(mappedMembers);
+        }
+      } catch (err) {
+        console.warn('Lỗi lấy danh sách member:', err);
+      }
+
+    } catch (e) {
+      console.error('Lỗi nạp dữ liệu Coach Dashboard:', e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -126,97 +256,102 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
     return () => clearInterval(interval);
   }, [sessionPhase]);
 
-  // Luồng 5: Coach Starts Session
-  const handleStartSession = (session: BookingSession) => {
-    setActiveSession(session);
-    setSessionPhase('running');
-    setSessionTimer(0);
-    soundEffects.playSuccessBeep();
-
-    // Update status in DB
-    const updated = { ...session, status: 'in_progress' as const };
-    MockDatabase.updateBooking(updated);
-    setBookings(MockDatabase.getBookings());
+  // Coach Starts Session (Calls Backend API)
+  const handleStartSession = async (session: BookingSession) => {
+    try {
+      await api.pt.updateBookingStatus(session.id, 'IN_PROGRESS');
+      setActiveSession({ ...session, status: 'in_progress' });
+      setSessionPhase('running');
+      setSessionTimer(0);
+      soundEffects.playSuccessBeep();
+      reloadData();
+    } catch (err: any) {
+      alert(`Không thể bắt đầu buổi tập: ${err.message}`);
+    }
   };
 
-  // Luồng 5: Coach Ends Session -> Open Completion Form
+  // Coach Ends Session -> Open Completion Form
   const handleEndSession = () => {
     setSessionPhase('completed_form');
   };
 
-  // Save Workout Results & Deduct PT Quota from Member
-  const handleSaveWorkoutResult = (e: React.FormEvent) => {
+  // Save Workout Results & Complete Session (Calls Backend API)
+  const handleSaveWorkoutResult = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeSession) return;
 
-    const completedSession: BookingSession = {
-      ...activeSession,
-      status: 'completed',
-      workoutLog: {
-        completedExercises: workoutLogForm.exercises,
-        intensityRating: workoutLogForm.intensity,
-        coachFeedback: workoutLogForm.coachFeedback,
-        homeworkNote: workoutLogForm.homeworkNote
-      }
-    };
+    try {
+      // 1. Complete Session on Backend (automatically deducts remaining session)
+      await api.pt.completeSession(activeSession.id);
 
-    // If it's a PT session, deduct 1 session from Member's remaining quota!
-    const trainee = members.find(m => m.id === activeSession.memberId);
-    if (trainee && trainee.ptSessionsRemaining > 0) {
-      const updatedTrainee: Member = {
-        ...trainee,
-        ptSessionsRemaining: Math.max(0, trainee.ptSessionsRemaining - 1)
-      };
-      MockDatabase.updateMember(updatedTrainee);
+      // 2. Log Session Workout Result & Exercises
+      await api.workouts.logSessionResult({
+        bookingId: Number(activeSession.id),
+        notes: `${workoutLogForm.coachFeedback} | Lời dặn: ${workoutLogForm.homeworkNote}`,
+        calories: 450,
+        durationMin: Math.max(1, Math.round(sessionTimer / 60)),
+        exercises: workoutLogForm.exercises.map(ex => ({
+          exerciseName: ex.exerciseName,
+          sets: ex.sets,
+          reps: ex.reps,
+          weightKg: ex.weightKg
+        }))
+      });
+
+      soundEffects.playSuccessBeep();
+      alert('Đã lưu kết quả buổi tập và trừ 1 lượt trong gói PT của học viên thành công!');
+      reloadData();
+      setSessionPhase('idle');
+      setActiveSession(null);
+    } catch (err: any) {
+      alert(`Lỗi lưu kết quả buổi tập: ${err.message}`);
     }
-
-    MockDatabase.updateBooking(completedSession);
-    soundEffects.playSuccessBeep();
-    reloadData();
-    setSessionPhase('idle');
-    setActiveSession(null);
   };
 
-  // Handle Absence & Makeup Session Logic (Luồng 5)
+  // Handle Absence & Makeup Session Logic (Calls Backend API)
   const handleOpenAbsenceDialog = (session: BookingSession) => {
     setActiveSession(session);
     setSessionPhase('absence_dialog');
   };
 
-  const handleConfirmAbsence = () => {
+  const handleConfirmAbsence = async () => {
     if (!activeSession) return;
 
-    const isEligibleForMakeup = absenceAdvanceHours >= 4;
+    try {
+      const reason = absenceAdvanceHours >= 4
+        ? `Báo vắng trước ${absenceAdvanceHours}h (Đủ điều kiện bù)`
+        : `Báo vắng muộn ${absenceAdvanceHours}h (Không được bù)`;
 
-    const updatedSession: BookingSession = {
-      ...activeSession,
-      status: isEligibleForMakeup ? 'absent_excused' : 'absent_unexcused'
-    };
-    MockDatabase.updateBooking(updatedSession);
-
-    if (isEligibleForMakeup) {
-      // Don't deduct PT quota, create a makeup credit
+      const res = await api.pt.markAbsent(activeSession.id, reason);
       soundEffects.playSuccessBeep();
-      alert(`Đã ghi nhận vắng mặt CÓ PHÉP (Báo trước ${absenceAdvanceHours}h).\nHọc viên được bảo lưu 01 buổi học bù (Makeup Session).`);
-    } else {
-      // Unexcused absence -> Deduct quota
-      soundEffects.playErrorBeep();
-      const trainee = members.find(m => m.id === activeSession.memberId);
-      if (trainee && trainee.ptSessionsRemaining > 0) {
-        MockDatabase.updateMember({
-          ...trainee,
-          ptSessionsRemaining: trainee.ptSessionsRemaining - 1
-        });
-      }
-      alert(`Đã ghi nhận vắng mặt KHÔNG PHÉP (Báo muộn < 4h).\nHệ thống đã tính trừ 01 buổi tập theo chính sách trung tâm.`);
+      alert(res.message || 'Xác nhận trạng thái vắng mặt thành công!');
+      reloadData();
+      setSessionPhase('idle');
+      setActiveSession(null);
+    } catch (err: any) {
+      alert(`Lỗi báo vắng: ${err.message}`);
     }
-
-    reloadData();
-    setSessionPhase('idle');
-    setActiveSession(null);
   };
 
-  // Smart Mock AI Workout Generator (Module AI Dự phòng)
+  // Generate Session QR Code for Trainee to scan
+  const handleGenerateSessionQR = async (session: BookingSession) => {
+    try {
+      const res = await api.pt.generateSessionQr(session.id);
+      if (res.data) {
+        setSessionQrModal({
+          open: true,
+          qrImage: res.data.qrCodeImage,
+          token: res.data.token,
+          bookingTitle: `${session.title} - ${session.memberName}`
+        });
+        soundEffects.playSuccessBeep();
+      }
+    } catch (err: any) {
+      alert(`Không thể tạo mã QR cho buổi tập: ${err.message}`);
+    }
+  };
+
+  // Smart AI Workout Generator (AI Engine)
   const handleGenerateAIWorkout = () => {
     setIsAiGenerating(true);
     setTimeout(() => {
@@ -317,13 +452,12 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
               {bookings.map(b => (
                 <div
                   key={b.id}
-                  className={`rounded-lg border p-4 transition-all ${
-                    b.status === 'in_progress'
+                  className={`rounded-lg border p-4 transition-all ${b.status === 'in_progress'
                       ? 'border-primary bg-primary/5 ring-2 ring-primary/40 shadow-sm'
                       : b.status === 'completed'
-                      ? 'border-border/60 bg-muted/30 opacity-70 hover:opacity-100'
-                      : 'border-border bg-card hover:border-primary/40'
-                  }`}
+                        ? 'border-border/60 bg-muted/30 opacity-70 hover:opacity-100'
+                        : 'border-border bg-card hover:border-primary/40'
+                    }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -337,13 +471,13 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                     <Badge
                       variant={
                         b.status === 'completed' ? 'success' :
-                        b.status === 'in_progress' ? 'default' :
-                        b.status === 'scheduled' ? 'info' : 'destructive'
+                          b.status === 'in_progress' ? 'default' :
+                            b.status === 'scheduled' ? 'info' : 'destructive'
                       }
                     >
                       {b.status === 'completed' ? '✓ Đã hoàn thành' :
-                       b.status === 'in_progress' ? '● Đang diễn ra' :
-                       b.status === 'scheduled' ? 'Chờ tập' : 'Vắng mặt'}
+                        b.status === 'in_progress' ? '● Đang diễn ra' :
+                          b.status === 'scheduled' ? 'Chờ tập' : 'Vắng mặt'}
                     </Badge>
                   </div>
 
@@ -373,6 +507,9 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
 
                       {b.status === 'scheduled' && (
                         <>
+                          <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => handleGenerateSessionQR(b)}>
+                            <QrCode className="size-3.5" /> Tạo QR Ca Dạy
+                          </Button>
                           <Button variant="outline" size="sm" className="h-8 text-xs text-destructive hover:text-destructive" onClick={() => handleOpenAbsenceDialog(b)}>
                             Báo Vắng
                           </Button>
@@ -1049,6 +1186,38 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
           </Card>
         </div>
       )}
+
+      {/* Session Dynamic QR Code Display Modal (90s validity) */}
+      <Dialog open={!!sessionQrModal?.open} onOpenChange={(open) => { if (!open) setSessionQrModal(null); }}>
+        <DialogContent className="sm:max-w-sm text-center">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-center gap-2 text-base">
+              <QrCode className="size-5 text-primary" /> Mã QR Điểm Danh Buổi Tập
+            </DialogTitle>
+            <DialogDescription>
+              {sessionQrModal?.bookingTitle}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center justify-center py-4">
+            {sessionQrModal?.qrImage && (
+              <img
+                src={sessionQrModal.qrImage}
+                alt="Session QR Code"
+                className="size-56 rounded-lg border-2 border-primary/40 p-2 bg-white shadow-md"
+              />
+            )}
+            <p className="mt-3 text-xs text-muted-foreground">
+              Mã QR có hiệu lực trong <strong>90 giây</strong>.<br />
+              Hướng dẫn học viên mở camera trên App để quét bắt đầu ca tập.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button className="w-full" onClick={() => setSessionQrModal(null)}>
+              Đóng Mã QR
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </StaffPage>
   );
 };
