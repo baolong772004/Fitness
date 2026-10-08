@@ -42,7 +42,7 @@ Sau đó chạy `flutter doctor --android-licenses` và đọc/chấp nhận cá
 Mặc định app dùng `http://10.0.2.2:5000/api` cho Android Emulator và `http://localhost:5000/api` cho iOS Simulator. Khi chạy trên điện thoại thật, truyền địa chỉ LAN của máy chạy backend:
 
 ```sh
-flutter run --dart-define=API_BASE_URL=http://192.168.1.10:5000/api
+flutter run --dart-define=API_BASE_URL=http://192.168.1.45:5000/api
 ```
 
 Thay `192.168.1.10` bằng địa chỉ IP của máy bạn. Điện thoại và máy chạy backend cần cùng mạng. Android cho phép HTTP trong debug build để dùng với server local; bản phát hành nên dùng HTTPS.

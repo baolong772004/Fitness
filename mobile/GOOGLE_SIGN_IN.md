@@ -20,7 +20,7 @@ For a physical device, include the backend address too:
 
 ```sh
 flutter run \
-  --dart-define=API_BASE_URL=http://192.168.1.10:5000/api \
+  --dart-define=API_BASE_URL=http://192.168.1.45:5000/api \
   --dart-define=GOOGLE_SERVER_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
 ```
 

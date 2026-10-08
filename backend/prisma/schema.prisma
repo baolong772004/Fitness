@@ -35,6 +35,7 @@ model User {
   payments          Payment[]
   givenReviews      Review[]           @relation("MemberReviews")
   supportRequests   SupportRequest[]   @relation("MemberSupport")
+  sentPtChatMessages PtChatMessage[]    @relation("PtChatSender")
 
   coachProfile      CoachProfile?
   coachBookings     Booking[]          @relation("CoachBookings")
@@ -235,6 +236,20 @@ model Booking {
   createdFromMakeUp  MakeUpRequest[] @relation("NewBooking")
   sessionResult      SessionResult?
   review             Review?
+  ptChatMessages     PtChatMessage[]
+}
+
+model PtChatMessage {
+  id        Int      @id @default(autoincrement())
+  bookingId Int
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  senderId  Int
+  sender    User     @relation("PtChatSender", fields: [senderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  content   String   @db.NVarChar(1000)
+  createdAt DateTime @default(now())
+
+  @@index([bookingId, id])
+  @@index([senderId])
 }
 
 model MakeUpRequest {

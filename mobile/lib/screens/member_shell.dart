@@ -8,9 +8,11 @@ import '../widgets/home_editorial.dart';
 import '../widgets/home_sections.dart';
 import '../widgets/home_showcase.dart';
 import 'auth_screen.dart';
+import 'booking_hub.dart';
 import 'change_password_screen.dart';
 import 'checkin_history_screen.dart';
 import 'my_subscriptions_screen.dart';
+import 'notifications_screen.dart';
 import 'package_store_screen.dart';
 import 'pt_journey_screen.dart';
 
@@ -26,22 +28,29 @@ class _MemberShellState extends State<MemberShell> {
   int _tab =
       0; // 0: Trang chu, 1: Dat lich, 2: Quet ma, 3: Hop thu, 4: Tai khoan
   int _checkinSubTab = 1; // 0: Lich tap, 1: Check in, 2: PT
-  int _day = 3; // Default T5 (07)
-  int _segmentIndex = 0; // 0: Danh sach, 1: Lich doi xac nhan, 2: Lich da Book
   String _query = '';
-  final _search = TextEditingController();
-  final _bookings = <String, Set<String>>{};
-  final _today = DateUtils.dateOnly(DateTime.now());
   CheckInQr? _checkInQr;
   Timer? _qrRefreshTimer;
+  Timer? _notificationRefreshTimer;
+  int _unreadNotificationCount = 0;
   int _qrRequestId = 0;
   bool _isLoadingQr = false;
   String? _qrError;
 
   @override
+  void initState() {
+    super.initState();
+    _refreshUnreadNotificationCount();
+    _notificationRefreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _refreshUnreadNotificationCount(),
+    );
+  }
+
+  @override
   void dispose() {
     _qrRefreshTimer?.cancel();
-    _search.dispose();
+    _notificationRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -92,16 +101,31 @@ class _MemberShellState extends State<MemberShell> {
 
   void _selectTab(int index) {
     if (index != 2) _qrRefreshTimer?.cancel();
-    setState(() => _tab = index);
+    setState(() {
+      if (index == 1 && _tab != 1) {
+        _query = '';
+      }
+      _tab = index;
+    });
+    if (index == 3) _refreshUnreadNotificationCount();
   }
 
-  DateTime get _selectedDate => _today.add(Duration(days: _day));
-
-  Set<String> get _memberBookings =>
-      _bookings[widget.auth.currentMember?.email] ?? {};
-
-  String _bookingKey(FitnessClass session) =>
-      '${_selectedDate.toIso8601String()}/${session.id}';
+  Future<void> _refreshUnreadNotificationCount() async {
+    if (widget.auth.currentMember == null) {
+      if (mounted && _unreadNotificationCount != 0) {
+        setState(() => _unreadNotificationCount = 0);
+      }
+      return;
+    }
+    try {
+      final count = await widget.auth.getUnreadNotificationCount();
+      if (mounted && count != _unreadNotificationCount) {
+        setState(() => _unreadNotificationCount = count);
+      }
+    } on AuthApiException {
+      // Keep the last known badge if the server is temporarily unavailable.
+    }
+  }
 
   Future<bool> _openAuth({bool register = false}) async {
     final result = await Navigator.of(context).push<AuthCompletion>(
@@ -111,6 +135,7 @@ class _MemberShellState extends State<MemberShell> {
     );
     if (!mounted || result == null) return false;
     setState(() {});
+    unawaited(_refreshUnreadNotificationCount());
     final message = result == AuthCompletion.loggedIn
         ? 'Đăng nhập thành công. Chào mừng ${widget.auth.currentMember?.name ?? 'bạn'}!'
         : 'Tạo tài khoản thành công. Chào mừng bạn đến với Aura Fitness!';
@@ -137,41 +162,6 @@ class _MemberShellState extends State<MemberShell> {
     return true;
   }
 
-  Future<void> _book(FitnessClass session) async {
-    if (widget.auth.currentMember == null) {
-      if (!await _openAuth() || !mounted) return;
-    }
-    final key = _bookingKey(session);
-    final booked = _memberBookings.contains(key);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(booked ? 'Hủy đặt chỗ?' : 'Xác nhận đặt chỗ'),
-        content: Text(
-          '${session.title}\n${session.time} · ${_selectedDate.day}/${_selectedDate.month}\n${session.room}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Quay lại'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(booked ? 'Hủy đặt chỗ' : 'Xác nhận'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() {
-      final bookings = _bookings.putIfAbsent(
-        widget.auth.currentMember!.email,
-        () => {},
-      );
-      booked ? bookings.remove(key) : bookings.add(key);
-    });
-  }
-
   void _info(String title, String text) {
     showDialog<void>(
       context: context,
@@ -191,51 +181,28 @@ class _MemberShellState extends State<MemberShell> {
   void _openScheduleFor([String category = '']) {
     setState(() {
       _tab = 1;
-      _segmentIndex = 0;
       _query = category;
-      _search.text = category;
     });
   }
 
   Widget _buildScheduleSection() {
-    final classes = fitnessClasses.where((session) {
-      final matches = '${session.title} ${session.coach} ${session.room}'
-          .toLowerCase()
-          .contains(_query.toLowerCase());
-
-      if (!matches) return false;
-
-      if (_segmentIndex == 1) {
-        return session.status == 'Đợi xác nhận';
-      } else if (_segmentIndex == 2) {
-        return _memberBookings.contains(_bookingKey(session)) ||
-            session.status == 'Đã book';
-      }
-      return true;
-    }).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (classes.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'Chưa có lớp tập phù hợp.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AuraColors.muted),
-            ),
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Gói tập, lịch PT và Workout Class nằm trong mục Đặt lịch.',
+            style: TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
           ),
-        for (final session in classes)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: SessionCard(
-              session: session,
-              booked: _memberBookings.contains(_bookingKey(session)),
-              onBook: () => _book(session),
-            ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () => _selectTab(1),
+            icon: const Icon(Icons.calendar_month_rounded),
+            label: const Text('Mở Đặt lịch'),
           ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -399,7 +366,9 @@ class _MemberShellState extends State<MemberShell> {
   }
 
   Future<void> _openMySubscriptions() async {
-    if (widget.auth.currentMember == null) return;
+    if (widget.auth.currentMember == null) {
+      if (!await _openAuth() || !mounted) return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => MySubscriptionsScreen(
@@ -410,12 +379,24 @@ class _MemberShellState extends State<MemberShell> {
     );
   }
 
-  void _openPtTab() {
-    _qrRefreshTimer?.cancel();
-    setState(() {
-      _tab = 2;
-      _checkinSubTab = 2;
-    });
+  Future<void> _openPtTab() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: AuraColors.espresso,
+          appBar: AppBar(
+            backgroundColor: AuraColors.espresso,
+            foregroundColor: Colors.white,
+            title: const Text('Lịch tập PT'),
+          ),
+          body: PtJourneyScreen(
+            auth: widget.auth,
+            onBrowsePackages: _openPackageStore,
+            onLoginRequired: _openAuth,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _accountMenuItem({
@@ -651,34 +632,11 @@ class _MemberShellState extends State<MemberShell> {
                   child: const Text('Tạo tài khoản hội viên'),
                 ),
                 const SizedBox(height: 10),
-                TextButton.icon(
-                  onPressed: _openPackageStore,
-                  icon: const Icon(Icons.local_offer_outlined),
-                  label: const Text('Xem các gói tập'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AuraColors.darkCoffee,
-                  ),
-                ),
               ],
             ),
           ),
           const SizedBox(height: 16),
         ] else ...[
-          _accountMenuItem(
-            icon: Icons.card_membership_rounded,
-            title: 'Gói tập của tôi',
-            onTap: _openMySubscriptions,
-          ),
-          _accountMenuItem(
-            icon: Icons.sports_gymnastics_rounded,
-            title: 'Lịch tập PT',
-            onTap: _openPtTab,
-          ),
-          _accountMenuItem(
-            icon: Icons.local_offer_rounded,
-            title: 'Mua gói tập',
-            onTap: _openPackageStore,
-          ),
           _accountMenuItem(
             icon: Icons.local_offer_outlined,
             title: 'Ưu đãi hội viên',
@@ -718,8 +676,8 @@ class _MemberShellState extends State<MemberShell> {
           ),
           _accountMenuItem(
             icon: Icons.history_rounded,
-            title: 'Lịch sử chăm sóc khách hàng',
-            onTap: () => setState(() => _tab = 3),
+            title: 'Hộp thư thông báo',
+            onTap: () => _selectTab(3),
           ),
           _accountMenuItem(
             icon: Icons.security_rounded,
@@ -760,8 +718,8 @@ class _MemberShellState extends State<MemberShell> {
               onPressed: () => setState(() {
                 widget.auth.logout();
                 _tab = 0;
+                _unreadNotificationCount = 0;
                 _query = '';
-                _search.clear();
               }),
               icon: const Icon(Icons.logout_rounded),
               label: const Text('Đăng xuất'),
@@ -800,7 +758,7 @@ class _MemberShellState extends State<MemberShell> {
                     balance: member?.balance,
                     onLogin: _openAuth,
                     onRegister: () => _openAuth(register: true),
-                    onNotifications: () => setState(() => _tab = 3),
+                    onNotifications: () => _selectTab(3),
                     showSearchAndFilter: false,
                   ),
                   HomePhotoHero(onExplore: _openScheduleFor),
@@ -817,39 +775,23 @@ class _MemberShellState extends State<MemberShell> {
                   const SizedBox(height: 90), // Space for bottom nav
                 ],
               ),
-              1 => ListView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                children: [
-                  HomeHero(
-                    memberName: member?.name,
-                    balance: member?.balance,
-                    onLogin: _openAuth,
-                    onRegister: () => _openAuth(register: true),
-                    onNotifications: () => setState(() => _tab = 3),
-                    showSearchAndFilter: true,
-                    search: _search,
-                    onSearch: (value) => setState(() => _query = value),
-                    segmentIndex: _segmentIndex,
-                    onSegmentChanged: (idx) =>
-                        setState(() => _segmentIndex = idx),
-                    selectedDayIndex: _day,
-                    onDayChanged: (day) => setState(() => _day = day),
-                    today: _today,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildScheduleSection(),
-                  const SizedBox(height: 90),
-                ],
+              1 => BookingHub(
+                auth: widget.auth,
+                onBrowsePackages: _openPackageStore,
+                onMyPackages: _openMySubscriptions,
+                onPtSchedule: _openPtTab,
+                onLoginRequired: _openAuth,
+                workoutCategory: _query,
               ),
               2 => _buildQRCheckinView(),
-              3 => SingleChildScrollView(
-                child: Column(
-                  children: [
-                    CaseHistoryList(onBack: () => setState(() => _tab = 0)),
-                    const SizedBox(height: 90),
-                  ],
-                ),
+              3 => NotificationsScreen(
+                auth: widget.auth,
+                onLoginRequired: _openAuth,
+                onUnreadCountChanged: (count) {
+                  if (mounted && count != _unreadNotificationCount) {
+                    setState(() => _unreadNotificationCount = count);
+                  }
+                },
               ),
               _ => SingleChildScrollView(
                 child: Column(
@@ -893,6 +835,7 @@ class _MemberShellState extends State<MemberShell> {
         selectedIndex: _tab,
         onDestinationSelected: _selectTab,
         onQRClick: _openCheckInQr,
+        unreadCount: _unreadNotificationCount,
       ),
     );
   }

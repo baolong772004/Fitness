@@ -3,15 +3,19 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import swaggerUi from 'swagger-ui-express';
+import { createServer } from 'node:http';
 
 import rootRouter from './routes/index.js';
 import errorHandler from './middlewares/errorHandler.js';
 import connectDB from './config/db.js';
 import swaggerSpec from './config/swagger.js';
+import { configurePtChatSocket } from './sockets/ptChat.socket.js';
 
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
+configurePtChatSocket(httpServer);
 const PORT = process.env.PORT || 5000;
 
 // Global Middlewares
@@ -44,7 +48,7 @@ app.use(errorHandler);
 const startServer = async () => {
     await connectDB();
 
-    app.listen(PORT, '0.0.0.0', () => {
+    httpServer.listen(PORT, '0.0.0.0', () => {
         console.log(`Server running on http://localhost:${PORT}`);
         console.log(`API docs: http://localhost:${PORT}/api-docs`);
     });

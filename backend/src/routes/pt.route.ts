@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PtController } from '../controllers/pt.controller.js';
 import { PaymentController } from '../controllers/payment.controller.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
+import { listPtChatMessages, sendPtChatMessage } from '../controllers/ptChat.controller.js';
 
 const router = Router();
 
@@ -150,6 +151,41 @@ router.patch('/booking/:id/status', authenticateToken, PtController.updateBookin
  *         description: Danh sách lịch đặt PT
  */
 router.get('/my-bookings', authenticateToken, PtController.getMyBookings);
+
+/**
+ * @swagger
+ * /pt/booking/{id}/messages:
+ *   get:
+ *     summary: Xem tin nhắn của lịch PT đã xác nhận
+ *     tags: [PersonalTrainer]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: query, name: beforeId, schema: { type: integer } }
+ *       - { in: query, name: afterId, schema: { type: integer } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 30 } }
+ *     responses:
+ *       200: { description: Danh sách tin nhắn cũ đến mới }
+ *   post:
+ *     summary: Gửi tin nhắn cho PT hoặc hội viên trong lịch
+ *     tags: [PersonalTrainer]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [content]
+ *             properties:
+ *               content: { type: string, maxLength: 1000 }
+ *     responses:
+ *       201: { description: Đã lưu và gửi tin nhắn }
+ */
+router.get('/booking/:id/messages', authenticateToken, listPtChatMessages);
+router.post('/booking/:id/messages', authenticateToken, sendPtChatMessage);
 
 /**
  * @swagger

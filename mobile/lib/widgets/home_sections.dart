@@ -1762,11 +1762,13 @@ class AuraBottomNavBar extends StatelessWidget {
     required this.selectedIndex,
     required this.onDestinationSelected,
     required this.onQRClick,
+    this.unreadCount = 0,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final VoidCallback onQRClick;
+  final int unreadCount;
 
   @override
   Widget build(BuildContext context) {
@@ -1785,7 +1787,14 @@ class AuraBottomNavBar extends StatelessWidget {
                 _buildNavItem(0, Icons.home, 'Trang chủ'),
                 _buildNavItem(1, Icons.calendar_month, 'Đặt lịch'),
                 const Expanded(child: SizedBox()), // Center space for FAB
-                _buildNavItem(3, Icons.notifications, 'Hộp thư', badge: '07'),
+                _buildNavItem(
+                  3,
+                  Icons.notifications,
+                  'Hộp thư',
+                  badge: unreadCount > 0
+                      ? (unreadCount > 99 ? '99+' : '$unreadCount')
+                      : null,
+                ),
                 _buildNavItem(4, Icons.person, 'Tài khoản'),
               ],
             ),

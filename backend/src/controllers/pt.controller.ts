@@ -3,8 +3,25 @@ import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import jwt from 'jsonwebtoken';
 import QRCode from 'qrcode';
+import { createUserNotification } from '../services/notification.service.js';
+import { closePtChatRoom } from '../sockets/ptChat.socket.js';
 
 const prisma = new PrismaClient();
+const PT_CHECKIN_EARLY_WINDOW_MS = 15 * 60 * 1000;
+
+const getPtCheckInWindowError = (
+  startTime: Date,
+  endTime: Date,
+  now = new Date(),
+) => {
+  if (now.getTime() < startTime.getTime() - PT_CHECKIN_EARLY_WINDOW_MS) {
+    return 'Chỉ có thể tạo hoặc quét mã QR trong vòng 15 phút trước giờ tập.';
+  }
+  if (now.getTime() > endTime.getTime()) {
+    return 'Đã qua giờ kết thúc buổi tập, không thể điểm danh.';
+  }
+  return null;
+};
 
 export class PtController {
   /** @route GET /api/pt/trainers */
@@ -213,6 +230,12 @@ export class PtController {
         },
       });
 
+      await createUserNotification({
+        userId: ptSub.coachId,
+        title: 'Yêu cầu lịch tập PT mới',
+        message: `Hội viên #${userId} gửi yêu cầu tập lúc ${targetDate.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}. Vui lòng xác nhận hoặc từ chối.`,
+      });
+
       return res.status(201).json({
         success: true,
         message: 'Đặt lịch thành công! Vui lòng chờ PT xác nhận.',
@@ -260,6 +283,14 @@ export class PtController {
       const updated = await prisma.booking.update({
         where: { id: bookingId },
         data: { status },
+      });
+
+      await createUserNotification({
+        userId: booking.memberId,
+        title: status === 'CONFIRMED' ? 'Lịch tập PT đã được xác nhận' : 'Lịch tập PT bị từ chối',
+        message: status === 'CONFIRMED'
+          ? `HLV đã xác nhận lịch tập lúc ${booking.startTime.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.`
+          : `HLV không thể nhận lịch tập lúc ${booking.startTime.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}. Bạn có thể chọn ca khác.`,
       });
 
       return res.status(200).json({
@@ -328,7 +359,8 @@ export class PtController {
         return res.status(400).json({ success: false, message: `Không thể tạo mã QR cho lịch hẹn trạng thái: ${booking.status}` });
       }
 
-      // Có thể thêm điều kiện thời gian: chỉ cho phép tạo trước/sau 15 phút. (Bỏ qua để dễ test)
+      const timeError = getPtCheckInWindowError(booking.startTime, booking.endTime);
+      if (timeError) return res.status(400).json({ success: false, message: timeError });
 
       const qrToken = jwt.sign(
         { bookingId, trainerId },
@@ -388,6 +420,9 @@ export class PtController {
       if (booking.status !== 'CONFIRMED') {
         return res.status(400).json({ success: false, message: 'Lịch tập cần được PT xác nhận trước khi điểm danh' });
       }
+
+      const timeError = getPtCheckInWindowError(booking.startTime, booking.endTime);
+      if (timeError) return res.status(400).json({ success: false, message: timeError });
 
       // Check replay attack or token matching
       if (booking.sessionQrToken !== qrToken) {
@@ -456,6 +491,14 @@ export class PtController {
           return { updatedBooking, updatedSub };
         }
         return { updatedBooking };
+      });
+
+      closePtChatRoom(bookingId);
+
+      await createUserNotification({
+        userId: booking.memberId,
+        title: 'Buổi tập PT hoàn thành',
+        message: 'HLV đã hoàn tất buổi tập. Số buổi còn lại trong gói đã được cập nhật.',
       });
 
       return res.status(200).json({
@@ -706,6 +749,12 @@ export class PtController {
          });
          
          return newBooking;
+       });
+
+       await createUserNotification({
+         userId: coachId,
+         title: 'Yêu cầu lịch học bù PT mới',
+         message: `Hội viên #${userId} gửi yêu cầu học bù lúc ${targetDate.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}. Vui lòng xác nhận hoặc từ chối.`,
        });
        
        return res.status(201).json({ success: true, message: 'Đặt lịch học bù thành công!', data: result });

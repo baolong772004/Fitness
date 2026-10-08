@@ -14,6 +14,7 @@ import workoutLogRoutes from './workoutLog.route.js';
 import reviewRoutes from './review.route.js';
 import supportRoutes from './support.route.js';
 import facilityRoutes from './facility.route.js';
+import notificationRoutes from './notification.route.js';
 
 const router = express.Router();
 
@@ -36,5 +37,6 @@ router.use('/workouts', workoutLogRoutes);
 router.use('/reviews', reviewRoutes);
 router.use('/support', supportRoutes);
 router.use('/facility', facilityRoutes);
+router.use('/notifications', notificationRoutes);
 
 export default router;
