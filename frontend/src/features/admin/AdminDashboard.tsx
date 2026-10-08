@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Member, Coach, PackagePlan, AuditLog, Invoice, SupportTicket } from '../../types';
-import { MockDatabase } from '../../mocks/mockData';
-import { api, ApiPackage, ApiUser } from '../../services/api';
+import { api, ApiPackage, ApiUser, ApiCoachProfile, ApiSubscription, ApiRoom, ApiEquipment, ApiGroupClassSchedule, ApiMemberProfile360 } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import {
   BarChart3,
@@ -97,6 +96,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     description: 'Gói tập chất lượng cao toàn bộ hệ thống AURA Fitness.'
   });
 
+  // Facility & Equipment State
+  const [rooms, setRooms] = useState<ApiRoom[]>([]);
+  const [isLoadingFacilities, setIsLoadingFacilities] = useState(false);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [roomForm, setRoomForm] = useState({ name: '', type: 'FITNESS', capacity: 30 });
+  const [isCreatingEquipment, setIsCreatingEquipment] = useState(false);
+  const [equipmentForm, setEquipmentForm] = useState({ name: '', code: '', roomId: 0, note: '' });
+
+  // Group Classes & Schedules State
+  const [groupClassSchedules, setGroupClassSchedules] = useState<ApiGroupClassSchedule[]>([]);
+  const [isLoadingGroupClasses, setIsLoadingGroupClasses] = useState(false);
+  const [isCreatingClass, setIsCreatingClass] = useState(false);
+  const [classForm, setClassForm] = useState({ name: '', description: '', durationMin: 60, imageUrl: '' });
+  const [isCreatingSchedule, setIsCreatingSchedule] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({
+    classId: 1,
+    trainerId: 1,
+    roomId: 0,
+    startTime: '',
+    endTime: '',
+    capacity: 20
+  });
+
+  // Package Edit State
+  const [isEditingPackage, setIsEditingPackage] = useState(false);
+  const [editingPackageId, setEditingPackageId] = useState<number | null>(null);
+  const [editPackageForm, setEditPackageForm] = useState({
+    name: '',
+    type: 'MEMBERSHIP' as 'MEMBERSHIP' | 'PT',
+    durationDays: 30,
+    price: 1500000,
+    trialPtSessions: 2,
+    totalPtSessions: 0,
+    description: '',
+    isActive: true
+  });
+
+  // Member 360 Full Profile State
+  const [inspectingMember360, setInspectingMember360] = useState<ApiMemberProfile360 | null>(null);
+  const [isLoadingMember360, setIsLoadingMember360] = useState(false);
+
   const reloadData = async () => {
     // 1. Fetch live Packages from backend
     try {
@@ -114,18 +154,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           features: ['Ra vào phòng tập 24/7', `${p.durationDays} ngày hiệu lực`, `${p.trialPtSessions || 0} buổi PT`]
         }));
         setPackages(mappedPkgs);
-      } else {
-        setPackages(MockDatabase.getPackages());
       }
-    } catch {
-      setPackages(MockDatabase.getPackages());
+    } catch (e) {
+      console.warn('Lỗi tải gói tập admin:', e);
     }
 
-    // 2. Fetch live Users from backend
+    // 2. Fetch live Members from backend
     try {
-      const liveUsers = await api.users.getUsers({ limit: 50 });
-      if (liveUsers.data && liveUsers.data.length > 0) {
-        const mappedMembers: Member[] = liveUsers.data.map(u => ({
+      const membersRes = await api.admin.getMembersList({ limit: 50 });
+      if (membersRes.data && membersRes.data.length > 0) {
+        const mappedMembers: Member[] = membersRes.data.map(u => ({
           id: String(u.id),
           code: 'MEM-' + u.id,
           name: u.fullName || u.email,
@@ -133,10 +171,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           email: u.email,
           avatar: u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
           cccd: '0012026' + u.id,
-          gender: (u.gender === 'female' ? 'female' : 'male') as any,
+          gender: 'male',
           birthYear: 1996,
           emergencyContact: { name: 'Người thân', phone: u.phone || '', relationship: 'Gia đình' },
-          status: 'active',
+          status: u.status === 'ACTIVE' ? 'active' : 'expired',
           activePackageId: 'pkg-standard',
           packageName: 'Gói Tiêu Chuẩn',
           packageType: 'standard_gym',
@@ -149,17 +187,109 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           inBodyHistory: []
         }));
         setMembers(mappedMembers);
-      } else {
-        setMembers(MockDatabase.getMembers());
       }
-    } catch {
-      setMembers(MockDatabase.getMembers());
+    } catch (e) {
+      console.warn('Lỗi tải danh sách member admin:', e);
     }
 
-    setCoaches(MockDatabase.getCoaches());
-    setInvoices(MockDatabase.getInvoices());
-    setAuditLogs(MockDatabase.getAuditLogs());
-    setTickets(MockDatabase.getTickets());
+    // 3. Fetch live Coaches from backend
+    try {
+      const liveTrainers = await api.adminTrainers.getTrainers({ limit: 50 });
+      if (liveTrainers.data) {
+        const mappedCoaches: Coach[] = liveTrainers.data.map((t, idx) => ({
+          id: String(t.id),
+          code: `COACH-${t.id}`,
+          name: t.user?.fullName || `Coach #${t.id}`,
+          email: t.user?.email || `coach${t.id}@aurafitness.vn`,
+          phone: t.user?.phone || '0901234567',
+          avatar: t.user?.avatar || 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=400&auto=format&fit=crop&q=80',
+          rank: idx === 0 ? 'master' : 'senior',
+          specialties: t.specialization ? t.specialization.split(',').map(s => s.trim()) : ['Gym & PT'],
+          rating: t.rating || 5.0,
+          reviewCount: 24,
+          bio: t.bio || 'Huấn luyện viên chuyên nghiệp AURA Fitness',
+          certifications: ['NASM-CPT', 'CSCS Specialist'],
+          hourlyRateVND: t.hourlyRate || 350000,
+          commissionPercent: 45,
+          workingHours: { shift: 'Toàn thời gian', start: '07:00', end: '21:00', daysOfWeek: [1, 2, 3, 4, 5, 6] },
+          isAcceptingBookings: t.status === 'ACTIVE',
+          activeTraineeCount: 8
+        }));
+        setCoaches(mappedCoaches);
+      }
+    } catch (e) {
+      console.warn('Lỗi tải danh sách HLV admin:', e);
+    }
+
+    // 4. Fetch Subscriptions / Invoices from backend
+    try {
+      const subsRes = await api.subscriptions.getAllSubscriptions({ limit: 50 });
+      if (subsRes.data) {
+        const mappedInvoices: Invoice[] = subsRes.data.map((s) => ({
+          id: 'inv-' + s.id,
+          code: `INV-${1000 + s.id}`,
+          memberId: String(s.userId),
+          memberName: s.user?.fullName || `Hội viên #${s.userId}`,
+          memberPhone: '0900000000',
+          items: [{
+            name: s.package?.name || 'Gói tập',
+            quantity: 1,
+            unitPriceVND: Number(s.package?.price || 500000),
+            amountVND: Number(s.package?.price || 500000)
+          }],
+          subtotalVND: Number(s.package?.price || 500000),
+          discountVND: 0,
+          totalVND: Number(s.package?.price || 500000),
+          paymentMethod: 'vietqr',
+          status: 'paid',
+          staffName: 'Admin Hệ Thống',
+          createdAt: s.createdAt || new Date().toISOString()
+        }));
+        setInvoices(mappedInvoices);
+      }
+    } catch (e) {
+      console.warn('Lỗi tải hóa đơn admin:', e);
+    }
+
+    // 5. Fetch Support Tickets from backend
+    try {
+      const ticketsRes = await api.support.getTickets();
+      if (Array.isArray(ticketsRes)) {
+        const mappedTickets: SupportTicket[] = ticketsRes.map((t) => ({
+          id: String(t.id),
+          ticketCode: `TCK-${t.id}`,
+          memberId: String(t.memberId),
+          memberName: t.member?.fullName || `Hội viên #${t.memberId}`,
+          memberPhone: '0900000000',
+          category: 'other',
+          title: t.subject,
+          description: t.message,
+          status: t.status === 'RESOLVED' || t.status === 'CLOSED' ? 'resolved' : 'open',
+          priority: 'medium',
+          createdAt: t.createdAt,
+          createdBy: t.member?.fullName || 'Hội viên'
+        }));
+        setTickets(mappedTickets);
+      }
+    } catch (e) {
+      console.warn('Lỗi tải danh sách tickets admin:', e);
+    }
+
+    // 6. Fetch Rooms & Equipments
+    try {
+      const liveRooms = await api.facility.getRooms();
+      if (liveRooms) setRooms(liveRooms);
+    } catch (e) {
+      console.warn('Lỗi tải cơ sở vật chất admin:', e);
+    }
+
+    // 7. Fetch Group Class Schedules
+    try {
+      const liveSchedules = await api.groupClasses.getSchedules();
+      if (liveSchedules) setGroupClassSchedules(liveSchedules);
+    } catch (e) {
+      console.warn('Lỗi tải lịch lớp học nhóm admin:', e);
+    }
   };
 
   useEffect(() => {
@@ -267,30 +397,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   );
 
   // Handle Save Coach Pricing (Luồng 9)
-  const handleSaveCoachPricing = (e: React.FormEvent) => {
+  const handleSaveCoachPricing = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCoach) return;
 
     const oldRate = editingCoach.hourlyRateVND;
-    const updatedCoach: Coach = {
-      ...editingCoach,
-      hourlyRateVND: newHourlyRate,
-      commissionPercent: newCommission,
-      rank: newRank
-    };
 
-    MockDatabase.updateCoach(updatedCoach);
-    MockDatabase.logAction(
-      'Hoàng Quản Lý',
-      'admin',
-      'Cập nhật giá Coach',
-      `HLV ${editingCoach.name}`,
-      `Đổi đơn giá từ ${oldRate.toLocaleString('vi-VN')}đ sang ${newHourlyRate.toLocaleString('vi-VN')}đ (Hạng: ${newRank.toUpperCase()})`
-    );
-
-    soundEffects.playSuccessBeep();
-    reloadData();
-    setEditingCoach(null);
+    try {
+      await api.adminTrainers.setupTrainer({
+        userId: Number(editingCoach.id),
+        hourlyRate: newHourlyRate,
+        bio: 'Huấn luyện viên thể hình & PT cá nhân AURA Fitness Club',
+        experienceYears: 5,
+        specialties: editingCoach.specialties
+      });
+      soundEffects.playSuccessBeep();
+      alert(`Đã cập nhật đơn giá Coach ${editingCoach.name} thành ${newHourlyRate.toLocaleString('vi-VN')} đ/buổi trực tiếp trên hệ thống!`);
+      reloadData();
+      setEditingCoach(null);
+    } catch (err: any) {
+      alert(`Lỗi cập nhật giá Coach: ${err.message}`);
+    }
   };
 
   // Handle Create Package via Live Backend REST API
@@ -346,6 +473,197 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  // Inspect Member 360 with live details from API
+  const handleInspectMember = async (m: Member) => {
+    setInspectingMember(m);
+    setIsLoadingMember360(true);
+    try {
+      const p360 = await api.admin.getMemberDetailProfile(m.id);
+      setInspectingMember360(p360);
+    } catch (e) {
+      console.warn('Lỗi tải 360 profile:', e);
+      setInspectingMember360(null);
+    } finally {
+      setIsLoadingMember360(false);
+    }
+  };
+
+  // Toggle Member Status (ACTIVE / BANNED)
+  const handleToggleMemberStatus = async (userId: string | number, currentStatus: string) => {
+    const nextStatus = currentStatus === 'active' ? 'BANNED' : 'ACTIVE';
+    try {
+      await api.users.updateUserStatus(userId, nextStatus);
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      alert(`Đã đổi trạng thái tài khoản thành công sang ${nextStatus}!`);
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi đổi trạng thái: ${err.message}`);
+    }
+  };
+
+  // Toggle Coach Status (ACTIVE / INACTIVE)
+  const handleToggleCoachStatus = async (coachId: string | number, currentAccepting: boolean) => {
+    const nextStatus = currentAccepting ? 'INACTIVE' : 'ACTIVE';
+    try {
+      await api.adminTrainers.toggleTrainerStatus(coachId, nextStatus);
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      alert(`Đã cập nhật trạng thái HLV sang ${nextStatus}!`);
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi cập nhật trạng thái HLV: ${err.message}`);
+    }
+  };
+
+  // Edit Package Handlers
+  const handleOpenEditPackage = (pkg: PackagePlan) => {
+    setEditingPackageId(Number(pkg.id));
+    setEditPackageForm({
+      name: pkg.name,
+      type: pkg.type === 'hybrid_pt' ? 'PT' : 'MEMBERSHIP',
+      durationDays: pkg.durationMonths * 30,
+      price: pkg.priceVND,
+      trialPtSessions: 2,
+      totalPtSessions: pkg.ptSessionsIncluded || 0,
+      description: pkg.description,
+      isActive: true
+    });
+    setIsEditingPackage(true);
+  };
+
+  const handleSaveEditPackage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPackageId) return;
+    setPackageLoading(true);
+    try {
+      await api.packages.updatePackage(editingPackageId, {
+        name: editPackageForm.name,
+        type: editPackageForm.type,
+        durationDays: editPackageForm.durationDays,
+        price: editPackageForm.price,
+        trialPtSessions: editPackageForm.trialPtSessions,
+        totalPtSessions: editPackageForm.type === 'PT' ? editPackageForm.totalPtSessions : undefined,
+        description: editPackageForm.description,
+        isActive: editPackageForm.isActive
+      });
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      setIsEditingPackage(false);
+      alert('Đã cập nhật gói tập thành công!');
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi cập nhật gói: ${err.message}`);
+    } finally {
+      setPackageLoading(false);
+    }
+  };
+
+  // Facility & Equipment Handlers
+  const handleSaveRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.facility.upsertRoom({
+        name: roomForm.name,
+        type: roomForm.type,
+        capacity: Number(roomForm.capacity)
+      });
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      setIsCreatingRoom(false);
+      setRoomForm({ name: '', type: 'FITNESS', capacity: 30 });
+      alert('Đã lưu phòng tập mới vào cơ sở dữ liệu!');
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi tạo phòng tập: ${err.message}`);
+    }
+  };
+
+  const handleSaveEquipment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.facility.createEquipment({
+        name: equipmentForm.name,
+        code: equipmentForm.code,
+        roomId: Number(equipmentForm.roomId || (rooms[0]?.id || 1)),
+        note: equipmentForm.note
+      });
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      setIsCreatingEquipment(false);
+      setEquipmentForm({ name: '', code: '', roomId: 0, note: '' });
+      alert('Đã thêm thiết bị mới vào hệ thống!');
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi thêm thiết bị: ${err.message}`);
+    }
+  };
+
+  const handleUpdateEquipmentStatus = async (id: number, status: 'AVAILABLE' | 'MAINTENANCE' | 'BROKEN') => {
+    try {
+      await api.facility.updateEquipmentStatus(id, { status });
+      soundEffects.playSuccessBeep();
+      await reloadData();
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi cập nhật thiết bị: ${err.message}`);
+    }
+  };
+
+  const handleDeleteEquipment = async (id: number) => {
+    if (!window.confirm('Bạn có chắc muốn xoá thiết bị này khỏi danh sách?')) return;
+    try {
+      await api.facility.deleteEquipment(id);
+      soundEffects.playSuccessBeep();
+      await reloadData();
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi xoá thiết bị: ${err.message}`);
+    }
+  };
+
+  // Group Classes Handlers
+  const handleSaveClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.groupClasses.createClass({
+        name: classForm.name,
+        description: classForm.description,
+        durationMin: Number(classForm.durationMin || 60),
+        imageUrl: classForm.imageUrl
+      });
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      setIsCreatingClass(false);
+      setClassForm({ name: '', description: '', durationMin: 60, imageUrl: '' });
+      alert('Đã tạo lớp học nhóm mới thành công!');
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi tạo lớp học: ${err.message}`);
+    }
+  };
+
+  const handleSaveSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.groupClasses.createSchedule({
+        classId: Number(scheduleForm.classId),
+        trainerId: Number(scheduleForm.trainerId),
+        roomId: scheduleForm.roomId ? Number(scheduleForm.roomId) : undefined,
+        startTime: new Date(scheduleForm.startTime).toISOString(),
+        endTime: new Date(scheduleForm.endTime).toISOString(),
+        capacity: Number(scheduleForm.capacity || 20)
+      });
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      setIsCreatingSchedule(false);
+      alert('Đã mở lịch ca tập mới thành công!');
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Lỗi lên lịch: ${err.message}`);
+    }
+  };
+
   // Handle Open Ticket Response Modal
   const handleOpenResponseModal = (t: SupportTicket) => {
     setRespondingTicket(t);
@@ -356,56 +674,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // Handle Save Admin Response
-  const handleSaveAdminResponse = (e: React.FormEvent) => {
+  const handleSaveAdminResponse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!respondingTicket || !adminResponseText.trim()) return;
 
-    const updated: SupportTicket = {
-      ...respondingTicket,
-      adminResponse: adminResponseText.trim(),
-      actionRequiredBy: targetAssignee,
-      status: targetStatus,
-      respondedAt: new Date().toISOString(),
-      resolvedAt: targetStatus === 'resolved' ? new Date().toISOString() : undefined,
-      resolvedBy: targetStatus === 'resolved' ? 'Hoàng Quản Lý (Admin)' : undefined
-    };
-
-    MockDatabase.updateTicket(updated);
-    MockDatabase.logAction(
-      'Hoàng Quản Lý',
-      'admin',
-      'Chỉ đạo xử lý báo cáo / sự cố',
-      updated.title,
-      `Mã: ${updated.ticketCode || updated.id} - Phân công: ${targetAssignee.toUpperCase()} - Trạng thái: ${targetStatus}`
-    );
-
-    soundEffects.playSuccessBeep();
-    reloadData();
-    setRespondingTicket(null);
-    alert(`Đã gửi chỉ đạo thành công cho báo cáo "${updated.title}"! Lễ tân và bộ phận liên quan đã nhận được.`);
+    try {
+      await api.support.replyTicket(respondingTicket.id.replace('TCK-', ''), {
+        reply: `[Chỉ đạo BQL -> ${targetAssignee.toUpperCase()}]: ${adminResponseText.trim()}`,
+        status: targetStatus === 'resolved' ? 'RESOLVED' : 'IN_PROGRESS'
+      });
+      soundEffects.playSuccessBeep();
+      reloadData();
+      setRespondingTicket(null);
+      alert(`Đã gửi chỉ đạo thành công cho báo cáo "${respondingTicket.title}"! Lễ tân và bộ phận liên quan đã nhận được trên hệ thống.`);
+    } catch (err: any) {
+      alert(`Lỗi phản hồi ticket: ${err.message}`);
+    }
   };
 
   // Quick Resolve Ticket
-  const handleQuickResolveTicket = (t: SupportTicket) => {
-    const updated: SupportTicket = {
-      ...t,
-      status: 'resolved',
-      resolvedAt: new Date().toISOString(),
-      resolvedBy: 'Hoàng Quản Lý (Admin)'
-    };
-
-    MockDatabase.updateTicket(updated);
-    MockDatabase.logAction(
-      'Hoàng Quản Lý',
-      'admin',
-      'Duyệt hoàn tất báo cáo',
-      t.title,
-      `Mã: ${t.ticketCode || t.id} - BQL đóng ticket trực tiếp`
-    );
-
-    soundEffects.playSuccessBeep();
-    reloadData();
-    alert(`Đã hoàn tất đóng báo cáo ${t.ticketCode || t.title}!`);
+  const handleQuickResolveTicket = async (t: SupportTicket) => {
+    try {
+      await api.support.replyTicket(t.id.replace('TCK-', ''), {
+        reply: 'Ban Quản Lý duyệt và đóng ticket trực tiếp.',
+        status: 'RESOLVED'
+      });
+      soundEffects.playSuccessBeep();
+      reloadData();
+      alert(`Đã hoàn tất đóng báo cáo ${t.ticketCode || t.title}!`);
+    } catch (err: any) {
+      alert(`Lỗi đóng ticket: ${err.message}`);
+    }
   };
 
   // Filtered Tickets
@@ -464,8 +763,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     soundEffects.playSuccessBeep();
                   }}
                   className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${isActive
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-background/60'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-background/60'
                     }`}
                 >
                   {tf.label}
@@ -608,10 +907,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </span>
             }
             className={`transition-all duration-200 group-hover:shadow-md h-full ${openTicketsCount > 0
-                ? 'border-destructive/80 bg-destructive/10 ring-2 ring-destructive/40 group-hover:border-destructive'
-                : activeTab === 'tickets-management'
-                  ? 'ring-2 ring-primary/40 border-primary shadow-xs'
-                  : 'group-hover:border-primary/60'
+              ? 'border-destructive/80 bg-destructive/10 ring-2 ring-destructive/40 group-hover:border-destructive'
+              : activeTab === 'tickets-management'
+                ? 'ring-2 ring-primary/40 border-primary shadow-xs'
+                : 'group-hover:border-primary/60'
               }`}
           />
         </button>
@@ -869,9 +1168,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <TableCell>{m.assignedCoachName || <span className="text-muted-foreground">Chưa gán</span>}</TableCell>
                     <TableCell className="font-semibold text-success">{m.totalCheckIns} lượt</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => setInspectingMember(m)}>
-                        <Eye className="size-4" /> Xem 360°
-                      </Button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button variant="outline" size="sm" onClick={() => handleInspectMember(m)}>
+                          <Eye className="size-4" /> Chi Tiết
+                        </Button>
+                        <Button
+                          variant={m.status === 'active' ? 'ghost' : 'outline'}
+                          size="sm"
+                          className={m.status === 'active' ? 'text-destructive hover:text-destructive' : 'text-success'}
+                          onClick={() => handleToggleMemberStatus(m.id, m.status)}
+                        >
+                          {m.status === 'active' ? 'Khóa' : 'Mở'}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -881,7 +1190,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </Card>
       )}
 
-      {/* Member 360 Modal Dialog */}
+      {/* Member Modal Dialog */}
       <Dialog open={!!inspectingMember} onOpenChange={(open) => { if (!open) setInspectingMember(null); }}>
         <DialogContent className="max-w-2xl">
           {inspectingMember && (
@@ -893,67 +1202,84 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <AvatarFallback>{inspectingMember.name.slice(0, 1)}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <DialogTitle>{inspectingMember.name} (Member 360°)</DialogTitle>
+                    <DialogTitle>Hồ Sơ Hội Viên - {inspectingMember.name}</DialogTitle>
                     <DialogDescription>{inspectingMember.code} • SĐT: {inspectingMember.phone} • CCCD: {inspectingMember.cccd}</DialogDescription>
                   </div>
                 </div>
               </DialogHeader>
 
               <div className="grid gap-4 py-2">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg border bg-muted/40">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Thông tin Gói Tập</div>
-                    <div className="font-semibold text-foreground text-sm">{inspectingMember.packageName}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {inspectingMember.packageStartDate} đến {inspectingMember.packageEndDate}
-                    </div>
-                    {inspectingMember.ptSessionsTotal > 0 && (
-                      <div className="text-xs font-bold text-primary mt-2">
-                        PT cá nhân: {inspectingMember.ptSessionsRemaining}/{inspectingMember.ptSessionsTotal} buổi
-                      </div>
-                    )}
+                {isLoadingMember360 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Loader2 className="size-6 animate-spin mx-auto mb-2 text-primary" />
+                    <div>Đang tải hồ sơ từ máy chủ...</div>
                   </div>
-
-                  <div className="p-4 rounded-lg border bg-muted/40">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Huấn Luyện Viên Phụ Trách</div>
-                    <div className="font-semibold text-foreground text-sm">{inspectingMember.assignedCoachName || 'Chưa gán HLV'}</div>
-                    <p className="text-xs text-muted-foreground mt-1">Học viên có quyền đổi Coach theo chính sách bù trừ chênh lệch.</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => {
-                        soundEffects.playSuccessBeep();
-                        alert(`Đã mở quy trình hỗ trợ đổi Coach cho ${inspectingMember.name}!`);
-                      }}
-                    >
-                      Hỗ Trợ Đổi HLV
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-lg border bg-muted/40">
-                  <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Lịch Sử Tiến Trình InBody</div>
-                  {inspectingMember.inBodyHistory.length > 0 ? (
-                    <div className="grid sm:grid-cols-2 gap-2">
-                      {inspectingMember.inBodyHistory.map(ib => (
-                        <div key={ib.id} className="p-3 rounded-md border bg-card text-xs">
-                          <div className="font-bold text-primary">{ib.date}</div>
-                          <div className="flex justify-between mt-1 text-muted-foreground">
-                            <span>Cân nặng: <strong className="text-foreground">{ib.weightKg}kg</strong></span>
-                            <span>Cơ: <strong className="text-success">{ib.muscleMassKg}kg</strong></span>
-                            <span>Mỡ: <strong className="text-warning">{ib.bodyFatPercent}%</strong></span>
-                          </div>
+                ) : (
+                  <>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="p-4 rounded-lg border bg-muted/40">
+                        <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Thông tin Gói Tập</div>
+                        <div className="font-semibold text-foreground text-sm">
+                          {inspectingMember360?.membershipSubscriptions?.[0]?.package?.name || inspectingMember.packageName}
                         </div>
-                      ))}
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {inspectingMember.packageStartDate} đến {inspectingMember.packageEndDate}
+                        </div>
+                        {(inspectingMember360?.ptSubscriptions?.[0]?.remainingSessions !== undefined || inspectingMember.ptSessionsTotal > 0) && (
+                          <div className="text-xs font-bold text-primary mt-2">
+                            PT cá nhân: {inspectingMember360?.ptSubscriptions?.[0]?.remainingSessions ?? inspectingMember.ptSessionsRemaining} buổi
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-4 rounded-lg border bg-muted/40">
+                        <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Lịch Sử Điểm Danh Gần Nhất</div>
+                        <div className="font-semibold text-foreground text-sm">
+                          {inspectingMember360?.checkInHistory?.length ? `${inspectingMember360.checkInHistory.length} lượt gần đây` : `${inspectingMember.totalCheckIns} lượt`}
+                        </div>
+                        {inspectingMember360?.checkInHistory?.[0] && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Lần cuối: {new Date(inspectingMember360.checkInHistory[0].checkInTime).toLocaleString('vi-VN')}
+                          </div>
+                        )}
+                        <div className="mt-3">
+                          <Button
+                            variant={inspectingMember.status === 'active' ? 'destructive' : 'default'}
+                            size="sm"
+                            onClick={() => {
+                              handleToggleMemberStatus(inspectingMember.id, inspectingMember.status);
+                              setInspectingMember(null);
+                            }}
+                          >
+                            {inspectingMember.status === 'active' ? 'Khóa Tài Khoản Hội Viên' : 'Kích Hoạt Tài Khoản'}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Chưa có lần đo InBody nào được ghi nhận.</p>
-                  )}
-                </div>
+
+                    <div className="p-4 rounded-lg border bg-muted/40">
+                      <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Lịch Sử Buổi Tập & Huấn Luyện</div>
+                      {(inspectingMember360?.trainingHistory?.ptSessions && inspectingMember360.trainingHistory.ptSessions.length > 0) ? (
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          {inspectingMember360.trainingHistory.ptSessions.slice(0, 4).map((pt: any) => (
+                            <div key={pt.id} className="p-3 rounded-md border bg-card text-xs">
+                              <div className="font-bold text-primary">{new Date(pt.startTime).toLocaleDateString('vi-VN')}</div>
+                              <div className="flex justify-between mt-1 text-muted-foreground">
+                                <span>HLV: <strong className="text-foreground">{pt.coach?.fullName || 'HLV'}</strong></span>
+                                <span>Trạng thái: <strong className="text-success">{pt.status}</strong></span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Chưa có lịch sử buổi tập PT nào được ghi nhận.</p>
+                      )}
+                    </div>
+                  </>
+                )}
 
                 <div className="p-4 rounded-lg border bg-muted/40">
-                  <Field label="Phân Quyền Vai Trò (Live Backend API Role)">
+                  <Field label="Phân Quyền Vai Trò">
                     <div className="flex flex-wrap items-center gap-3">
                       <Select defaultValue="MEMBER" onValueChange={(val) => handleChangeUserRole(inspectingMember.id, val as any)}>
                         <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
@@ -964,7 +1290,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <SelectItem value="ADMIN">ADMIN (Ban Quản Lý)</SelectItem>
                         </SelectContent>
                       </Select>
-                      <span className="text-xs text-muted-foreground">Cập nhật quyền tức thời vào database qua REST API</span>
+                      <span className="text-xs text-muted-foreground">Cập nhật quyền tài khoản tức thời</span>
                     </div>
                   </Field>
                 </div>
@@ -1181,6 +1507,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-foreground">{c.name}</span>
                           <Badge variant={rankVariant(c.rank)}>{c.rank.toUpperCase()}</Badge>
+                          <Badge variant={c.isAcceptingBookings ? "success" : "secondary"} className="text-[10px]">
+                            {c.isAcceptingBookings ? "ACTIVE" : "OFF"}
+                          </Badge>
                         </div>
                         <div className="text-xs text-muted-foreground">{c.code} • {c.phone}</div>
                       </div>
@@ -1202,19 +1531,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => {
-                      setEditingCoach(c);
-                      setNewHourlyRate(c.hourlyRateVND);
-                      setNewCommission(c.commissionPercent);
-                      setNewRank(c.rank);
-                    }}
-                  >
-                    <Edit3 className="size-3.5" /> Cấu Hình Giá & Cấp Bậc
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        setEditingCoach(c);
+                        setNewHourlyRate(c.hourlyRateVND);
+                        setNewCommission(c.commissionPercent);
+                        setNewRank(c.rank);
+                      }}
+                    >
+                      <Edit3 className="size-3.5" /> Đơn Giá
+                    </Button>
+                    <Button
+                      variant={c.isAcceptingBookings ? "ghost" : "outline"}
+                      size="sm"
+                      className={c.isAcceptingBookings ? "text-destructive hover:text-destructive" : "text-success"}
+                      onClick={() => handleToggleCoachStatus(c.id, c.isAcceptingBookings)}
+                    >
+                      {c.isAcceptingBookings ? "Tạm Ngưng" : "Kích Hoạt"}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1318,14 +1657,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div key={i}>• {f}</div>
                       ))}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => handleDeletePackage(pkg.id, pkg.name)}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenEditPackage(pkg)}
+                        title="Chỉnh sửa gói tập"
+                      >
+                        <Edit3 className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDeletePackage(pkg.id, pkg.name)}
+                        title="Xóa gói tập"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1339,7 +1689,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <DialogContent className="max-w-lg">
           <form onSubmit={handleSavePackage}>
             <DialogHeader>
-              <DialogTitle>Tạo Gói Tập Mới (Lưu Vào Database)</DialogTitle>
+              <DialogTitle>Tạo Gói Tập Mới</DialogTitle>
               <DialogDescription>Gói tập mới sẽ đồng bộ trực tiếp tới bảng giá của khách hàng và quầy POS.</DialogDescription>
             </DialogHeader>
 
@@ -1408,8 +1758,511 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsCreatingPackage(false)}>Hủy Bỏ</Button>
               <Button type="submit" disabled={packageLoading}>
-                {packageLoading ? 'Đang lưu...' : 'Lưu Gói Vào Database'}
+                {packageLoading ? 'Đang lưu...' : 'Lưu Gói Tập'}
               </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Package Dialog */}
+      <Dialog open={isEditingPackage} onOpenChange={setIsEditingPackage}>
+        <DialogContent className="max-w-lg">
+          <form onSubmit={handleSaveEditPackage}>
+            <DialogHeader>
+              <DialogTitle>Cập Nhật Gói Tập (REST API)</DialogTitle>
+              <DialogDescription>Chỉnh sửa giá tiền, số ngày sử dụng và số buổi kèm PT.</DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-3">
+              <Field label="Tên Gói Tập *">
+                <Input
+                  required
+                  value={editPackageForm.name}
+                  onChange={(e) => setEditPackageForm({ ...editPackageForm, name: e.target.value })}
+                />
+              </Field>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Loại Gói">
+                  <Select value={editPackageForm.type} onValueChange={(v) => setEditPackageForm({ ...editPackageForm, type: v as any })}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MEMBERSHIP">MEMBERSHIP (Thẻ Hội Viên)</SelectItem>
+                      <SelectItem value="PT">PT (Gói Kèm 1:1 Riêng)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field label="Thời Hạn Sử Dụng (Ngày) *">
+                  <Input
+                    type="number"
+                    min="1"
+                    required
+                    value={editPackageForm.durationDays}
+                    onChange={(e) => setEditPackageForm({ ...editPackageForm, durationDays: parseInt(e.target.value) || 30 })}
+                  />
+                </Field>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Giá Bán Niêm Yết (VNĐ) *">
+                  <Input
+                    type="number"
+                    step="50000"
+                    required
+                    value={editPackageForm.price}
+                    onChange={(e) => setEditPackageForm({ ...editPackageForm, price: parseInt(e.target.value) || 0 })}
+                  />
+                </Field>
+
+                <Field label={editPackageForm.type === 'PT' ? 'Tổng Số Buổi PT 1:1 *' : 'Số Buổi PT Tặng Thử'}>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={editPackageForm.type === 'PT' ? editPackageForm.totalPtSessions : editPackageForm.trialPtSessions}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0;
+                      if (editPackageForm.type === 'PT') {
+                        setEditPackageForm({ ...editPackageForm, totalPtSessions: val });
+                      } else {
+                        setEditPackageForm({ ...editPackageForm, trialPtSessions: val });
+                      }
+                    }}
+                  />
+                </Field>
+              </div>
+
+              <Field label="Mô Tả Gói">
+                <Textarea
+                  rows={3}
+                  value={editPackageForm.description}
+                  onChange={(e) => setEditPackageForm({ ...editPackageForm, description: e.target.value })}
+                />
+              </Field>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsEditingPackage(false)}>Hủy Bỏ</Button>
+              <Button type="submit" disabled={packageLoading}>
+                {packageLoading ? 'Đang lưu...' : 'Lưu Cập Nhật'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* TAB: Facilities & Equipments Management */}
+      {activeTab === 'facilities' && (
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center flex-wrap gap-4">
+                <div>
+                  <CardTitle>Quản Lý Cơ Sở Vật Chất & Thiết Bị Phòng Tập</CardTitle>
+                  <CardDescription>Theo dõi danh sách phòng tập chức năng, tình trạng máy tập và quản lý bảo trì</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => setIsCreatingRoom(true)}>
+                    <Plus className="size-4" /> Thêm Phòng Mới
+                  </Button>
+                  <Button onClick={() => setIsCreatingEquipment(true)}>
+                    <Plus className="size-4" /> Thêm Thiết Bị
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {rooms.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground border border-dashed rounded-lg">
+                  <Wrench className="size-10 mx-auto text-primary mb-2 opacity-60" />
+                  <p className="font-semibold text-foreground">Chưa có dữ liệu phòng tập trong cơ sở dữ liệu</p>
+                  <p className="text-xs mt-1">Bấm nút "Thêm Phòng Mới" để thiết lập không gian tập luyện đầu tiên.</p>
+                </div>
+              ) : (
+                <div className="grid gap-6">
+                  {rooms.map(room => (
+                    <div key={room.id} className="p-4 rounded-lg border bg-card">
+                      <div className="flex justify-between items-center mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
+                            #{room.id}
+                          </div>
+                          <div>
+                            <div className="font-bold text-foreground text-base">{room.name}</div>
+                            <div className="text-xs text-muted-foreground">Loại: {room.type} • Sức chứa: {room.capacity} người</div>
+                          </div>
+                        </div>
+                        <Badge variant={room.isActive !== false ? "success" : "secondary"}>
+                          {room.isActive !== false ? "ĐANG HOẠT ĐỘNG" : "TẠM NGƯNG"}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t">
+                        <div className="text-xs font-bold text-muted-foreground uppercase mb-2">
+                          Danh Sách Thiết Bị ({room.equipments?.length || 0})
+                        </div>
+                        {!room.equipments || room.equipments.length === 0 ? (
+                          <div className="text-xs text-muted-foreground italic py-2">
+                            Chưa có thiết bị nào trong phòng này. Bấm "Thêm Thiết Bị" để bổ sung máy tập.
+                          </div>
+                        ) : (
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {room.equipments.map(eq => {
+                              const isAvailable = eq.status === 'AVAILABLE';
+                              const isMaint = eq.status === 'MAINTENANCE';
+                              return (
+                                <div key={eq.id} className="p-3 rounded-md border bg-muted/30 flex flex-col justify-between text-xs">
+                                  <div>
+                                    <div className="flex justify-between items-start mb-1">
+                                      <strong className="text-foreground">{eq.name}</strong>
+                                      <Badge variant={isAvailable ? "success" : isMaint ? "warning" : "destructive"}>
+                                        {eq.status}
+                                      </Badge>
+                                    </div>
+                                    <div className="text-muted-foreground text-[11px] mb-1">Mã: {eq.code}</div>
+                                    {eq.note && <div className="text-muted-foreground text-[11px] italic">Ghi chú: {eq.note}</div>}
+                                  </div>
+
+                                  <div className="flex justify-between items-center mt-3 pt-2 border-t border-border/50">
+                                    <Select
+                                      defaultValue={eq.status}
+                                      onValueChange={(val) => handleUpdateEquipmentStatus(eq.id, val as any)}
+                                    >
+                                      <SelectTrigger className="h-7 text-[11px] w-28">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="AVAILABLE">AVAILABLE</SelectItem>
+                                        <SelectItem value="MAINTENANCE">BẢO TRÌ</SelectItem>
+                                        <SelectItem value="BROKEN">HỎNG HÓC</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 px-2 text-destructive hover:text-destructive"
+                                      onClick={() => handleDeleteEquipment(eq.id)}
+                                      title="Xóa thiết bị"
+                                    >
+                                      <Trash2 className="size-3.5" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* TAB: Group Classes & Schedules Management */}
+      {activeTab === 'group-classes' && (
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center flex-wrap gap-4">
+                <div>
+                  <CardTitle>Quản Lý Lớp Học Nhóm & Lên Lịch Ca Tập</CardTitle>
+                  <CardDescription>Tạo danh mục lớp học nhóm và lên thời khóa biểu theo phòng tập & HLV</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => setIsCreatingClass(true)}>
+                    <Plus className="size-4" /> Tạo Lớp Học Mới
+                  </Button>
+                  <Button onClick={() => setIsCreatingSchedule(true)}>
+                    <Plus className="size-4" /> Mở Ca Lịch Tập
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {groupClassSchedules.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground border border-dashed rounded-lg">
+                  <Layers className="size-10 mx-auto text-primary mb-2 opacity-60" />
+                  <p className="font-semibold text-foreground">Chưa có lịch ca tập nào trong hệ thống</p>
+                  <p className="text-xs mt-1">Bấm nút "Tạo Lớp Học Mới" hoặc "Mở Ca Lịch Tập" để bắt đầu thiết lập.</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tên Lớp Học</TableHead>
+                      <TableHead>HLV Phụ Trách</TableHead>
+                      <TableHead>Phòng Tập</TableHead>
+                      <TableHead>Khung Giờ</TableHead>
+                      <TableHead>Chỗ Đã Đặt</TableHead>
+                      <TableHead>Trạng Thái</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groupClassSchedules.map(sch => {
+                      const startTimeStr = new Date(sch.startTime).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+                      const endTimeStr = new Date(sch.endTime).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <TableRow key={sch.id}>
+                          <TableCell className="font-bold text-foreground">
+                            {sch.groupClass?.name || `Lớp #${sch.classId}`}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Avatar className="size-7">
+                                <AvatarImage src={sch.trainer?.avatar || undefined} />
+                                <AvatarFallback>{sch.trainer?.fullName?.slice(0, 1) || 'C'}</AvatarFallback>
+                              </Avatar>
+                              <span className="font-medium text-xs">{sch.trainer?.fullName || 'Coach'}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{sch.room?.name || 'Phòng Chung'}</TableCell>
+                          <TableCell className="font-mono text-xs">{startTimeStr} - {endTimeStr}</TableCell>
+                          <TableCell>
+                            <span className="font-bold text-primary">{sch.bookedCount || 0}</span> / {sch.capacity}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={sch.status === 'OPEN' ? 'success' : 'secondary'}>
+                              {sch.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Create Room Dialog */}
+      <Dialog open={isCreatingRoom} onOpenChange={setIsCreatingRoom}>
+        <DialogContent className="max-w-md">
+          <form onSubmit={handleSaveRoom}>
+            <DialogHeader>
+              <DialogTitle>Thêm Phòng Tập Mới</DialogTitle>
+              <DialogDescription>Tạo phòng tập mới vào hệ thống cơ sở vật chất AURA Fitness.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-3">
+              <Field label="Tên Phòng *">
+                <Input
+                  required
+                  placeholder="VD: Phòng Gym Khu Tạ Rogue"
+                  value={roomForm.name}
+                  onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })}
+                />
+              </Field>
+              <Field label="Loại Không Gian">
+                <Select value={roomForm.type} onValueChange={(v) => setRoomForm({ ...roomForm, type: v })}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FITNESS">FITNESS / GYM (Tạ & Máy)</SelectItem>
+                    <SelectItem value="YOGA">YOGA & PILATES</SelectItem>
+                    <SelectItem value="CYCLING">CYCLING (Đạp Xe Trong Nhà)</SelectItem>
+                    <SelectItem value="BOXING">BOXING & MARTIAL ARTS</SelectItem>
+                    <SelectItem value="SAUNA">SAUNA & SPA</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Sức Chứa Tối Đa (Người) *">
+                <Input
+                  type="number"
+                  min="1"
+                  required
+                  value={roomForm.capacity}
+                  onChange={(e) => setRoomForm({ ...roomForm, capacity: parseInt(e.target.value) || 20 })}
+                />
+              </Field>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreatingRoom(false)}>Hủy Bỏ</Button>
+              <Button type="submit">Lưu Phòng Tập</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Equipment Dialog */}
+      <Dialog open={isCreatingEquipment} onOpenChange={setIsCreatingEquipment}>
+        <DialogContent className="max-w-md">
+          <form onSubmit={handleSaveEquipment}>
+            <DialogHeader>
+              <DialogTitle>Thêm Thiết Bị Vào Phòng Tập</DialogTitle>
+              <DialogDescription>Ghi nhận máy tập mới hoặc tạ đơn vào danh mục quản lý.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-3">
+              <Field label="Tên Thiết Bị *">
+                <Input
+                  required
+                  placeholder="VD: Máy Kéo Cáp Đôi Technogym"
+                  value={equipmentForm.name}
+                  onChange={(e) => setEquipmentForm({ ...equipmentForm, name: e.target.value })}
+                />
+              </Field>
+              <Field label="Mã Định Danh (Code) *">
+                <Input
+                  required
+                  placeholder="VD: EQ-CABLE-01"
+                  value={equipmentForm.code}
+                  onChange={(e) => setEquipmentForm({ ...equipmentForm, code: e.target.value })}
+                />
+              </Field>
+              <Field label="Phòng Đặt Máy *">
+                <Select
+                  value={equipmentForm.roomId ? String(equipmentForm.roomId) : (rooms[0] ? String(rooms[0].id) : '1')}
+                  onValueChange={(v) => setEquipmentForm({ ...equipmentForm, roomId: parseInt(v) })}
+                >
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {rooms.map(r => (
+                      <SelectItem key={r.id} value={String(r.id)}>{r.name} (#{r.id})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Ghi Chú Kỹ Thuật">
+                <Input
+                  placeholder="VD: Trọng lượng tạ tối đa 120kg, bảo trì định kỳ 6 tháng"
+                  value={equipmentForm.note}
+                  onChange={(e) => setEquipmentForm({ ...equipmentForm, note: e.target.value })}
+                />
+              </Field>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreatingEquipment(false)}>Hủy Bỏ</Button>
+              <Button type="submit">Thêm Thiết Bị</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Class Dialog */}
+      <Dialog open={isCreatingClass} onOpenChange={setIsCreatingClass}>
+        <DialogContent className="max-w-md">
+          <form onSubmit={handleSaveClass}>
+            <DialogHeader>
+              <DialogTitle>Tạo Danh Mục Lớp Học Mới</DialogTitle>
+              <DialogDescription>Định nghĩa tên lớp, thời lượng và mô tả nội dung buổi tập.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-3">
+              <Field label="Tên Lớp Học *">
+                <Input
+                  required
+                  placeholder="VD: HIIT Burn Fat 45', Power Yoga"
+                  value={classForm.name}
+                  onChange={(e) => setClassForm({ ...classForm, name: e.target.value })}
+                />
+              </Field>
+              <Field label="Thời Lượng (Phút) *">
+                <Input
+                  type="number"
+                  min="15"
+                  max="180"
+                  required
+                  value={classForm.durationMin}
+                  onChange={(e) => setClassForm({ ...classForm, durationMin: parseInt(e.target.value) || 60 })}
+                />
+              </Field>
+              <Field label="Mô Tả Lớp">
+                <Textarea
+                  rows={2}
+                  placeholder="Mô tả nội dung bài tập và đối tượng phù hợp..."
+                  value={classForm.description}
+                  onChange={(e) => setClassForm({ ...classForm, description: e.target.value })}
+                />
+              </Field>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreatingClass(false)}>Hủy Bỏ</Button>
+              <Button type="submit">Lưu Lớp Học</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Schedule Dialog */}
+      <Dialog open={isCreatingSchedule} onOpenChange={setIsCreatingSchedule}>
+        <DialogContent className="max-w-md">
+          <form onSubmit={handleSaveSchedule}>
+            <DialogHeader>
+              <DialogTitle>Mở Lịch Ca Tập Lớp Học Nhóm</DialogTitle>
+              <DialogDescription>Lên lịch cho lớp học và phân công Huấn luyện viên phụ trách.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-3">
+              <Field label="Mã Lớp Học (Class ID) *">
+                <Input
+                  type="number"
+                  min="1"
+                  required
+                  value={scheduleForm.classId}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, classId: parseInt(e.target.value) || 1 })}
+                />
+              </Field>
+              <Field label="Huấn Luyện Viên Phụ Trách *">
+                <Select
+                  value={String(scheduleForm.trainerId)}
+                  onValueChange={(v) => setScheduleForm({ ...scheduleForm, trainerId: parseInt(v) })}
+                >
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {coaches.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name} ({c.code})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Phòng Tập">
+                <Select
+                  value={scheduleForm.roomId ? String(scheduleForm.roomId) : (rooms[0] ? String(rooms[0].id) : '1')}
+                  onValueChange={(v) => setScheduleForm({ ...scheduleForm, roomId: parseInt(v) })}
+                >
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {rooms.map(r => (
+                      <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Giờ Bắt Đầu *">
+                  <Input
+                    type="datetime-local"
+                    required
+                    value={scheduleForm.startTime}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, startTime: e.target.value })}
+                  />
+                </Field>
+                <Field label="Giờ Kết Thúc *">
+                  <Input
+                    type="datetime-local"
+                    required
+                    value={scheduleForm.endTime}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, endTime: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <Field label="Sức Chứa Giới Hạn (Chỗ Ngồi) *">
+                <Input
+                  type="number"
+                  min="5"
+                  max="100"
+                  required
+                  value={scheduleForm.capacity}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, capacity: parseInt(e.target.value) || 20 })}
+                />
+              </Field>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreatingSchedule(false)}>Hủy Bỏ</Button>
+              <Button type="submit">Lên Lịch Ngay</Button>
             </DialogFooter>
           </form>
         </DialogContent>

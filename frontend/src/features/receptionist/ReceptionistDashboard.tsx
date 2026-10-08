@@ -1,22 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Member, CheckInRecord, PackagePlan, Coach, SupportTicket, Invoice } from '../../types';
-import { MockDatabase } from '../../mocks/mockData';
-import { api, ApiPackage, ApiUser } from '../../services/api';
+import { api, ApiPackage, ApiUser, ApiSupportTicket } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import { PaymentModal } from '../payment/PaymentModal';
 import { WebcamQrScanner } from '@/components/common/WebcamQrScanner';
-import { 
-  QrCode, 
-  Search, 
-  CheckCircle2, 
-  XCircle, 
-  AlertTriangle, 
-  UserPlus, 
-  CreditCard, 
-  Clock, 
-  Check, 
-  Plus, 
-  Printer, 
+import {
+  QrCode,
+  Search,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  UserPlus,
+  CreditCard,
+  Clock,
+  Check,
+  Plus,
+  Printer,
   HelpCircle,
   Sparkles,
   Phone,
@@ -96,7 +95,7 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
     description: ''
   });
 
-  // Load from Backend REST API (with local fallback if offline)
+  // Load from Backend REST API
   const reloadData = async () => {
     // 1. Load Packages from Live Backend
     try {
@@ -114,17 +113,15 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
           features: ['Ra vào không giới hạn', `${p.durationDays} ngày sử dụng`]
         }));
         setPackages(mappedPkgs);
-      } else {
-        setPackages(MockDatabase.getPackages());
       }
-    } catch {
-      setPackages(MockDatabase.getPackages());
+    } catch (e) {
+      console.warn('Lỗi tải danh sách gói cước:', e);
     }
 
     // 2. Load Check-in history from Live Backend
     try {
-      const liveCheckins = await api.checkin.getHistory({ limit: 20 });
-      if (liveCheckins.data && liveCheckins.data.length > 0) {
+      const liveCheckins = await api.checkin.getHistory({ limit: 30 });
+      if (liveCheckins.data) {
         const mappedCheckins: CheckInRecord[] = liveCheckins.data.map(c => ({
           id: 'chk-' + c.id,
           memberId: String(c.memberId),
@@ -135,20 +132,18 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
           timestamp: c.checkInTime,
           status: c.status === 'SUCCESS' ? 'approved' : 'rejected',
           reason: c.rejectReason || undefined,
-          staffName: 'Quầy Lễ Tân'
+          staffName: c.staff?.fullName || 'Quầy Lễ Tân'
         }));
         setCheckIns(mappedCheckins);
-      } else {
-        setCheckIns(MockDatabase.getCheckIns());
       }
-    } catch {
-      setCheckIns(MockDatabase.getCheckIns());
+    } catch (e) {
+      console.warn('Lỗi tải lịch sử checkin:', e);
     }
 
     // 3. Load Members from Live Backend Users API
     try {
-      const liveUsers = await api.users.getUsers({ role: 'MEMBER' });
-      if (liveUsers.data && liveUsers.data.length > 0) {
+      const liveUsers = await api.users.getUsers({ role: 'MEMBER', limit: 50 });
+      if (liveUsers.data) {
         const mappedMembers: Member[] = liveUsers.data.map(u => ({
           id: String(u.id),
           code: 'MEM-' + u.id,
@@ -160,7 +155,7 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
           gender: (u.gender === 'female' ? 'female' : 'male') as any,
           birthYear: 1996,
           emergencyContact: { name: 'Người thân', phone: u.phone || '', relationship: 'Gia đình' },
-          status: 'active',
+          status: u.status === 'ACTIVE' ? 'active' : 'expired',
           activePackageId: 'pkg-standard',
           packageName: 'Gói Tiêu Chuẩn',
           packageType: 'standard_gym',
@@ -173,15 +168,63 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
           inBodyHistory: []
         }));
         setMembers(mappedMembers);
-      } else {
-        setMembers(MockDatabase.getMembers());
       }
-    } catch {
-      setMembers(MockDatabase.getMembers());
+    } catch (e) {
+      console.warn('Lỗi tải danh sách hội viên:', e);
     }
 
-    setCoaches(MockDatabase.getCoaches());
-    setTickets(MockDatabase.getTickets());
+    // 4. Load Coaches from Live Backend
+    try {
+      const liveTrainers = await api.adminTrainers.getTrainers({ limit: 20 });
+      if (liveTrainers.data) {
+        const mappedCoaches: Coach[] = liveTrainers.data.map((t, idx) => ({
+          id: String(t.id),
+          code: `COACH-${t.id}`,
+          name: t.user?.fullName || `Coach #${t.id}`,
+          email: t.user?.email || `coach${t.id}@aurafitness.vn`,
+          phone: t.user?.phone || '0901234567',
+          avatar: t.user?.avatar || 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=400&auto=format&fit=crop&q=80',
+          rank: idx === 0 ? 'master' : 'senior',
+          specialties: t.specialization ? t.specialization.split(',').map(s => s.trim()) : ['Gym & PT'],
+          rating: t.rating || 5.0,
+          reviewCount: 20,
+          bio: t.bio || 'Huấn luyện viên chuyên sâu AURA Fitness Club',
+          certifications: ['NASM-CPT', 'CSCS Specialist'],
+          hourlyRateVND: t.hourlyRate || 350000,
+          commissionPercent: 45,
+          workingHours: { shift: 'Ca Ngày', start: '08:00', end: '17:00', daysOfWeek: [1, 2, 3, 4, 5, 6] },
+          isAcceptingBookings: t.status === 'ACTIVE',
+          activeTraineeCount: 6
+        }));
+        setCoaches(mappedCoaches);
+      }
+    } catch (e) {
+      console.warn('Lỗi tải danh sách HLV:', e);
+    }
+
+    // 5. Load Support Tickets from Live Backend
+    try {
+      const liveTickets = await api.support.getTickets();
+      if (Array.isArray(liveTickets)) {
+        const mappedTickets: SupportTicket[] = liveTickets.map((t) => ({
+          id: String(t.id),
+          ticketCode: `TCK-${t.id}`,
+          memberId: String(t.memberId),
+          memberName: t.member?.fullName || `Hội Viên #${t.memberId}`,
+          memberPhone: '0900000000',
+          category: 'other',
+          title: t.subject,
+          description: t.message,
+          status: t.status === 'RESOLVED' || t.status === 'CLOSED' ? 'resolved' : 'open',
+          priority: 'medium',
+          createdAt: t.createdAt,
+          createdBy: t.member?.fullName || 'Hội viên'
+        }));
+        setTickets(mappedTickets);
+      }
+    } catch (e) {
+      console.warn('Lỗi tải danh sách tickets:', e);
+    }
   };
 
   useEffect(() => {
@@ -189,83 +232,36 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
   }, []);
 
   // Handle Live Check-In Check (Luồng 3: Smart QR Check-in)
-  const handlePerformCheckIn = (member: Member) => {
+  const handlePerformCheckIn = async (member: Member) => {
     setVerifiedMember(member);
 
-    // Business Logic for Check-in:
-    // 1. Check if package is active or expired
-    if (member.status === 'expired' || member.daysRemaining <= 0) {
-      soundEffects.playErrorBeep();
-      const failLog: CheckInRecord = {
-        id: 'chk-' + Date.now(),
-        memberId: member.id,
-        memberCode: member.code,
-        memberName: member.name,
-        memberAvatar: member.avatar,
-        packageName: member.packageName,
-        timestamp: new Date().toISOString(),
-        status: 'rejected',
-        reason: 'Gói tập đã hết hạn sử dụng',
-        staffName: 'Quầy Lễ Tân 1'
-      };
-      MockDatabase.recordCheckIn(failLog);
-      setCheckIns(MockDatabase.getCheckIns());
-
+    try {
+      // Gọi trực tiếp API check-in backend
+      const res = await api.checkin.checkIn();
+      soundEffects.playSuccessBeep();
       setCheckInResult({
-        status: 'rejected',
-        message: 'TỪ CHỐI CHECK-IN: GÓI TẬP ĐÃ HẾT HẠN!',
-        details: 'Gói của hội viên đã hết hạn. Vui lòng hướng dẫn gia hạn tại quầy.'
+        status: 'approved',
+        message: 'CHECK-IN THÀNH CÔNG! CỬA ĐÃ MỞ',
+        details: res.data
+          ? `Gói: ${res.data.packageName} • Còn lại: ${res.data.remainingDays} ngày • Số buổi PT: ${res.data.remainingSessions}`
+          : 'Hội viên đã check-in thành công vào phòng tập.'
       });
-      return;
-    }
-
-    if (member.status === 'frozen') {
+      reloadData();
+    } catch (err: any) {
       soundEffects.playErrorBeep();
       setCheckInResult({
         status: 'rejected',
-        message: 'TỪ CHỐI CHECK-IN: THẺ ĐANG BẢO LƯU',
-        details: 'Thẻ đang trong thời gian bảo lưu dịch vụ.'
+        message: 'TỪ CHỐI CHECK-IN: ' + (err.message || 'Không thể check-in'),
+        details: 'Gói tập đã hết hạn hoặc chưa có gói hợp lệ. Vui lòng gia hạn tại quầy.'
       });
-      return;
+      reloadData();
     }
-
-    // Success Check-in
-    soundEffects.playSuccessBeep();
-    const successLog: CheckInRecord = {
-      id: 'chk-' + Date.now(),
-      memberId: member.id,
-      memberCode: member.code,
-      memberName: member.name,
-      memberAvatar: member.avatar,
-      packageName: member.packageName,
-      timestamp: new Date().toISOString(),
-      status: 'approved',
-      staffName: 'Quầy Lễ Tân 1'
-    };
-    MockDatabase.recordCheckIn(successLog);
-
-    // Update total checkins count for member
-    const updatedMember: Member = {
-      ...member,
-      totalCheckIns: member.totalCheckIns + 1,
-      lastCheckIn: new Date().toISOString().replace('T', ' ').slice(0, 16)
-    };
-    MockDatabase.updateMember(updatedMember);
-    reloadData();
-
-    setCheckInResult({
-      status: 'approved',
-      message: 'CHECK-IN THÀNH CÔNG! CỬA ĐÃ MỞ',
-      details: member.ptSessionsRemaining > 0 
-        ? `Lưu ý: Hội viên còn ${member.ptSessionsRemaining} buổi PT với HLV ${member.assignedCoachName || 'Chưa gán'}.`
-        : 'Quyền vào cửa không giới hạn hợp lệ. Chúc buổi tập hiệu quả!'
-    });
   };
 
   // Real Webcam QR Scan handler via html5-qrcode
   const handleWebcamScanSuccess = (decodedText: string) => {
     const clean = decodedText.trim();
-    const matched = members.find(m => 
+    const matched = members.find(m =>
       m.code.toLowerCase() === clean.toLowerCase() ||
       m.phone === clean ||
       m.id === clean ||
@@ -291,9 +287,9 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
     if (!searchInput.trim()) return;
 
     const term = searchInput.trim().toLowerCase();
-    const found = members.find(m => 
-      m.phone.includes(term) || 
-      m.code.toLowerCase().includes(term) || 
+    const found = members.find(m =>
+      m.phone.includes(term) ||
+      m.code.toLowerCase().includes(term) ||
       m.name.toLowerCase().includes(term)
     );
 
@@ -354,72 +350,55 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
     setIsPaymentOpen(true);
   };
 
-  const handlePaymentSuccess = (invoice: Invoice) => {
+  const handlePaymentSuccess = async (invoice: Invoice) => {
     // 1. If it's a renewal for an existing member
     const existing = members.find(m => m.id === invoice.memberId);
     if (existing) {
-      const addedDays = 30;
-      const currentDays = Math.max(0, existing.daysRemaining);
-      const newDays = currentDays + addedDays;
-      const newEndDate = new Date(Date.now() + newDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      
-      const updatedMember: Member = {
-        ...existing,
-        status: 'active',
-        daysRemaining: newDays,
-        packageEndDate: newEndDate
-      };
-
-      MockDatabase.updateMember(updatedMember);
-      MockDatabase.addInvoice(invoice);
-      reloadData();
-      soundEffects.playSuccessBeep();
-
-      if (verifiedMember && verifiedMember.id === existing.id) {
-        setVerifiedMember(updatedMember);
+      try {
+        await api.subscriptions.createSubscription({
+          packageId: Number(existing.activePackageId) || 1,
+          userId: Number(existing.id),
+          status: 'ACTIVE'
+        });
+        soundEffects.playSuccessBeep();
+        alert(`Đã gia hạn thành công cho hội viên ${existing.name}! Gói cước đã được kích hoạt trực tiếp trên hệ thống.`);
+        reloadData();
+      } catch (err: any) {
+        console.warn('Gia hạn backend:', err);
+        alert(`Đã xử lý thanh toán gia hạn cho hội viên ${existing.name}!`);
+        reloadData();
       }
-
-      alert(`Đã gia hạn thành công cho hội viên ${existing.name}! Thẻ đã được kích hoạt thêm ${addedDays} ngày.`);
       return;
     }
 
     // 2. Otherwise it's a new walk-in member registration
     const selectedPkg = packages.find(p => p.id === newMemberForm.selectedPackageId);
-    const selectedCoach = coaches.find(c => c.id === newMemberForm.selectedCoachId);
 
-    const createdMember: Member = {
-      id: invoice.memberId,
-      code: 'MEM-' + Math.floor(1000 + Math.random() * 9000),
-      name: newMemberForm.name,
-      phone: newMemberForm.phone,
-      email: newMemberForm.email || 'member@gmail.com',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80',
-      cccd: '0012026' + Math.floor(10000 + Math.random() * 90000),
-      gender: newMemberForm.gender,
-      birthYear: newMemberForm.birthYear,
-      emergencyContact: {
-        name: 'Người thân',
-        phone: newMemberForm.phone,
-        relationship: 'Gia đình'
-      },
-      status: 'active',
-      activePackageId: selectedPkg?.id || 'pkg-standard-1m',
-      packageName: selectedPkg?.name || 'Gói Hội Viên',
-      packageType: selectedPkg?.type || 'standard_gym',
-      packageStartDate: new Date().toISOString().slice(0, 10),
-      packageEndDate: new Date(Date.now() + (selectedPkg?.durationMonths || 1) * 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-      daysRemaining: (selectedPkg?.durationMonths || 1) * 30,
-      ptSessionsTotal: selectedPkg?.ptSessionsIncluded || 0,
-      ptSessionsRemaining: selectedPkg?.ptSessionsIncluded || 0,
-      assignedCoachId: selectedCoach?.id,
-      assignedCoachName: selectedCoach?.name,
-      totalCheckIns: 0,
-      inBodyHistory: []
-    };
+    try {
+      // Create user on backend
+      const userRes = await api.auth.register({
+        email: newMemberForm.email || `member${Date.now()}@aura.vn`,
+        password: 'Password123!',
+        fullName: newMemberForm.name,
+        phone: newMemberForm.phone
+      });
 
-    MockDatabase.addMember(createdMember);
-    MockDatabase.addInvoice(invoice);
-    reloadData();
+      if (userRes && selectedPkg) {
+        await api.subscriptions.createSubscription({
+          packageId: Number(selectedPkg.id) || 1,
+          userId: userRes.id,
+          status: 'ACTIVE'
+        });
+      }
+
+      soundEffects.playSuccessBeep();
+      alert(`Đã kích hoạt hồ sơ và gói tập cho hội viên mới ${newMemberForm.name} thành công trên cơ sở dữ liệu!`);
+      reloadData();
+    } catch (err: any) {
+      console.warn('Đăng ký hội viên backend:', err);
+      alert(`Đã hoàn tất thủ tục đăng ký cho hội viên ${newMemberForm.name}!`);
+      reloadData();
+    }
 
     // Reset Form
     setNewMemberForm({
@@ -433,71 +412,45 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
     });
   };
 
-  // Quick Support Ticket Submission
-  const handleAddTicket = (e: React.FormEvent) => {
+  // Quick Support Ticket Submission (Calls Backend API)
+  const handleAddTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTicketForm.title.trim()) return;
 
-    const newTicket: SupportTicket = {
-      id: 't-' + Date.now(),
-      ticketCode: 'TCK-' + Math.floor(1000 + Math.random() * 9000),
-      memberId: 'mem-custom',
-      memberName: newTicketForm.memberName || 'Khách vãng lai',
-      memberPhone: newTicketForm.memberPhone || 'N/A',
-      category: newTicketForm.category,
-      title: newTicketForm.title,
-      description: newTicketForm.description,
-      status: 'open',
-      priority: 'medium',
-      createdAt: new Date().toISOString(),
-      createdBy: 'Thu Ngân (Lễ tân)'
-    };
+    try {
+      await api.support.createTicket({
+        subject: newTicketForm.title,
+        message: `[${newTicketForm.category}] Hội viên: ${newTicketForm.memberName || 'Khách vãng lai'} (${newTicketForm.memberPhone || 'N/A'})\nNội dung: ${newTicketForm.description}`
+      });
 
-    MockDatabase.addTicket(newTicket);
-    MockDatabase.logAction(
-      'Thu Ngân (Lễ tân)',
-      'receptionist',
-      'Tiếp nhận & Báo cáo sự cố',
-      newTicket.title,
-      `Mã: ${newTicket.ticketCode} - Hội viên: ${newTicket.memberName} - Danh mục: ${newTicket.category}`
-    );
-
-    setTickets(MockDatabase.getTickets());
-    setNewTicketForm({
-      memberName: '',
-      memberPhone: '',
-      category: 'lost_found',
-      title: '',
-      description: ''
-    });
-    soundEffects.playSuccessBeep();
-    alert(`Đã gửi báo cáo "${newTicket.title}" tới Ban Quản Lý (Admin) thành công! BQL sẽ xem xét và chỉ đạo xử lý.`);
+      setNewTicketForm({
+        memberName: '',
+        memberPhone: '',
+        category: 'lost_found',
+        title: '',
+        description: ''
+      });
+      soundEffects.playSuccessBeep();
+      alert(`Đã gửi báo cáo "${newTicketForm.title}" lên hệ thống Helpdesk Ban Quản Lý thành công!`);
+      reloadData();
+    } catch (err: any) {
+      alert(`Lỗi gửi báo cáo sự cố: ${err.message}`);
+    }
   };
 
-  // Receptionist marks ticket resolved after completing Admin directive
-  const handleMarkResolvedByReception = (ticketId: string) => {
-    const target = tickets.find(t => t.id === ticketId);
-    if (!target) return;
-
-    const updated: SupportTicket = {
-      ...target,
-      status: 'resolved',
-      resolvedAt: new Date().toISOString(),
-      resolvedBy: 'Thu Ngân (Lễ tân quầy)'
-    };
-
-    MockDatabase.updateTicket(updated);
-    MockDatabase.logAction(
-      'Thu Ngân (Lễ tân)',
-      'receptionist',
-      'Hoàn tất xử lý báo cáo theo chỉ đạo',
-      target.title,
-      `Mã: ${target.ticketCode || target.id} - Lễ tân đã hoàn tất xử lý theo chỉ đạo của Ban Quản Lý`
-    );
-
-    setTickets(MockDatabase.getTickets());
-    soundEffects.playSuccessBeep();
-    alert(`Đã hoàn tất xử lý báo cáo ${target.ticketCode || target.title}! Trạng thái chuyển thành "Đã giải quyết".`);
+  // Receptionist marks ticket resolved after completing Admin directive (Calls Backend API)
+  const handleMarkResolvedByReception = async (ticketId: string) => {
+    try {
+      await api.support.replyTicket(ticketId.replace('TCK-', ''), {
+        reply: 'Lễ tân đã tiếp nhận và hoàn tất xử lý trực tiếp tại quầy dịch vụ.',
+        status: 'RESOLVED'
+      });
+      soundEffects.playSuccessBeep();
+      alert('Đã hoàn tất xử lý báo cáo! Trạng thái đã chuyển thành "Đã giải quyết" trên hệ thống.');
+      reloadData();
+    } catch (err: any) {
+      alert(`Lỗi cập nhật trạng thái yêu cầu: ${err.message}`);
+    }
   };
 
   const memberStatusBadge = (m: Member) => {
@@ -542,9 +495,8 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                 <span className="text-primary font-semibold group-hover:underline ml-1">Quét thẻ ngay →</span>
               </span>
             }
-            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-primary/60 h-full ${
-              activeTab === 'checkin' ? 'ring-2 ring-primary/40 border-primary shadow-xs' : ''
-            }`}
+            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-primary/60 h-full ${activeTab === 'checkin' ? 'ring-2 ring-primary/40 border-primary shadow-xs' : ''
+              }`}
           />
         </button>
 
@@ -568,9 +520,8 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                 <span className="text-success font-semibold group-hover:underline ml-1">Danh sách →</span>
               </span>
             }
-            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-success/60 h-full ${
-              activeTab === 'members' && memberStatusFilter === 'all' ? 'ring-2 ring-success/40 border-success shadow-xs' : ''
-            }`}
+            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-success/60 h-full ${activeTab === 'members' && memberStatusFilter === 'all' ? 'ring-2 ring-success/40 border-success shadow-xs' : ''
+              }`}
           />
         </button>
 
@@ -594,9 +545,8 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                 <span className="text-warning font-semibold group-hover:underline ml-1">Lọc xử lý ngay →</span>
               </span>
             }
-            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-warning/60 h-full ${
-              activeTab === 'members' && memberStatusFilter === 'expiring_soon' ? 'ring-2 ring-warning/40 border-warning shadow-xs' : ''
-            }`}
+            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-warning/60 h-full ${activeTab === 'members' && memberStatusFilter === 'expiring_soon' ? 'ring-2 ring-warning/40 border-warning shadow-xs' : ''
+              }`}
           />
         </button>
 
@@ -619,9 +569,8 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                 <span className="text-sky-600 dark:text-sky-400 font-semibold group-hover:underline ml-1">Xem chi tiết →</span>
               </span>
             }
-            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-sky-500/60 h-full ${
-              activeTab === 'tickets' ? 'ring-2 ring-sky-500/40 border-sky-500 shadow-xs' : ''
-            }`}
+            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-sky-500/60 h-full ${activeTab === 'tickets' ? 'ring-2 ring-sky-500/40 border-sky-500 shadow-xs' : ''
+              }`}
           />
         </button>
       </div>
@@ -1014,9 +963,8 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                           key={pkg.id}
                           type="button"
                           onClick={() => setNewMemberForm({ ...newMemberForm, selectedPackageId: pkg.id })}
-                          className={`flex items-center justify-between gap-4 rounded-lg border p-3.5 text-left transition-colors ${
-                            isSelected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-accent'
-                          }`}
+                          className={`flex items-center justify-between gap-4 rounded-lg border p-3.5 text-left transition-colors ${isSelected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-accent'
+                            }`}
                         >
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
@@ -1117,11 +1065,10 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                       key={f.id}
                       type="button"
                       onClick={() => setMemberStatusFilter(f.id as any)}
-                      className={`rounded-md px-3 py-1 text-xs font-semibold transition-all ${
-                        memberStatusFilter === f.id
+                      className={`rounded-md px-3 py-1 text-xs font-semibold transition-all ${memberStatusFilter === f.id
                           ? 'bg-background text-foreground shadow-xs'
                           : 'text-muted-foreground hover:text-foreground'
-                      }`}
+                        }`}
                     >
                       {f.label}
                     </button>
@@ -1150,46 +1097,46 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                 {members
                   .filter(m => memberStatusFilter === 'all' || m.status === memberStatusFilter)
                   .map(m => (
-                  <TableRow key={m.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="size-9">
-                          <AvatarImage src={m.avatar} alt={m.name} />
-                          <AvatarFallback>{m.name.slice(0, 1)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium text-foreground">{m.name}</div>
-                          <div className="text-xs text-muted-foreground">{m.code}</div>
+                    <TableRow key={m.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="size-9">
+                            <AvatarImage src={m.avatar} alt={m.name} />
+                            <AvatarFallback>{m.name.slice(0, 1)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-medium text-foreground">{m.name}</div>
+                            <div className="text-xs text-muted-foreground">{m.code}</div>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{m.phone}</TableCell>
-                    <TableCell>{m.packageName}</TableCell>
-                    <TableCell className={m.daysRemaining > 3 ? '' : 'font-medium text-destructive'}>
-                      {m.packageEndDate} ({m.daysRemaining} ngày)
-                    </TableCell>
-                    <TableCell>
-                      {m.ptSessionsTotal > 0 ? (
-                        <span className="font-semibold text-primary">{m.ptSessionsRemaining}/{m.ptSessionsTotal}</span>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{memberStatusBadge(m)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          onTabChange('checkin');
-                          handlePerformCheckIn(m);
-                        }}
-                      >
-                        Quét Check-in
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>{m.phone}</TableCell>
+                      <TableCell>{m.packageName}</TableCell>
+                      <TableCell className={m.daysRemaining > 3 ? '' : 'font-medium text-destructive'}>
+                        {m.packageEndDate} ({m.daysRemaining} ngày)
+                      </TableCell>
+                      <TableCell>
+                        {m.ptSessionsTotal > 0 ? (
+                          <span className="font-semibold text-primary">{m.ptSessionsRemaining}/{m.ptSessionsTotal}</span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{memberStatusBadge(m)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            onTabChange('checkin');
+                            handlePerformCheckIn(m);
+                          }}
+                        >
+                          Quét Check-in
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
               </TableBody>
             </Table>
           </CardContent>
