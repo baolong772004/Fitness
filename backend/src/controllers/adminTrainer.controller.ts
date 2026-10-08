@@ -83,6 +83,34 @@ export const setupTrainerProfile = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ thông tin bắt buộc (userId, hourlyRate)' });
     }
 
+    if (workingSchedules !== undefined) {
+      if (!Array.isArray(workingSchedules)) {
+        return res.status(400).json({ success: false, message: 'workingSchedules phải là một mảng' });
+      }
+      for (const [index, schedule] of workingSchedules.entries()) {
+        const day = Number(schedule?.dayOfWeek);
+        const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+        if (!Number.isInteger(day) || day < 1 || day > 7) {
+          return res.status(400).json({
+            success: false,
+            message: `workingSchedules[${index}].dayOfWeek phải từ 1 (Thứ Hai) đến 7 (Chủ Nhật)`,
+          });
+        }
+        if (!timePattern.test(schedule?.startTime ?? '') || !timePattern.test(schedule?.endTime ?? '')) {
+          return res.status(400).json({
+            success: false,
+            message: `workingSchedules[${index}] cần dùng giờ HH:mm, ví dụ 02:00`,
+          });
+        }
+        if (schedule.endTime <= schedule.startTime) {
+          return res.status(400).json({
+            success: false,
+            message: `workingSchedules[${index}].endTime phải sau startTime`,
+          });
+        }
+      }
+    }
+
     // Đảm bảo user có tồn tại và đang có role là COACH
     const user = await prisma.user.findUnique({ where: { id: Number(userId) } });
     if (!user) {

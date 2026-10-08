@@ -100,6 +100,47 @@ class CheckInHistoryPage {
   final int total;
 }
 
+class MemberNotification {
+  const MemberNotification({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.isRead,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String title;
+  final String message;
+  final bool isRead;
+  final DateTime? createdAt;
+
+  factory MemberNotification.fromJson(Map<String, dynamic> json) =>
+      MemberNotification(
+        id: json['id']?.toString() ?? '',
+        title: json['title']?.toString() ?? 'Thông báo Aura',
+        message: json['message']?.toString() ?? '',
+        isRead: json['isRead'] == true,
+        createdAt: DateTime.tryParse(
+          json['createdAt']?.toString() ?? '',
+        )?.toLocal(),
+      );
+}
+
+class MemberNotificationPage {
+  const MemberNotificationPage({
+    required this.notifications,
+    required this.unreadCount,
+    required this.page,
+    required this.totalPages,
+  });
+
+  final List<MemberNotification> notifications;
+  final int unreadCount;
+  final int page;
+  final int totalPages;
+}
+
 class FitnessPackage {
   const FitnessPackage({
     required this.id,
@@ -295,6 +336,44 @@ class PtSessionQr {
   final String token;
 }
 
+class PtChatMessage {
+  const PtChatMessage({
+    required this.id,
+    required this.bookingId,
+    required this.senderId,
+    required this.content,
+    required this.createdAt,
+  });
+
+  final int id;
+  final int bookingId;
+  final int senderId;
+  final String content;
+  final DateTime? createdAt;
+
+  factory PtChatMessage.fromJson(Map<String, dynamic> json) => PtChatMessage(
+    id: int.tryParse(json['id']?.toString() ?? '') ?? 0,
+    bookingId: int.tryParse(json['bookingId']?.toString() ?? '') ?? 0,
+    senderId: int.tryParse(json['senderId']?.toString() ?? '') ?? 0,
+    content: json['content']?.toString() ?? '',
+    createdAt: DateTime.tryParse(
+      json['createdAt']?.toString() ?? '',
+    )?.toLocal(),
+  );
+}
+
+class PtChatPage {
+  const PtChatPage({
+    required this.messages,
+    required this.hasMore,
+    required this.canSend,
+  });
+
+  final List<PtChatMessage> messages;
+  final bool hasMore;
+  final bool canSend;
+}
+
 class PayOsCheckout {
   const PayOsCheckout({
     required this.orderCode,
@@ -333,6 +412,7 @@ class AuthService {
   }
 
   final String _baseUrl;
+  String get socketBaseUrl => Uri.parse(_baseUrl).origin;
   Member? currentMember;
   String? accessToken;
   String? refreshToken;
@@ -431,6 +511,75 @@ class AuthService {
     );
   }
 
+  Future<MemberNotificationPage> getMyNotifications({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw const AuthApiException('Vui lòng đăng nhập để xem thông báo.');
+    }
+    final response = await _get(
+      '/notifications?page=$page&limit=$limit',
+      bearerToken: token,
+    );
+    final rows = response['data'];
+    final pagination = _asMap(response['pagination']);
+    return MemberNotificationPage(
+      notifications: rows is List
+          ? rows
+                .whereType<Map>()
+                .map(
+                  (row) => MemberNotification.fromJson(
+                    row.map((key, value) => MapEntry('$key', value)),
+                  ),
+                )
+                .toList()
+          : const [],
+      unreadCount: int.tryParse(response['unreadCount']?.toString() ?? '') ?? 0,
+      page: int.tryParse(pagination?['page']?.toString() ?? '') ?? page,
+      totalPages:
+          int.tryParse(pagination?['totalPages']?.toString() ?? '') ?? 1,
+    );
+  }
+
+  Future<int> getUnreadNotificationCount() async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) return 0;
+    final response = await _get(
+      '/notifications/unread-count',
+      bearerToken: token,
+    );
+    final data = _asMap(response['data']);
+    return int.tryParse(data?['unreadCount']?.toString() ?? '') ?? 0;
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw const AuthApiException('Vui lòng đăng nhập để cập nhật thông báo.');
+    }
+    await _request(
+      'PATCH',
+      '/notifications/$id/read',
+      null,
+      bearerToken: token,
+    );
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw const AuthApiException('Vui lòng đăng nhập để cập nhật thông báo.');
+    }
+    await _request(
+      'PATCH',
+      '/notifications/read-all',
+      null,
+      bearerToken: token,
+    );
+  }
+
   Future<List<FitnessPackage>> getFitnessPackages({String? type}) async {
     final query = type == null ? '' : '?type=$type';
     final response = await _get('/packages$query');
@@ -490,9 +639,12 @@ class AuthService {
     final orderCode = data['orderCode']?.toString();
     final checkoutUrl = data['checkoutUrl']?.toString();
     final qrCode = data['qrCode']?.toString();
-    if (orderCode == null || orderCode.isEmpty ||
-        checkoutUrl == null || checkoutUrl.isEmpty ||
-        qrCode == null || qrCode.isEmpty) {
+    if (orderCode == null ||
+        orderCode.isEmpty ||
+        checkoutUrl == null ||
+        checkoutUrl.isEmpty ||
+        qrCode == null ||
+        qrCode.isEmpty) {
       throw const AuthApiException(
         'Máy chủ chưa trả về thông tin thanh toán gói PT.',
       );
@@ -568,6 +720,49 @@ class AuthService {
         .toList();
   }
 
+  Future<PtChatPage> getPtChatMessages(
+    int bookingId, {
+    int? beforeId,
+    int? afterId,
+  }) async {
+    final query = beforeId != null
+        ? '?beforeId=$beforeId'
+        : afterId != null
+        ? '?afterId=$afterId'
+        : '';
+    final response = await _get(
+      '/pt/booking/$bookingId/messages$query',
+      bearerToken: _ptAccessToken,
+    );
+    final rows = response['data'];
+    return PtChatPage(
+      messages: rows is List
+          ? rows
+                .whereType<Map>()
+                .map(
+                  (row) => PtChatMessage.fromJson(
+                    row.map((key, value) => MapEntry('$key', value)),
+                  ),
+                )
+                .where((message) => message.id > 0)
+                .toList()
+          : const [],
+      hasMore: response['hasMore'] == true,
+      canSend: response['canSend'] == true,
+    );
+  }
+
+  Future<PtChatMessage> sendPtChatMessage(int bookingId, String content) async {
+    final response = await _post('/pt/booking/$bookingId/messages', {
+      'content': content.trim(),
+    }, bearerToken: _ptAccessToken);
+    final data = _asMap(response['data']);
+    if (data == null) {
+      throw const AuthApiException('Máy chủ chưa trả về tin nhắn vừa gửi.');
+    }
+    return PtChatMessage.fromJson(data);
+  }
+
   Future<PtSessionQr> generatePtSessionQr(int bookingId) async {
     final response = await _post(
       '/pt/booking/$bookingId/generate-session-qr',
@@ -600,12 +795,9 @@ class AuthService {
     required int bookingId,
     required bool accept,
   }) async {
-    await _request(
-      'PATCH',
-      '/pt/booking/$bookingId/status',
-      {'status': accept ? 'CONFIRMED' : 'REJECTED'},
-      bearerToken: _ptAccessToken,
-    );
+    await _request('PATCH', '/pt/booking/$bookingId/status', {
+      'status': accept ? 'CONFIRMED' : 'REJECTED',
+    }, bearerToken: _ptAccessToken);
   }
 
   Future<String> markPtAbsent(int bookingId, String reason) async {

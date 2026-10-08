@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../theme.dart';
 import '../widgets/aura_loader.dart';
 import 'pt_booking_screen.dart';
+import 'pt_chat_screen.dart';
 import 'pt_qr_screen.dart';
 
 class PtJourneyScreen extends StatefulWidget {
@@ -404,8 +405,29 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
 
   Widget _bookingCard(PtBooking booking) {
     final status = booking.status.toUpperCase();
+    final canOpenChat =
+        booking.coachId != null &&
+        const {
+          'CONFIRMED',
+          'IN_PROGRESS',
+        }.contains(status);
     final canReview = status == 'PENDING' || status == 'UPCOMING';
     final canAttend = status == 'CONFIRMED';
+    final now = DateTime.now();
+    final checkInOpensAt = booking.startTime?.subtract(
+      const Duration(minutes: 15),
+    );
+    final checkInEnded =
+        booking.endTime != null && now.isAfter(booking.endTime!);
+    final canScanQr =
+        canAttend &&
+        checkInOpensAt != null &&
+        booking.endTime != null &&
+        !now.isBefore(checkInOpensAt) &&
+        !checkInEnded;
+    final statusLabel = status == 'CONFIRMED' && checkInEnded
+        ? 'Đã qua giờ tập'
+        : _status(status);
     final canMakeup =
         status == 'ABSENT_ELIGIBLE' &&
         booking.absenceReportedAt != null &&
@@ -440,10 +462,12 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
                 ),
               ),
               Text(
-                _status(status),
+                statusLabel,
                 style: TextStyle(
                   color: status == 'IN_PROGRESS' || status == 'CONFIRMED'
-                      ? AuraColors.green
+                      ? checkInEnded
+                            ? AuraColors.muted
+                            : AuraColors.green
                       : status == 'REJECTED'
                       ? Colors.red.shade700
                       : AuraColors.caramel,
@@ -485,7 +509,30 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
                 style: const TextStyle(color: AuraColors.muted, fontSize: 11),
               ),
             ),
-          if ((_isCoach && (canReview || canAttend || status == 'IN_PROGRESS')) ||
+          if (canOpenChat) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  await Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => PtChatScreen(
+                        auth: widget.auth,
+                        booking: booking,
+                        isCoach: _isCoach,
+                      ),
+                    ),
+                  );
+                  if (mounted) await _load();
+                },
+                icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                label: Text(_isCoach ? 'Nhắn hội viên' : 'Nhắn PT'),
+              ),
+            ),
+          ],
+          if ((_isCoach &&
+                  (canReview || canScanQr || status == 'IN_PROGRESS')) ||
               (!_isCoach && (canAttend || canMakeup))) ...[
             const SizedBox(height: 12),
             Wrap(
@@ -508,7 +555,7 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
                     label: const Text('Từ chối'),
                   ),
                 ],
-                if (_isCoach && canAttend)
+                if (_isCoach && canScanQr)
                   FilledButton.icon(
                     onPressed: busy
                         ? null
@@ -535,17 +582,17 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
                     ),
                     label: Text(busy ? 'Đang xử lý…' : 'Hoàn thành'),
                   ),
-                if (!_isCoach && canAttend) ...[
+                if (!_isCoach && canScanQr)
                   FilledButton.icon(
                     onPressed: busy ? null : _scanSession,
                     icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
                     label: const Text('Quét QR điểm danh'),
                   ),
+                if (!_isCoach && canAttend)
                   OutlinedButton(
                     onPressed: busy ? null : () => _markAbsent(booking),
                     child: Text(busy ? 'Đang xử lý…' : 'Báo vắng'),
                   ),
-                ],
                 if (!_isCoach && canMakeup && booking.coachId != null)
                   FilledButton.icon(
                     onPressed: () => _openBooking(

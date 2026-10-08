@@ -4,7 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "prisma generate",
     "dev": "tsx watch src/server.js",
+    "prestart": "prisma generate",
+    "db:push": "prisma db push --skip-generate",
     "start": "tsx src/server.js"
   },
   "dependencies": {
@@ -20,6 +23,7 @@
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.12.1",
     "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1",
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1",
     "zod": "^4.6.5"
