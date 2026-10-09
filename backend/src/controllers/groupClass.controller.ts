@@ -43,6 +43,37 @@ export const getGroupClassSchedules = async (req: Request, res: Response) => {
   }
 };
 
+export const getAdminGroupClasses = async (_req: Request, res: Response) => {
+  try {
+    const classes = await prisma.groupClass.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.status(200).json({ success: true, data: classes });
+  } catch (error: any) {
+    console.error('Lỗi lấy danh mục lớp học nhóm:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi lấy danh mục lớp học nhóm' });
+  }
+};
+
+export const getAdminGroupClassSchedules = async (_req: Request, res: Response) => {
+  try {
+    const schedules = await prisma.groupClassSchedule.findMany({
+      include: {
+        groupClass: true,
+        trainer: { select: { id: true, fullName: true, avatar: true } },
+        room: true,
+      },
+      orderBy: { startTime: 'asc' },
+    });
+
+    return res.status(200).json({ success: true, data: schedules });
+  } catch (error: any) {
+    console.error('Lỗi lấy toàn bộ lịch lớp học nhóm admin:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi lấy toàn bộ lịch lớp học nhóm' });
+  }
+};
+
 /**
  * API 2: Member Đăng ký tham gia Lớp Group Class
  * @route POST /api/group-classes/book

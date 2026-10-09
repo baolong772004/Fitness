@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Member, Coach, PackagePlan, AuditLog, Invoice, SupportTicket } from '../../types';
-import { api, ApiPackage, ApiUser, ApiCoachProfile, ApiSubscription, ApiRoom, ApiEquipment, ApiGroupClassSchedule, ApiMemberProfile360 } from '../../services/api';
+import { api, ApiPackage, ApiUser, ApiCoachProfile, ApiSubscription, ApiRoom, ApiEquipment, ApiGroupClass, ApiGroupClassSchedule, ApiMemberProfile360 } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import {
   BarChart3,
@@ -105,13 +105,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [equipmentForm, setEquipmentForm] = useState({ name: '', code: '', roomId: 0, note: '' });
 
   // Group Classes & Schedules State
+  const [groupClasses, setGroupClasses] = useState<ApiGroupClass[]>([]);
   const [groupClassSchedules, setGroupClassSchedules] = useState<ApiGroupClassSchedule[]>([]);
   const [isLoadingGroupClasses, setIsLoadingGroupClasses] = useState(false);
   const [isCreatingClass, setIsCreatingClass] = useState(false);
   const [classForm, setClassForm] = useState({ name: '', description: '', durationMin: 60, imageUrl: '' });
   const [isCreatingSchedule, setIsCreatingSchedule] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
-    classId: 1,
+    classId: 0,
     trainerId: 1,
     roomId: 0,
     startTime: '',
@@ -283,10 +284,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       console.warn('Lỗi tải cơ sở vật chất admin:', e);
     }
 
-    // 7. Fetch Group Class Schedules
+    // 7. Fetch Group Classes & Schedules
     try {
-      const liveSchedules = await api.groupClasses.getSchedules();
-      if (liveSchedules) setGroupClassSchedules(liveSchedules);
+      const [liveClasses, liveSchedules] = await Promise.all([
+        api.groupClasses.getAdminClasses(),
+        api.groupClasses.getAdminSchedules()
+      ]);
+      setGroupClasses(liveClasses);
+      setGroupClassSchedules(liveSchedules);
+      setScheduleForm(current => current.classId || !liveClasses.length
+        ? current
+        : { ...current, classId: liveClasses[0].id });
     } catch (e) {
       console.warn('Lỗi tải lịch lớp học nhóm admin:', e);
     }
@@ -1969,6 +1977,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="grid gap-6">
           <Card>
             <CardHeader>
+              <CardTitle>Danh Mục Lớp Học ({groupClasses.length})</CardTitle>
+              <CardDescription>Các lớp đã tạo, kể cả lớp chưa được xếp lịch.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {groupClasses.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+                  <p className="font-semibold text-foreground">Chưa có lớp học nào</p>
+                  <p className="text-xs mt-1">Lớp vừa tạo sẽ xuất hiện tại đây.</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tên Lớp Học</TableHead>
+                      <TableHead>Thời Lượng</TableHead>
+                      <TableHead>Mô Tả</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groupClasses.map(groupClass => (
+                      <TableRow key={groupClass.id}>
+                        <TableCell className="font-bold text-foreground">{groupClass.name}</TableCell>
+                        <TableCell>{groupClass.durationMin} phút</TableCell>
+                        <TableCell>{groupClass.description || '—'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
               <div className="flex justify-between items-center flex-wrap gap-4">
                 <div>
                   <CardTitle>Quản Lý Lớp Học Nhóm & Lên Lịch Ca Tập</CardTitle>
@@ -2196,14 +2237,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <DialogDescription>Lên lịch cho lớp học và phân công Huấn luyện viên phụ trách.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-3">
-              <Field label="Mã Lớp Học (Class ID) *">
-                <Input
-                  type="number"
-                  min="1"
-                  required
-                  value={scheduleForm.classId}
-                  onChange={(e) => setScheduleForm({ ...scheduleForm, classId: parseInt(e.target.value) || 1 })}
-                />
+              <Field label="Lớp Học *">
+                <Select
+                  value={String(scheduleForm.classId)}
+                  onValueChange={(v) => setScheduleForm({ ...scheduleForm, classId: parseInt(v) })}
+                  disabled={groupClasses.length === 0}
+                >
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Chọn lớp học" /></SelectTrigger>
+                  <SelectContent>
+                    {groupClasses.map(groupClass => (
+                      <SelectItem key={groupClass.id} value={String(groupClass.id)}>
+                        {groupClass.name} (#{groupClass.id})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label="Huấn Luyện Viên Phụ Trách *">
                 <Select
@@ -2262,7 +2310,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsCreatingSchedule(false)}>Hủy Bỏ</Button>
-              <Button type="submit">Lên Lịch Ngay</Button>
+              <Button type="submit" disabled={groupClasses.length === 0}>Lên Lịch Ngay</Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getGroupClassSchedules, bookGroupClass, cancelGroupClass, checkInGroupClass, createGroupClass, createGroupClassSchedule } from '../controllers/groupClass.controller.js';
+import { getGroupClassSchedules, getAdminGroupClasses, getAdminGroupClassSchedules, bookGroupClass, cancelGroupClass, checkInGroupClass, createGroupClass, createGroupClassSchedule } from '../controllers/groupClass.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -30,6 +30,9 @@ const router = Router();
  *         description: Thành công
  */
 router.get('/schedules', authenticateToken, getGroupClassSchedules);
+
+router.get('/admin/classes', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getAdminGroupClasses);
+router.get('/admin/schedules', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getAdminGroupClassSchedules);
 
 /**
  * @swagger

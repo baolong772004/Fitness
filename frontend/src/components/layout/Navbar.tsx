@@ -25,9 +25,11 @@ import {
   ChevronDown,
   GripVertical,
   Wrench,
-  Layers
+  Layers,
+  Bell
 } from 'lucide-react';
 import { AuraLogo } from '../common/AuraLogo';
+import { api, ApiNotification } from '../../services/api';
 
 interface NavbarProps {
   currentRole: UserRole;
@@ -76,6 +78,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<ApiNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Close user dropdown menu when clicking outside or pressing Escape
@@ -102,6 +107,42 @@ export const Navbar: React.FC<NavbarProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [showUserMenu]);
+
+  const loadNotifications = async () => {
+    if (!currentUser || !api.auth.getToken()) return;
+    try {
+      const res = await api.notifications.getMyNotifications({ limit: 8 });
+      setNotifications(res.data || []);
+      setUnreadCount(res.unreadCount || 0);
+    } catch {
+      // A notification failure must not interrupt normal navigation.
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications();
+    if (!currentUser || !api.auth.getToken()) return;
+    const timer = window.setInterval(loadNotifications, 60000);
+    return () => window.clearInterval(timer);
+  }, [currentUser?.id]);
+
+  const handleNotificationClick = async (notification: ApiNotification) => {
+    if (!notification.isRead) {
+      try {
+        await api.notifications.markRead(notification.id);
+        setNotifications(items => items.map(item => item.id === notification.id ? { ...item, isRead: true } : item));
+        setUnreadCount(count => Math.max(0, count - 1));
+      } catch { /* keep notification visible for a later retry */ }
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    try {
+      await api.notifications.markAllRead();
+      setNotifications(items => items.map(item => ({ ...item, isRead: true })));
+      setUnreadCount(0);
+    } catch { /* leave state unchanged */ }
+  };
 
   // Sync collapsed state to localStorage
   useEffect(() => {
@@ -321,6 +362,26 @@ export const Navbar: React.FC<NavbarProps> = ({
           </>
         )}
       </div>
+
+      {currentUser && (
+        <div style={{ padding: isCollapsed ? '8px 10px 2px' : '10px 14px 2px', position: 'relative' }}>
+          <button
+            type="button"
+            onClick={() => { setShowNotifications(open => !open); loadNotifications(); }}
+            title="Thông báo"
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'space-between', gap: 8, padding: '9px 10px', border: '1px solid var(--aura-border)', borderRadius: 'var(--radius-sm)', background: showNotifications ? 'var(--color-primary-light)' : 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Bell size={16} /><span style={{ display: isCollapsed ? 'none' : 'inline' }}>Thông báo</span></span>
+            {unreadCount > 0 && <span style={{ minWidth: 18, height: 18, padding: '0 5px', display: 'grid', placeItems: 'center', borderRadius: 9, background: 'var(--color-danger)', color: '#fff', fontSize: 10 }}>{unreadCount > 99 ? '99+' : unreadCount}</span>}
+          </button>
+          {showNotifications && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: isCollapsed ? 'calc(100% + 8px)' : 14, width: 320, maxWidth: 'calc(100vw - 100px)', zIndex: 500, padding: 10, background: 'var(--bg-panel)', border: '1px solid var(--aura-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px 10px' }}><strong style={{ fontSize: 13 }}>Thông báo</strong><button type="button" onClick={markAllNotificationsRead} disabled={!unreadCount} style={{ border: 0, background: 'transparent', color: 'var(--color-primary)', cursor: unreadCount ? 'pointer' : 'default', fontSize: 11, fontWeight: 700 }}>Đọc tất cả</button></div>
+              {notifications.length ? notifications.map(item => <button type="button" key={item.id} onClick={() => handleNotificationClick(item)} style={{ width: '100%', textAlign: 'left', padding: '10px 8px', border: 0, borderTop: '1px solid var(--aura-border)', background: item.isRead ? 'transparent' : 'var(--color-primary-light)', color: 'var(--text-primary)', cursor: 'pointer' }}><div style={{ fontSize: 12, fontWeight: 800 }}>{item.title}</div><div style={{ marginTop: 3, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>{item.message}</div><div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-muted)' }}>{new Date(item.createdAt).toLocaleString('vi-VN')}</div></button>) : <div style={{ padding: '20px 8px', color: 'var(--text-muted)', fontSize: 12, textAlign: 'center' }}>Chưa có thông báo.</div>}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 2. QUICK CTA (Check-in QR for Staff/Admin) */}
       {(currentRole === 'admin' || currentRole === 'receptionist') && (

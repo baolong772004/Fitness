@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Coach, Member, BookingSession, WorkoutLogEntry } from '../../types';
-import { api, ApiBooking, ApiCoachProfile, ApiUser } from '../../services/api';
+import { api } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import {
   Calendar,
@@ -122,123 +122,151 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
 
   const reloadData = async () => {
     setIsLoading(true);
+    const currentUser = api.auth.getCurrentUser();
+    const fallbackCoach: Coach | null = currentUser ? {
+      id: String(currentUser.id),
+      code: `COACH-${currentUser.id}`,
+      name: currentUser.fullName,
+      email: currentUser.email,
+      phone: currentUser.phone || '',
+      avatar: currentUser.avatar || '',
+      rank: 'senior',
+      specialties: ['Fitness & Hypertrophy'],
+      hourlyRateVND: 0,
+      commissionPercent: 0,
+      rating: 0,
+      reviewCount: 0,
+      bio: '',
+      certifications: [],
+      workingHours: { shift: 'Chưa cập nhật', start: '08:00', end: '17:00', daysOfWeek: [] },
+      isAcceptingBookings: true,
+      activeTraineeCount: 0
+    } : null;
+    if (fallbackCoach) setCurrentCoach(fallbackCoach);
+
     try {
-      // 1. Fetch Coach Profile & Coaches List from Backend
-      const trainersRes = await api.adminTrainers.getTrainers({ limit: 20 });
-      const trainerList = trainersRes.data || [];
-      const currentUser = api.auth.getCurrentUser();
-
-      const mappedCoaches: Coach[] = trainerList.map((t, idx) => ({
-        id: String(t.id),
-        code: `COACH-${t.id}`,
-        name: t.user?.fullName || `Coach #${t.id}`,
-        email: t.user?.email || `coach${t.id}@aurafitness.vn`,
-        phone: t.user?.phone || '0901234567',
-        avatar: t.user?.avatar || 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=400&auto=format&fit=crop&q=80',
-        rank: idx === 0 ? 'master' : 'senior',
-        specialties: t.specialization ? t.specialization.split(',').map(s => s.trim()) : ['Fitness & Hypertrophy'],
-        rating: t.rating || 5.0,
-        reviewCount: 24,
-        bio: t.bio || 'Huấn luyện viên chuyên sâu AURA Fitness Club',
-        certifications: ['NASM-CPT', 'CSCS Specialist'],
-        hourlyRateVND: t.hourlyRate || 350000,
-        commissionPercent: 45,
-        workingHours: {
-          shift: 'Toàn thời gian (Full-time)',
-          start: '07:00',
-          end: '21:00',
-          daysOfWeek: [1, 2, 3, 4, 5, 6]
-        },
-        isAcceptingBookings: t.status === 'ACTIVE',
-        activeTraineeCount: 8
+      const trainersRes = await api.pt.getAvailableTrainers();
+      const mappedCoaches: Coach[] = trainersRes.data.map((trainer) => ({
+        id: String(trainer.userId),
+        code: `COACH-${trainer.userId}`,
+        name: trainer.fullName,
+        email: trainer.email,
+        phone: trainer.phone || '',
+        avatar: trainer.avatar || '',
+        rank: 'senior',
+        specialties: trainer.specialization
+          ? trainer.specialization.split(',').map(specialty => specialty.trim())
+          : ['Fitness & Hypertrophy'],
+        rating: trainer.rating ?? 0,
+        reviewCount: 0,
+        bio: trainer.bio || '',
+        certifications: [],
+        hourlyRateVND: Number(trainer.hourlyRate) || 0,
+        commissionPercent: 0,
+        workingHours: { shift: 'Chưa cập nhật', start: '08:00', end: '17:00', daysOfWeek: [] },
+        isAcceptingBookings: true,
+        activeTraineeCount: 0
       }));
-
       setCoaches(mappedCoaches);
 
-      // Find current active coach or fallback
-      const matchingCoach = mappedCoaches.find(c => String(c.id) === String(currentUser?.id)) || mappedCoaches[0];
-      if (matchingCoach) {
-        setCurrentCoach(matchingCoach);
-      }
-
-      // 2. Fetch Live Bookings for Coach
-      try {
-        const liveBookings = await api.pt.getMyBookings();
-        if (liveBookings && liveBookings.length > 0) {
-          const mapped: BookingSession[] = liveBookings.map(b => {
-            const startDate = new Date(b.startTime);
-            const endDate = new Date(b.endTime);
-            const timeStr = `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')}`;
-            const endStr = `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`;
-
-            return {
-              id: String(b.id),
-              memberId: String(b.memberId),
-              memberName: b.member?.fullName || `Hội viên #${b.memberId}`,
-              memberPhone: b.member?.phone || '0900000000',
-              memberAvatar: b.member?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
-              coachId: String(b.coachId),
-              coachName: b.coach?.fullName || matchingCoach?.name || 'HLV',
-              coachAvatar: b.coach?.avatar || matchingCoach?.avatar || '',
-              type: 'pt_individual',
-              title: b.membership?.package?.name ? `Buổi tập ${b.membership.package.name}` : 'Buổi tập Huấn Luyện Viên 1-1',
-              room: 'Khu vực PT / Gym Floor',
-              date: startDate.toISOString().slice(0, 10),
-              startTime: timeStr,
-              endTime: endStr,
-              status: mapStatusToSessionStatus(b.status),
-              isMakeupSession: b.isMakeup || false,
-              pricePaidVND: 350000
-            };
-          });
-          setBookings(mapped);
-        } else {
-          setBookings([]);
-        }
-      } catch (err) {
-        console.warn('Lỗi lấy lịch bookings của coach:', err);
-      }
-
-      // 3. Fetch Live Members
-      try {
-        const usersRes = await api.users.getUsers({ role: 'MEMBER', limit: 50 });
-        if (usersRes.data) {
-          const mappedMembers: Member[] = usersRes.data.map(u => ({
-            id: String(u.id),
-            code: 'MEM-' + u.id,
-            name: u.fullName || u.email,
-            phone: u.phone || '0900000000',
-            email: u.email,
-            avatar: u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
-            cccd: '0012026' + u.id,
-            gender: (u.gender === 'female' ? 'female' : 'male') as any,
-            birthYear: 1996,
-            emergencyContact: { name: 'Người thân', phone: u.phone || '', relationship: 'Gia đình' },
-            status: 'active',
-            activePackageId: 'pkg-standard',
-            packageName: 'Gói Tiêu Chuẩn',
-            packageType: 'standard_gym',
-            packageStartDate: new Date().toISOString().slice(0, 10),
-            packageEndDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-            daysRemaining: 30,
-            ptSessionsTotal: 10,
-            ptSessionsRemaining: 6,
-            totalCheckIns: 5,
-            inBodyHistory: [
-              { id: 'inb-' + u.id, date: '2026-10-01', weightKg: 70, muscleMassKg: 32, bodyFatPercent: 18, bmi: 22.5, visceralFatLevel: 4 }
-            ]
-          }));
-          setMembers(mappedMembers);
-        }
-      } catch (err) {
-        console.warn('Lỗi lấy danh sách member:', err);
-      }
-
-    } catch (e) {
-      console.error('Lỗi nạp dữ liệu Coach Dashboard:', e);
-    } finally {
-      setIsLoading(false);
+      const matchingCoach = mappedCoaches.find(coach => coach.id === String(currentUser?.id));
+      if (matchingCoach) setCurrentCoach(matchingCoach);
+    } catch (error) {
+      console.warn('Lỗi lấy hồ sơ Coach:', error);
+      setCoaches([]);
     }
+
+    try {
+      const liveBookings = await api.pt.getMyBookings();
+      const mappedBookings: BookingSession[] = liveBookings.map(booking => {
+        const startDate = new Date(booking.startTime);
+        const endDate = new Date(booking.endTime);
+        const timeStr = `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')}`;
+        const endStr = `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`;
+
+        return {
+          id: String(booking.id),
+          memberId: String(booking.memberId),
+          memberName: booking.member?.fullName || `Hội viên #${booking.memberId}`,
+          memberPhone: booking.member?.phone || 'Chưa cập nhật',
+          memberAvatar: booking.member?.avatar || '',
+          coachId: String(booking.coachId),
+          coachName: booking.coach?.fullName || currentCoach?.name || fallbackCoach?.name || 'HLV',
+          coachAvatar: currentCoach?.avatar || fallbackCoach?.avatar || '',
+          type: 'pt_individual' as const,
+          title: booking.membership?.package?.name
+            ? `Buổi tập ${booking.membership.package.name}`
+            : 'Buổi tập Huấn Luyện Viên 1-1',
+          room: 'Khu vực PT / Gym Floor',
+          date: startDate.toISOString().slice(0, 10),
+          startTime: timeStr,
+          endTime: endStr,
+          status: mapStatusToSessionStatus(booking.status),
+          isMakeupSession: booking.isMakeup || false,
+          pricePaidVND: 0
+        };
+      }).sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+      setBookings(mappedBookings);
+    } catch (error) {
+      console.warn('Lỗi lấy lịch bookings của Coach:', error);
+      setBookings([]);
+    }
+
+    try {
+      const trainees = await api.pt.getMyTrainees();
+      const mappedMembers: Member[] = trainees.map(trainee => {
+        const latestMembership = [...trainee.memberships].sort(
+          (a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime()
+        )[0];
+        const remainingSessions = trainee.memberships.reduce(
+          (total, membership) => total + (membership.remainingSessions ?? 0),
+          0
+        );
+        const totalSessions = trainee.memberships.reduce(
+          (total, membership) => total + (membership.package.totalPtSessions ?? membership.remainingSessions ?? 0),
+          0
+        );
+        const packageNames = [...new Set(trainee.memberships.map(membership => membership.package.name))];
+        const daysRemaining = latestMembership
+          ? Math.max(0, Math.ceil((new Date(latestMembership.endDate).getTime() - Date.now()) / 86400000))
+          : 0;
+
+        return {
+          id: String(trainee.id),
+          code: `MEM-${trainee.id}`,
+          name: trainee.fullName,
+          phone: trainee.phone || 'Chưa cập nhật',
+          email: trainee.email,
+          avatar: trainee.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+          cccd: '',
+          gender: trainee.gender === 'male' || trainee.gender === 'female' ? trainee.gender : 'other',
+          birthYear: trainee.dateOfBirth ? new Date(trainee.dateOfBirth).getFullYear() : 0,
+          emergencyContact: { name: '', phone: '', relationship: '' },
+          status: 'active',
+          activePackageId: String(trainee.memberships[0]?.id || ''),
+          packageName: packageNames.join(', '),
+          packageType: 'hybrid_pt',
+          packageStartDate: trainee.memberships[0]?.startDate.slice(0, 10) || '',
+          packageEndDate: latestMembership?.endDate.slice(0, 10) || '',
+          daysRemaining,
+          ptSessionsTotal: totalSessions,
+          ptSessionsRemaining: remainingSessions,
+          assignedCoachId: String(currentUser?.id || ''),
+          assignedCoachName: currentCoach?.name || fallbackCoach?.name || '',
+          inBodyHistory: [],
+          totalCheckIns: 0
+        };
+      });
+      setMembers(mappedMembers);
+      setCurrentCoach(coach => coach
+        ? { ...coach, activeTraineeCount: mappedMembers.length }
+        : coach);
+    } catch (error) {
+      console.warn('Lỗi lấy danh sách học viên của Coach:', error);
+      setMembers([]);
+    }
+
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -399,6 +427,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
   };
 
   if (!currentCoach) return null;
+  const assignedTrainees = members.filter(member => member.ptSessionsTotal > 0 || member.ptSessionsRemaining > 0);
 
   const rankVariant = (rank: string) => (rank === 'master' ? 'default' : rank === 'senior' ? 'success' : 'secondary') as 'default' | 'success' | 'secondary';
   const formatTimer = `${Math.floor(sessionTimer / 60).toString().padStart(2, '0')}:${(sessionTimer % 60).toString().padStart(2, '0')}`;
@@ -418,7 +447,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                 <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentCoach.name}</h2>
                 <Badge variant={rankVariant(currentCoach.rank)}>{currentCoach.rank.toUpperCase()} COACH</Badge>
                 <span className="flex items-center gap-1 text-sm text-warning">
-                  <Award className="size-4" /> {currentCoach.rating} ({currentCoach.reviewCount} đánh giá)
+                  <Award className="size-4" /> {currentCoach.rating ? `${currentCoach.rating} (${currentCoach.reviewCount} đánh giá)` : 'Chưa có đánh giá'}
                 </span>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -431,7 +460,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
           <div className="text-right">
             <p className="text-xs font-medium text-muted-foreground">Đơn giá dạy lẻ cá nhân</p>
             <p className="text-2xl font-bold tracking-tight text-primary">
-              {currentCoach.hourlyRateVND.toLocaleString('vi-VN')} <span className="text-sm font-normal text-muted-foreground">đ / Buổi</span>
+              {currentCoach.hourlyRateVND > 0 ? `${currentCoach.hourlyRateVND.toLocaleString('vi-VN')} đ / Buổi` : 'Chưa cập nhật'}
             </p>
             <Badge variant="success" className="mt-1">● Sẵn sàng nhận booking</Badge>
           </div>
@@ -443,13 +472,23 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
           <Card>
             <CardHeader>
-              <CardTitle>Lịch Dạy & Các Buổi Tập Hôm Nay</CardTitle>
+              <CardTitle>Lịch Dạy Của Tôi</CardTitle>
               <CardDescription>
-                Ngày: <span className="font-medium text-foreground">{new Date().toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                Các buổi PT được phân công, sắp xếp theo ngày và giờ bắt đầu.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
-              {bookings.map(b => (
+              {isLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" /> Đang tải lịch dạy...
+                </div>
+              ) : bookings.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-12 text-center">
+                  <Calendar className="size-8 text-muted-foreground" />
+                  <p className="text-sm font-semibold text-foreground">Chưa có buổi dạy được phân công</p>
+                  <p className="text-xs text-muted-foreground">Lịch PT của học viên sẽ hiện tại đây sau khi đặt lịch.</p>
+                </div>
+              ) : bookings.map(b => (
                 <div
                   key={b.id}
                   className={`rounded-lg border p-4 transition-all ${b.status === 'in_progress'
@@ -922,10 +961,20 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
         <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
           <Card>
             <CardHeader>
-              <CardTitle>Học Viên PT Phụ Trách</CardTitle>
+              <CardTitle>Hồ Sơ Học Viên ({assignedTrainees.length})</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3">
-              {members.filter(m => m.ptSessionsTotal > 0).map(m => {
+              {isLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" /> Đang tải hồ sơ học viên...
+                </div>
+              ) : assignedTrainees.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-12 text-center">
+                  <Users className="size-8 text-muted-foreground" />
+                  <p className="text-sm font-semibold text-foreground">Chưa có học viên PT được gán</p>
+                  <p className="text-xs text-muted-foreground">Hồ sơ sẽ xuất hiện khi có gói PT đang hoạt động do bạn phụ trách.</p>
+                </div>
+              ) : assignedTrainees.map(m => {
                 const latest = m.inBodyHistory[m.inBodyHistory.length - 1];
                 return (
                   <div key={m.id} className="rounded-lg border bg-card p-4">
@@ -937,7 +986,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                         </Avatar>
                         <div>
                           <div className="text-sm font-semibold text-foreground">{m.name}</div>
-                          <div className="text-xs text-muted-foreground">SĐT: {m.phone} • Năm sinh: {m.birthYear}</div>
+                          <div className="text-xs text-muted-foreground">SĐT: {m.phone} • Năm sinh: {m.birthYear || 'Chưa cập nhật'}</div>
                         </div>
                       </div>
                       <Badge variant="soft">PT Còn: {m.ptSessionsRemaining}/{m.ptSessionsTotal}</Badge>
@@ -1171,7 +1220,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({
                 </div>
                 <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Đơn giá/buổi dạy lẻ</dt>
-                  <dd className="text-lg font-bold text-primary">{currentCoach.hourlyRateVND.toLocaleString('vi-VN')} đ</dd>
+                  <dd className="text-lg font-bold text-primary">{currentCoach.hourlyRateVND > 0 ? `${currentCoach.hourlyRateVND.toLocaleString('vi-VN')} đ` : 'Chưa cập nhật'}</dd>
                 </div>
                 <Separator />
                 <div className="flex items-center justify-between">

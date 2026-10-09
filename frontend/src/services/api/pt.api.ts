@@ -1,17 +1,20 @@
 import { request } from './client';
-import { ApiBooking, ApiSubscription } from './types';
+import { ApiBooking, ApiCoachTrainee, ApiSubscription } from './types';
 
 export const ptApi = {
   async getAvailableTrainers() {
     return request<{
       success: boolean;
       data: Array<{
+        id: number;
         userId: number;
         bio?: string;
         specialization?: string;
         rating?: number;
         hourlyRate: number;
         fullName: string;
+        email: string;
+        phone?: string | null;
         avatar?: string;
       }>;
     }>('/pt/trainers');
@@ -66,6 +69,11 @@ export const ptApi = {
 
   async getMyBookings() {
     const res = await request<{ success: boolean; data: ApiBooking[] }>('/pt/my-bookings');
+    return res.data;
+  },
+
+  async getMyTrainees() {
+    const res = await request<{ success: boolean; data: ApiCoachTrainee[] }>('/pt/my-trainees');
     return res.data;
   },
 

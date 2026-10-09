@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { PtController } from '../controllers/pt.controller.js';
 import { PaymentController } from '../controllers/payment.controller.js';
-import { authenticateToken } from '../middlewares/auth.middleware.js';
+import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 import { listPtChatMessages, sendPtChatMessage } from '../controllers/ptChat.controller.js';
 
 const router = Router();
@@ -151,6 +151,7 @@ router.patch('/booking/:id/status', authenticateToken, PtController.updateBookin
  *         description: Danh sách lịch đặt PT
  */
 router.get('/my-bookings', authenticateToken, PtController.getMyBookings);
+router.get('/my-trainees', authenticateToken, authorizeRoles('COACH', 'TRAINER'), PtController.getMyTrainees);
 
 /**
  * @swagger
