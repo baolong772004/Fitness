@@ -107,6 +107,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Group Classes & Schedules State
   const [groupClassSchedules, setGroupClassSchedules] = useState<ApiGroupClassSchedule[]>([]);
   const [isLoadingGroupClasses, setIsLoadingGroupClasses] = useState(false);
+  const [groupClassError, setGroupClassError] = useState<string | null>(null);
+  const [groupClassTrainers, setGroupClassTrainers] = useState<ApiCoachProfile[]>([]);
   const [isCreatingClass, setIsCreatingClass] = useState(false);
   const [classForm, setClassForm] = useState({ name: '', description: '', durationMin: 60, imageUrl: '' });
   const [isCreatingSchedule, setIsCreatingSchedule] = useState(false);
@@ -136,8 +138,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Member 360 Full Profile State
   const [inspectingMember360, setInspectingMember360] = useState<ApiMemberProfile360 | null>(null);
   const [isLoadingMember360, setIsLoadingMember360] = useState(false);
+  const [correctingNoShowId, setCorrectingNoShowId] = useState<number | null>(null);
 
   const reloadData = async () => {
+    setIsLoadingGroupClasses(true);
+    setGroupClassError(null);
     // 1. Fetch live Packages from backend
     try {
       const livePkgs = await api.packages.getPackages({ includeInactive: true });
@@ -196,6 +201,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const liveTrainers = await api.adminTrainers.getTrainers({ limit: 50 });
       if (liveTrainers.data) {
+        setGroupClassTrainers(liveTrainers.data);
         const mappedCoaches: Coach[] = liveTrainers.data.map((t, idx) => ({
           id: String(t.id),
           code: `COACH-${t.id}`,
@@ -285,10 +291,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     // 7. Fetch Group Class Schedules
     try {
-      const liveSchedules = await api.groupClasses.getSchedules();
-      if (liveSchedules) setGroupClassSchedules(liveSchedules);
-    } catch (e) {
+      const liveSchedules = await api.groupClasses.getAllSchedules();
+      setGroupClassSchedules(liveSchedules || []);
+    } catch (e: any) {
       console.warn('Lỗi tải lịch lớp học nhóm admin:', e);
+      setGroupClassError(e.message || 'Không tải được lịch lớp học nhóm');
+    } finally {
+      setIsLoadingGroupClasses(false);
     }
   };
 
@@ -485,6 +494,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setInspectingMember360(null);
     } finally {
       setIsLoadingMember360(false);
+    }
+  };
+
+  const handleResolveNoShow = async (bookingId: number, resolution: 'ATTENDED' | 'EXCUSED') => {
+    const reason = window.prompt(resolution === 'ATTENDED'
+      ? 'Lý do xác nhận hội viên đã tham gia buổi tập:'
+      : 'Lý do hoàn lại buổi PT cho hội viên:')?.trim();
+    if (!reason) return;
+
+    setCorrectingNoShowId(bookingId);
+    try {
+      const result = await api.pt.resolveNoShow(bookingId, resolution, reason);
+      soundEffects.playSuccessBeep();
+      alert(result.message);
+      if (inspectingMember) {
+        try {
+          setInspectingMember360(await api.admin.getMemberDetailProfile(inspectingMember.id));
+        } catch (refreshError) {
+          console.warn('Đã điều chỉnh buổi PT nhưng chưa tải lại hồ sơ:', refreshError);
+        }
+      }
+    } catch (error: any) {
+      soundEffects.playErrorBeep();
+      alert(error.message || 'Không thể điều chỉnh buổi PT vắng');
+    } finally {
+      setCorrectingNoShowId(null);
     }
   };
 
@@ -1260,14 +1295,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="p-4 rounded-lg border bg-muted/40">
                       <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Lịch Sử Buổi Tập & Huấn Luyện</div>
                       {(inspectingMember360?.trainingHistory?.ptSessions && inspectingMember360.trainingHistory.ptSessions.length > 0) ? (
-                        <div className="grid sm:grid-cols-2 gap-2">
-                          {inspectingMember360.trainingHistory.ptSessions.slice(0, 4).map((pt: any) => (
+                        <div className="grid sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto">
+                          {inspectingMember360.trainingHistory.ptSessions.map((pt: any) => (
                             <div key={pt.id} className="p-3 rounded-md border bg-card text-xs">
                               <div className="font-bold text-primary">{new Date(pt.startTime).toLocaleDateString('vi-VN')}</div>
                               <div className="flex justify-between mt-1 text-muted-foreground">
                                 <span>HLV: <strong className="text-foreground">{pt.coach?.fullName || 'HLV'}</strong></span>
                                 <span>Trạng thái: <strong className="text-success">{pt.status}</strong></span>
                               </div>
+                              {pt.cancelledBy === 'SYSTEM_NO_SHOW_NO_DEBIT' && (
+                                <p className="mt-2 text-amber-700">Hệ thống ghi nhận vắng nhưng gói đã hết buổi; chưa trừ lượt. Cần kiểm tra thủ công.</p>
+                              )}
+                              {pt.status === 'ABSENT_NO_REFUND' && pt.cancelledBy === 'SYSTEM_NO_SHOW' && (
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                  <Button size="sm" variant="outline" disabled={correctingNoShowId !== null}
+                                    onClick={() => handleResolveNoShow(pt.id, 'ATTENDED')}>
+                                    Ghi nhận đã tập
+                                  </Button>
+                                  <Button size="sm" variant="outline" disabled={correctingNoShowId !== null}
+                                    onClick={() => handleResolveNoShow(pt.id, 'EXCUSED')}>
+                                    Hoàn lại 1 buổi
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1978,14 +2028,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Button variant="outline" onClick={() => setIsCreatingClass(true)}>
                     <Plus className="size-4" /> Tạo Lớp Học Mới
                   </Button>
-                  <Button onClick={() => setIsCreatingSchedule(true)}>
+                  <Button onClick={() => {
+                    setScheduleForm(prev => ({ ...prev, trainerId: groupClassTrainers[0]?.userId ?? 0, roomId: rooms[0]?.id ?? 0 }));
+                    setIsCreatingSchedule(true);
+                  }}>
                     <Plus className="size-4" /> Mở Ca Lịch Tập
                   </Button>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              {groupClassSchedules.length === 0 ? (
+              {isLoadingGroupClasses ? (
+                <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
+                  <Loader2 className="size-5 animate-spin" /> Đang tải lịch lớp học nhóm...
+                </div>
+              ) : groupClassError ? (
+                <div className="text-center py-10 text-destructive">
+                  <p>{groupClassError}</p>
+                  <Button variant="outline" className="mt-3" onClick={() => void reloadData()}>Thử lại</Button>
+                </div>
+              ) : groupClassSchedules.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground border border-dashed rounded-lg">
                   <Layers className="size-10 mx-auto text-primary mb-2 opacity-60" />
                   <p className="font-semibold text-foreground">Chưa có lịch ca tập nào trong hệ thống</p>
@@ -2212,8 +2274,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {coaches.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name} ({c.code})</SelectItem>
+                    {groupClassTrainers.map(trainer => (
+                      <SelectItem key={trainer.userId} value={String(trainer.userId)}>
+                        {trainer.user?.fullName || `HLV #${trainer.userId}`} (User #{trainer.userId})
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

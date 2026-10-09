@@ -186,7 +186,13 @@ export default function App() {
               />
             )}
 
-            {currentRole === 'admin' && (
+            {currentRole === 'admin' && activeTab === 'checkin' ? (
+              <ReceptionistDashboard
+                activeTab="checkin"
+                onTabChange={setActiveTab}
+                autoOpenScanner
+              />
+            ) : currentRole === 'admin' && (
               <AdminDashboard
                 activeTab={activeTab}
                 onTabChange={setActiveTab}

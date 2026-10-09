@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 import '../widgets/aura_loader.dart';
+import 'group_class_screen.dart';
 
 class BookingHub extends StatefulWidget {
   const BookingHub({
@@ -124,6 +125,21 @@ class _BookingHubState extends State<BookingHub> {
     if (mounted) await _load();
   }
 
+  Future<void> _openGroupClasses() async {
+    if (widget.auth.currentMember == null) {
+      if (!await widget.onLoginRequired() || !mounted) return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => GroupClassScreen(
+          auth: widget.auth,
+          category: widget.workoutCategory,
+        ),
+      ),
+    );
+    if (mounted) await _load();
+  }
+
   MemberSubscription? get _activeMembership {
     for (final subscription in _subscriptions) {
       if (subscription.status.toUpperCase() == 'ACTIVE' &&
@@ -173,6 +189,15 @@ class _BookingHubState extends State<BookingHub> {
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 116),
         children: [
           _hero(),
+          const SizedBox(height: 14),
+          _trainingOption(
+            icon: Icons.groups_rounded,
+            title: 'Workout Class',
+            description: widget.workoutCategory.isEmpty
+                ? 'Xem lịch lớp nhóm, đặt chỗ và check-in'
+                : 'Xem lịch lớp ${widget.workoutCategory}',
+            onTap: _openGroupClasses,
+          ),
           const SizedBox(height: 25),
           if (!_isCoach) ...[
             _sectionTitle('Gói tập & quyền lợi'),
@@ -230,15 +255,6 @@ class _BookingHubState extends State<BookingHub> {
             title: 'Tập cùng PT',
             description: 'Lịch hẹn, đặt buổi và liên hệ huấn luyện viên',
             onTap: _openPtSchedule,
-          ),
-          const SizedBox(height: 11),
-          _trainingOption(
-            icon: Icons.groups_rounded,
-            title: 'Workout Class',
-            description: widget.workoutCategory.isEmpty
-                ? 'Khu vực dành cho lịch lớp tập nhóm sắp tới'
-                : 'Lớp ${widget.workoutCategory} sẽ hiển thị tại đây',
-            badge: 'Đang hoàn thiện',
           ),
         ],
       ),

@@ -41,31 +41,17 @@ export class CheckInController {
         return res.status(404).json({ message: 'Người dùng không tồn tại trong hệ thống' });
       }
 
-      // 2. Chống Spam: Kiểm tra xem user có check-in thành công trong vòng 5 phút gần nhất không
-      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const recentCheckIn = await prisma.checkIn.findFirst({
-        where: {
-          memberId: userId,
-          status: 'SUCCESS',
-          checkInTime: {
-            gte: fiveMinsAgo
-          }
-        }
-      });
-
-      if (recentCheckIn) {
-        return res.status(429).json({ message: 'Bạn vừa check-in gần đây, vui lòng thử lại sau ít phút!' });
-      }
-
-      // 3. Tìm gói tập (Subscription/Membership) đang ACTIVE và còn hạn
+      // 2. Find an eligible gym membership by status and validity dates.
       const currentDate = new Date();
       const activeMembership = await prisma.membership.findFirst({
         where: {
           userId: userId,
-          status: 'ACTIVE',
+          status: { in: ['ACTIVE', 'COMPLETED'] },
           startDate: { lte: currentDate },
-          endDate: { gte: currentDate }
+          endDate: { gte: currentDate },
+          package: { type: 'MEMBERSHIP' }
         },
+        orderBy: { endDate: 'asc' },
         include: {
           package: true
         }
@@ -78,39 +64,22 @@ export class CheckInController {
             memberId: userId,
             status: 'FAILED',
             method: 'QR_CODE',
-            rejectReason: 'Không có gói tập nào đang hoạt động hoặc đã hết hạn'
+            rejectReason: 'Không có gói hội viên đang hoạt động hoặc gói đã hết hạn'
           }
         });
-        return res.status(403).json({ message: 'Bạn không có gói tập nào đang hoạt động hoặc đã hết hạn' });
+        return res.status(403).json({ message: 'Bạn không có gói hội viên đang hoạt động hoặc gói đã hết hạn' });
       }
 
-      // 4. Nếu gói tập tính theo số buổi (Ví dụ gói PT) thì phải còn buổi
-      if (activeMembership.remainingSessions !== null) {
-        if (activeMembership.remainingSessions <= 0) {
-          await prisma.checkIn.create({
-            data: {
-              memberId: userId,
-              status: 'FAILED',
-              method: 'QR_CODE',
-              rejectReason: 'Đã hết số buổi tập'
-            }
-          });
-          return res.status(403).json({ message: 'Gói tập của bạn đã hết số buổi' });
-        }
-      }
-
-      // 5. Nếu hợp lệ -> Tạo CheckIn SUCCESS & Trừ số buổi (Nếu có)
+      // Older PT flows could mark a gym membership COMPLETED after its last
+      // included PT session. Restore that membership while recording entry.
       const result = await prisma.$transaction(async (tx) => {
-        // Trừ 1 buổi nếu gói đó giới hạn số buổi
-        if (activeMembership.remainingSessions !== null && activeMembership.remainingSessions > 0) {
-          await tx.membership.update({
-            where: { id: activeMembership.id },
-            data: { remainingSessions: activeMembership.remainingSessions - 1 }
+        if (activeMembership.status === 'COMPLETED') {
+          await tx.membership.updateMany({
+            where: { id: activeMembership.id, status: 'COMPLETED' },
+            data: { status: 'ACTIVE' }
           });
         }
-
-        // Tạo bản ghi CheckIn
-        const newCheckIn = await tx.checkIn.create({
+        return tx.checkIn.create({
           data: {
             memberId: userId,
             membershipId: activeMembership.id,
@@ -118,11 +87,10 @@ export class CheckInController {
             method: 'QR_CODE'
           }
         });
-
-        return newCheckIn;
       });
 
-      // Tính số ngày còn lại
+      // Remaining PT session balance is reported without changing it here.
+
       const remainingDays = Math.max(0, Math.ceil((activeMembership.endDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)));
 
       return res.status(200).json({
@@ -132,7 +100,7 @@ export class CheckInController {
           fullName: user.fullName,
           packageName: activeMembership.package.name,
           remainingDays: remainingDays,
-          remainingSessions: activeMembership.remainingSessions !== null ? activeMembership.remainingSessions - 1 : 'Không giới hạn'
+          remainingSessions: activeMembership.remainingSessions !== null ? activeMembership.remainingSessions : 'Không giới hạn'
         }
       });
 

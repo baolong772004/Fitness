@@ -155,8 +155,9 @@ export const Navbar: React.FC<NavbarProps> = ({
       case 'coach':
         return [
           { id: 'schedule', label: 'Lịch Dạy', icon: Calendar },
+          { id: 'workclass', label: 'Workclass', icon: Layers },
           { id: 'trainees', label: 'Hồ Sơ Học Viên', icon: UserCheck },
-          { id: 'ai-workout', label: 'Giáo Án (AI)', icon: Sparkles },
+          { id: 'ai-workout', label: 'Giáo Án', icon: Sparkles },
           { id: 'availability', label: 'Đăng Lịch Rảnh', icon: Clock }
         ];
       case 'admin':

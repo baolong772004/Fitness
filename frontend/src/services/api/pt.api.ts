@@ -1,7 +1,65 @@
 import { request } from './client';
-import { ApiBooking, ApiSubscription } from './types';
+import { ApiBooking, ApiCoachProfile, ApiCoachSchedule, ApiSubscription } from './types';
+
+export interface CoachTraineeMembership {
+  id: number;
+  userId: number;
+  startDate: string;
+  endDate: string;
+  remainingSessions: number | null;
+  status: string;
+  package: { name: string; totalPtSessions: number | null };
+  user: {
+    id: number;
+    fullName: string;
+    phone: string | null;
+    email: string;
+    avatar: string | null;
+    gender: string | null;
+    dateOfBirth: string | null;
+    height: number | null;
+    weight: number | null;
+  };
+}
+
+export interface CoachWorkoutPlan {
+  id: number;
+  memberId: number;
+  title: string;
+  description: string | null;
+  createdAt: string;
+  member: { id: number; fullName: string };
+}
 
 export const ptApi = {
+  async getCoachWorkspace() {
+    const res = await request<{ success: boolean; data: ApiCoachProfile & { schedules: ApiCoachSchedule[] } }>('/pt/coach/me');
+    return res.data;
+  },
+
+  async getCoachTrainees() {
+    const res = await request<{ success: boolean; data: CoachTraineeMembership[] }>('/pt/coach/trainees');
+    return res.data;
+  },
+
+  async updateCoachAvailability(schedules: Array<{ dayOfWeek: number; startTime: string; endTime: string; isAvailable: boolean }>) {
+    return request<{ success: boolean; message: string; data: ApiCoachSchedule[] }>('/pt/coach/availability', {
+      method: 'PUT',
+      body: JSON.stringify({ schedules })
+    });
+  },
+
+  async getCoachPlans() {
+    const res = await request<{ success: boolean; data: CoachWorkoutPlan[] }>('/pt/coach/plans');
+    return res.data;
+  },
+
+  async createCoachPlan(payload: { memberId: number; title: string; description: string }) {
+    return request<{ success: boolean; message: string; data: CoachWorkoutPlan }>('/pt/coach/plans', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
   async getAvailableTrainers() {
     return request<{
       success: boolean;
@@ -53,7 +111,7 @@ export const ptApi = {
     });
   },
 
-  async updateBookingStatus(id: number | string, status: 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | string) {
+  async updateBookingStatus(id: number | string, status: 'CONFIRMED' | 'REJECTED') {
     return request<{
       success: boolean;
       message: string;
@@ -98,6 +156,31 @@ export const ptApi = {
     }>(`/pt/booking/${bookingId}/complete-session`, {
       method: 'POST'
     });
+  },
+
+  async getBookingMessages(bookingId: number | string) {
+    return request<{
+      success: boolean;
+      data: Array<{ id: number; senderId: number; content: string; createdAt: string; sender: { fullName: string } }>;
+      canSend: boolean;
+      hasMore: boolean;
+    }>(`/pt/booking/${bookingId}/messages`);
+  },
+
+  async sendBookingMessage(bookingId: number | string, content: string) {
+    return request<{ success: boolean; data: { id: number } }>(`/pt/booking/${bookingId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content })
+    });
+  },
+
+  async resolveNoShow(bookingId: number | string, resolution: 'ATTENDED' | 'EXCUSED', reason: string) {
+    return request<{ success: boolean; message: string; data: ApiBooking }>(
+      `/pt/booking/${bookingId}/resolve-no-show`, {
+        method: 'POST',
+        body: JSON.stringify({ resolution, reason })
+      }
+    );
   },
 
   async markAbsent(bookingId: number | string, reason?: string) {

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getGroupClassSchedules, bookGroupClass, cancelGroupClass, checkInGroupClass, createGroupClass, createGroupClassSchedule } from '../controllers/groupClass.controller.js';
+import { getGroupClassSchedules, getGroupClassCheckInQr, getGroupClassAttendees, bookGroupClass, cancelGroupClass, checkInGroupClass, createGroupClass, createGroupClassSchedule } from '../controllers/groupClass.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -25,11 +25,56 @@ const router = Router();
  *         schema:
  *           type: string
  *         description: Ngày cần xem (YYYY-MM-DD). Nếu không truyền sẽ lấy ngày hôm nay.
+ *       - in: query
+ *         name: all
+ *         schema:
+ *           type: boolean
+ *         description: Admin/Staff dùng true để xem toàn bộ lịch, kể cả ngày khác và lớp đã đóng.
  *     responses:
  *       200:
  *         description: Thành công
  */
 router.get('/schedules', authenticateToken, getGroupClassSchedules);
+
+/**
+ * @swagger
+ * /group-classes/schedules/{scheduleId}/check-in-qr:
+ *   get:
+ *     summary: HLV tạo mã QR điểm danh cho ca lớp nhóm được phân công
+ *     tags: [GroupClass]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: scheduleId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Mã QR có hiệu lực 90 giây
+ */
+router.get('/schedules/:scheduleId/check-in-qr', authenticateToken, getGroupClassCheckInQr);
+
+/**
+ * @swagger
+ * /group-classes/schedules/{scheduleId}/attendees:
+ *   get:
+ *     summary: HLV xem hội viên đã đặt và đã điểm danh lớp nhóm
+ *     tags: [GroupClass]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: scheduleId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Danh sách hội viên của ca lớp
+ */
+router.get('/schedules/:scheduleId/attendees', authenticateToken, getGroupClassAttendees);
 
 /**
  * @swagger
@@ -92,6 +137,16 @@ router.post('/cancel/:bookingId', authenticateToken, cancelGroupClass);
  *         required: true
  *         schema:
  *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [qrToken]
+ *             properties:
+ *               qrToken:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Check-in thành công

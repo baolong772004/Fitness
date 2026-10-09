@@ -762,7 +762,6 @@ class _MemberShellState extends State<MemberShell> {
                     showSearchAndFilter: false,
                   ),
                   HomePhotoHero(onExplore: _openScheduleFor),
-                  UpcomingCard(onTap: _openCheckInQr),
                   FeatureCardsGrid(
                     onSelectFeature: (feature) =>
                         _info('Aura Fitness', feature),

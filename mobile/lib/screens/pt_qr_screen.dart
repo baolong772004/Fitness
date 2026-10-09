@@ -9,7 +9,14 @@ import '../theme.dart';
 import '../widgets/aura_loader.dart';
 
 class PtQrScanScreen extends StatefulWidget {
-  const PtQrScanScreen({super.key});
+  const PtQrScanScreen({
+    super.key,
+    this.title = 'Quét QR buổi PT',
+    this.instruction = 'Đưa mã QR trên điện thoại HLV vào khung để bắt đầu buổi tập.',
+  });
+
+  final String title;
+  final String instruction;
 
   @override
   State<PtQrScanScreen> createState() => _PtQrScanScreenState();
@@ -33,7 +40,7 @@ class _PtQrScanScreenState extends State<PtQrScanScreen> {
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.black,
     appBar: AppBar(
-      title: const Text('Quét QR buổi PT'),
+      title: Text(widget.title),
       backgroundColor: AuraColors.espresso,
       foregroundColor: Colors.white,
     ),
@@ -62,12 +69,12 @@ class _PtQrScanScreenState extends State<PtQrScanScreen> {
             ),
           ),
         ),
-        const Align(
+        Align(
           alignment: Alignment(0, 0.7),
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 25),
             child: Text(
-              'Đưa mã QR trên điện thoại HLV vào khung để bắt đầu buổi tập.',
+              widget.instruction,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white,

@@ -10,6 +10,13 @@ export const groupClassApi = {
     return res.data;
   },
 
+  async getAllSchedules() {
+    const res = await request<{ success: boolean; data: ApiGroupClassSchedule[] }>(
+      '/group-classes/schedules?all=true'
+    );
+    return res.data;
+  },
+
   async book(scheduleId: number) {
     return request<{
       success: boolean;
@@ -31,14 +38,31 @@ export const groupClassApi = {
     });
   },
 
-  async checkIn(bookingId: number) {
+  async checkIn(bookingId: number, qrToken: string) {
     return request<{
       success: boolean;
       message: string;
       data: ApiGroupClassBooking;
     }>(`/group-classes/check-in/${bookingId}`, {
-      method: 'POST'
+      method: 'POST',
+      body: JSON.stringify({ qrToken })
     });
+  },
+
+  async getCheckInQr(scheduleId: number) {
+    const res = await request<{
+      success: boolean;
+      data: { token: string; qrCodeImage: string; expiresInSeconds: number };
+    }>(`/group-classes/schedules/${scheduleId}/check-in-qr`);
+    return res.data;
+  },
+
+  async getAttendees(scheduleId: number) {
+    const res = await request<{
+      success: boolean;
+      data: Array<{ id: number; status: 'BOOKED' | 'CHECKED_IN'; user: { id: number; fullName: string } }>;
+    }>(`/group-classes/schedules/${scheduleId}/attendees`);
+    return res.data;
   },
 
   async createClass(payload: {

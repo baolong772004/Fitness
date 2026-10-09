@@ -49,7 +49,7 @@ export async function getPtChatAccess(bookingId: number, userId: number) {
   }
 
   const canSend = ['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) &&
-    Date.now() <= booking.endTime.getTime() + 2 * 60 * 60 * 1000;
+    Date.now() < booking.endTime.getTime();
   return { booking, canSend };
 }
 
@@ -83,7 +83,7 @@ export async function createPtChatMessage(bookingId: number, senderId: number, c
       throw new PtChatError(403, completedMessage);
     }
     if (!readableStatuses.includes(booking.status) ||
-        Date.now() > booking.endTime.getTime() + 2 * 60 * 60 * 1000) {
+        Date.now() >= booking.endTime.getTime()) {
       throw new PtChatError(403, 'Cuộc trò chuyện đã đóng sau giờ tập.');
     }
     return tx.ptChatMessage.create({

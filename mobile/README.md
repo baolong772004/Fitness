@@ -47,7 +47,7 @@ flutter run --dart-define=API_BASE_URL=http://192.168.1.45:5000/api
 
 Thay `192.168.1.10` bằng địa chỉ IP của máy bạn. Điện thoại và máy chạy backend cần cùng mạng. Android cho phép HTTP trong debug build để dùng với server local; bản phát hành nên dùng HTTPS.
 
-Các lớp và lịch đặt vẫn là dữ liệu mẫu trong bộ nhớ, chưa kết nối API lịch tập.
+Trong tab **Đặt lịch**, chọn **Workout Class** để xem lớp nhóm theo ngày, đặt chỗ, hủy đăng ký và check-in. Màn hình này dùng các API `/group-classes/schedules`, `/group-classes/book`, `/group-classes/cancel/{bookingId}`, `/group-classes/check-in/{bookingId}` và `/member/my-schedule`. Cần đăng nhập và chạy backend để xem lịch thật.
 
 ## Mã nguồn
 

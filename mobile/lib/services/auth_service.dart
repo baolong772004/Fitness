@@ -202,6 +202,80 @@ class FitnessCoach {
   );
 }
 
+class GroupClassSchedule {
+  const GroupClassSchedule({
+    required this.id,
+    required this.name,
+    required this.startTime,
+    required this.endTime,
+    required this.capacity,
+    required this.bookedCount,
+    required this.status,
+    this.description,
+    this.imageUrl,
+    this.trainerName,
+    this.roomName,
+  });
+
+  final int id;
+  final String name;
+  final String? description;
+  final String? imageUrl;
+  final String? trainerName;
+  final String? roomName;
+  final DateTime startTime;
+  final DateTime endTime;
+  final int capacity;
+  final int bookedCount;
+  final String status;
+
+  int get availableSpots => capacity > bookedCount ? capacity - bookedCount : 0;
+
+  factory GroupClassSchedule.fromJson(Map<String, dynamic> json) {
+    final groupClass = json['groupClass'] is Map
+        ? Map<String, dynamic>.from(json['groupClass'] as Map)
+        : <String, dynamic>{};
+    final trainer = json['trainer'] is Map
+        ? Map<String, dynamic>.from(json['trainer'] as Map)
+        : <String, dynamic>{};
+    final room = json['room'] is Map
+        ? Map<String, dynamic>.from(json['room'] as Map)
+        : <String, dynamic>{};
+    return GroupClassSchedule(
+      id: int.tryParse(json['id']?.toString() ?? '') ?? 0,
+      name: groupClass['name']?.toString() ?? 'Lớp học nhóm',
+      description: groupClass['description']?.toString(),
+      imageUrl: groupClass['imageUrl']?.toString(),
+      trainerName: trainer['fullName']?.toString(),
+      roomName: room['name']?.toString(),
+      startTime: DateTime.parse(json['startTime'].toString()).toLocal(),
+      endTime: DateTime.parse(json['endTime'].toString()).toLocal(),
+      capacity: int.tryParse(json['capacity']?.toString() ?? '') ?? 0,
+      bookedCount: int.tryParse(json['bookedCount']?.toString() ?? '') ?? 0,
+      status: json['status']?.toString() ?? 'OPEN',
+    );
+  }
+}
+
+class GroupClassReservation {
+  const GroupClassReservation({
+    required this.id,
+    required this.scheduleId,
+    required this.status,
+  });
+
+  final int id;
+  final int scheduleId;
+  final String status;
+
+  factory GroupClassReservation.fromJson(Map<String, dynamic> json) =>
+      GroupClassReservation(
+        id: int.tryParse(json['id']?.toString() ?? '') ?? 0,
+        scheduleId: int.tryParse(json['scheduleId']?.toString() ?? '') ?? 0,
+        status: json['status']?.toString() ?? '',
+      );
+}
+
 class MemberSubscription {
   const MemberSubscription({
     required this.id,
@@ -283,6 +357,7 @@ class PtBooking {
     this.packageName,
     this.remainingSessions,
     this.absenceReportedAt,
+    this.cancelledBy,
     this.isMakeup = false,
   });
 
@@ -297,6 +372,7 @@ class PtBooking {
   final String? packageName;
   final int? remainingSessions;
   final DateTime? absenceReportedAt;
+  final String? cancelledBy;
   final bool isMakeup;
 
   factory PtBooking.fromJson(Map<String, dynamic> json) {
@@ -326,6 +402,7 @@ class PtBooking {
       absenceReportedAt: DateTime.tryParse(
         json['absenceReportedAt']?.toString() ?? '',
       )?.toLocal(),
+      cancelledBy: json['cancelledBy']?.toString(),
       isMakeup: json['isMakeup'] == true,
     );
   }
@@ -596,6 +673,95 @@ class AuthService {
         )
         .where((package) => package.id > 0)
         .toList();
+  }
+
+  Future<List<GroupClassSchedule>> getGroupClassSchedules(DateTime day) async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw const AuthApiException('Vui lòng đăng nhập để xem lịch lớp nhóm.');
+    }
+    final date =
+        '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+    final response = await _get(
+      '/group-classes/schedules?date=$date',
+      bearerToken: token,
+    );
+    final rows = response['data'];
+    if (rows is! List) {
+      throw const AuthApiException('Máy chủ chưa trả về lịch lớp nhóm.');
+    }
+    return rows
+        .whereType<Map>()
+        .map(
+          (row) => GroupClassSchedule.fromJson(Map<String, dynamic>.from(row)),
+        )
+        .where((schedule) => schedule.id > 0)
+        .toList();
+  }
+
+  Future<List<GroupClassReservation>> getMyGroupClassReservations(
+    DateTime day,
+  ) async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw const AuthApiException('Vui lòng đăng nhập để xem lớp đã đặt.');
+    }
+    final from = DateTime(day.year, day.month, day.day);
+    final to = DateTime(day.year, day.month, day.day, 23, 59, 59, 999);
+    final query = Uri(
+      queryParameters: {
+        'fromDate': from.toUtc().toIso8601String(),
+        'toDate': to.toUtc().toIso8601String(),
+        'type': 'GROUP',
+      },
+    ).query;
+    final response = await _get(
+      '/member/my-schedule?$query',
+      bearerToken: token,
+    );
+    final rows = response['data'];
+    if (rows is! List) {
+      throw const AuthApiException('Máy chủ chưa trả về lớp đã đặt.');
+    }
+    return rows
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => row['bookingType'] == 'GROUP_CLASS')
+        .map(GroupClassReservation.fromJson)
+        .where(
+          (reservation) => reservation.id > 0 && reservation.scheduleId > 0,
+        )
+        .toList();
+  }
+
+  Future<void> bookGroupClass(int scheduleId) async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw const AuthApiException('Vui lòng đăng nhập để đặt lớp nhóm.');
+    }
+    await _post('/group-classes/book', {
+      'scheduleId': scheduleId,
+    }, bearerToken: token);
+  }
+
+  Future<void> cancelGroupClass(int bookingId) async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw const AuthApiException('Vui lòng đăng nhập để hủy lớp nhóm.');
+    }
+    await _post('/group-classes/cancel/$bookingId', {}, bearerToken: token);
+  }
+
+  Future<void> checkInGroupClass(int bookingId, String qrToken) async {
+    final token = accessToken;
+    if (token == null || token.isEmpty) {
+      throw const AuthApiException('Vui lòng đăng nhập để check-in lớp nhóm.');
+    }
+    await _post(
+      '/group-classes/check-in/$bookingId',
+      {'qrToken': qrToken},
+      bearerToken: token,
+    );
   }
 
   Future<List<FitnessCoach>> getAvailablePtCoaches() async {

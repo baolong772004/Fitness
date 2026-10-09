@@ -52,7 +52,7 @@ const router = Router();
  *         description: Ghi log thành công
  */
 // Chỉ COACH mới được log giáo án buổi tập
-router.post('/log-session', authenticateToken, authorizeRoles('COACH', 'ADMIN'), logSessionResult);
+router.post('/log-session', authenticateToken, authorizeRoles('COACH', 'TRAINER', 'ADMIN'), logSessionResult);
 
 /**
  * @swagger
@@ -82,7 +82,7 @@ router.post('/log-session', authenticateToken, authorizeRoles('COACH', 'ADMIN'),
  *         description: Lưu thành công
  */
 // STAFF, COACH hoặc ADMIN có quyền lưu InBody cho khách
-router.post('/inbody', authenticateToken, authorizeRoles('STAFF', 'COACH', 'ADMIN'), logInBodyProgress);
+router.post('/inbody', authenticateToken, authorizeRoles('STAFF', 'COACH', 'TRAINER', 'ADMIN'), logInBodyProgress);
 
 /**
  * @swagger
