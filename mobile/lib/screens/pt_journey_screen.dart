@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
@@ -29,6 +31,7 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
   String? _error;
   bool _loading = true;
   int? _busyBookingId;
+  Timer? _timeRefreshTimer;
 
   bool get _isCoach => const {
     'COACH',
@@ -39,6 +42,44 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  void _scheduleNextTimeRefresh() {
+    _timeRefreshTimer?.cancel();
+    final now = DateTime.now();
+    DateTime? next;
+    for (final booking in _bookings) {
+      final times = [
+        if (booking.startTime != null)
+          booking.startTime!.subtract(const Duration(minutes: 15)),
+        if (booking.startTime != null) booking.startTime!,
+        if (booking.endTime != null) booking.endTime!,
+        if (booking.endTime != null)
+          booking.endTime!.add(const Duration(minutes: 16)),
+      ];
+      for (final time in times) {
+        if (time.isAfter(now) && (next == null || time.isBefore(next))) {
+          next = time;
+        }
+      }
+      if (booking.status.toUpperCase() == 'CONFIRMED' &&
+          booking.endTime != null &&
+          !booking.endTime!.add(const Duration(minutes: 15)).isAfter(now)) {
+        final retryAt = now.add(const Duration(minutes: 1));
+        if (next == null || retryAt.isBefore(next)) next = retryAt;
+      }
+    }
+    if (next == null) return;
+    _timeRefreshTimer = Timer(next.difference(now) + const Duration(milliseconds: 50), () {
+      if (!mounted) return;
+      unawaited(_load());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timeRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -60,6 +101,7 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
         _bookings = bookings;
         _subscriptions = subscriptions;
       });
+      _scheduleNextTimeRefresh();
     } on AuthApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } finally {
@@ -242,13 +284,17 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
     return '$hour:$minute · $day/$month/${value.year}';
   }
 
-  String _status(String status) => switch (status.toUpperCase()) {
+  String _status(String status, {String? cancelledBy}) =>
+      switch (status.toUpperCase()) {
     'PENDING' || 'UPCOMING' => 'Chờ HLV xác nhận',
     'CONFIRMED' => 'Đã xác nhận',
     'IN_PROGRESS' => 'Đang tập',
     'COMPLETED' => 'Hoàn thành',
     'ABSENT_ELIGIBLE' => 'Được học bù',
-    'ABSENT_NO_REFUND' => 'Vắng, đã trừ buổi',
+    'ABSENT_NO_REFUND' => cancelledBy == 'SYSTEM_NO_SHOW_NO_DEBIT'
+        ? 'Vắng, gói hết buổi'
+        : 'Vắng, đã trừ buổi',
+    'ABSENT_EXCUSED' => 'Vắng được điều chỉnh',
     'MAKEUP_BOOKED' => 'Đã đặt học bù',
     'CANCELLED' => 'Đã hủy',
     'REJECTED' => 'PT đã từ chối',
@@ -405,20 +451,26 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
 
   Widget _bookingCard(PtBooking booking) {
     final status = booking.status.toUpperCase();
+    final now = DateTime.now();
+    final hasStarted = booking.startTime != null &&
+        !now.isBefore(booking.startTime!);
+    final hasEnded = booking.endTime != null &&
+        !now.isBefore(booking.endTime!);
     final canOpenChat =
         booking.coachId != null &&
+        booking.endTime != null &&
+        !hasEnded &&
         const {
           'CONFIRMED',
           'IN_PROGRESS',
         }.contains(status);
-    final canReview = status == 'PENDING' || status == 'UPCOMING';
+    final canReview = (status == 'PENDING' || status == 'UPCOMING') && !hasStarted;
     final canAttend = status == 'CONFIRMED';
-    final now = DateTime.now();
+    final canReportAbsence = canAttend && booking.startTime != null && !hasStarted;
     final checkInOpensAt = booking.startTime?.subtract(
       const Duration(minutes: 15),
     );
-    final checkInEnded =
-        booking.endTime != null && now.isAfter(booking.endTime!);
+    final checkInEnded = hasEnded;
     final canScanQr =
         canAttend &&
         checkInOpensAt != null &&
@@ -427,7 +479,7 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
         !checkInEnded;
     final statusLabel = status == 'CONFIRMED' && checkInEnded
         ? 'Đã qua giờ tập'
-        : _status(status);
+        : _status(status, cancelledBy: booking.cancelledBy);
     final canMakeup =
         status == 'ABSENT_ELIGIBLE' &&
         booking.absenceReportedAt != null &&
@@ -533,7 +585,7 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
           ],
           if ((_isCoach &&
                   (canReview || canScanQr || status == 'IN_PROGRESS')) ||
-              (!_isCoach && (canAttend || canMakeup))) ...[
+              (!_isCoach && (canScanQr || canReportAbsence || canMakeup))) ...[
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -588,7 +640,7 @@ class _PtJourneyScreenState extends State<PtJourneyScreen> {
                     icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
                     label: const Text('Quét QR điểm danh'),
                   ),
-                if (!_isCoach && canAttend)
+                if (!_isCoach && canReportAbsence)
                   OutlinedButton(
                     onPressed: busy ? null : () => _markAbsent(booking),
                     child: Text(busy ? 'Đang xử lý…' : 'Báo vắng'),

@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
+import jwt from 'jsonwebtoken';
+import QRCode from 'qrcode';
 
 const prisma = new PrismaClient();
 
@@ -8,20 +10,31 @@ const prisma = new PrismaClient();
  * API 1: Xem danh sách lớp học nhóm & Lịch học theo ngày
  * @route GET /api/group-classes/schedules?date=2026-10-06
  */
-export const getGroupClassSchedules = async (req: Request, res: Response) => {
+export const getGroupClassSchedules = async (req: AuthRequest, res: Response) => {
   try {
     const { date } = req.query;
-    const targetDate = date ? new Date(date as string) : new Date();
-
-    // Lấy danh sách lịch học trong ngày được chọn
-    const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+    const all = req.query.all === 'true';
+    if (all && !['ADMIN', 'STAFF'].includes(req.user?.role || '')) {
+      return res.status(403).json({ success: false, message: 'Không có quyền xem toàn bộ lịch lớp học' });
+    }
+    const dateText = typeof date === 'string'
+      ? date
+      : new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    if (!all && !/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
+      return res.status(400).json({ success: false, message: 'date phải có dạng YYYY-MM-DD' });
+    }
+    // Gym dùng giờ Việt Nam (UTC+07), độc lập múi giờ máy chủ.
+    const startOfDay = new Date(`${dateText}T00:00:00+07:00`);
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    if (!all && (Number.isNaN(startOfDay.getTime()) || new Date(`${dateText}T00:00:00.000Z`).toISOString().slice(0, 10) !== dateText)) {
+      return res.status(400).json({ success: false, message: 'Ngày không hợp lệ' });
+    }
 
     const schedules = await prisma.groupClassSchedule.findMany({
-      where: {
+      where: all ? {} : {
         startTime: {
           gte: startOfDay,
-          lte: endOfDay,
+          lt: endOfDay,
         },
         status: { in: ['OPEN', 'FULL'] },
       },
@@ -30,7 +43,7 @@ export const getGroupClassSchedules = async (req: Request, res: Response) => {
         trainer: { select: { id: true, fullName: true, avatar: true } },
         room: true
       },
-      orderBy: { startTime: 'asc' },
+      orderBy: all ? { startTime: 'desc' } : { startTime: 'asc' },
     });
 
     return res.status(200).json({
@@ -40,6 +53,37 @@ export const getGroupClassSchedules = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Lỗi lấy danh sách lớp học nhóm:', error);
     return res.status(500).json({ success: false, message: 'Lỗi lấy danh sách lớp học nhóm' });
+  }
+};
+
+export const getAdminGroupClasses = async (_req: Request, res: Response) => {
+  try {
+    const classes = await prisma.groupClass.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.status(200).json({ success: true, data: classes });
+  } catch (error: any) {
+    console.error('Lỗi lấy danh mục lớp học nhóm:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi lấy danh mục lớp học nhóm' });
+  }
+};
+
+export const getAdminGroupClassSchedules = async (_req: Request, res: Response) => {
+  try {
+    const schedules = await prisma.groupClassSchedule.findMany({
+      include: {
+        groupClass: true,
+        trainer: { select: { id: true, fullName: true, avatar: true } },
+        room: true,
+      },
+      orderBy: { startTime: 'asc' },
+    });
+
+    return res.status(200).json({ success: true, data: schedules });
+  } catch (error: any) {
+    console.error('Lỗi lấy toàn bộ lịch lớp học nhóm admin:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi lấy toàn bộ lịch lớp học nhóm' });
   }
 };
 
@@ -223,13 +267,68 @@ export const cancelGroupClass = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * API 4: Member Check-in Lớp Group Class
- * @route POST /api/group-classes/check-in/:bookingId
+ * Coach QR and attendance list for an assigned group class schedule.
  */
+export const getGroupClassCheckInQr = async (req: AuthRequest, res: Response) => {
+  try {
+    const scheduleId = Number(req.params.scheduleId);
+    const actorId = req.user?.userId;
+    if (!Number.isSafeInteger(scheduleId) || scheduleId <= 0 || !actorId) {
+      return res.status(400).json({ success: false, message: 'Lịch lớp học không hợp lệ' });
+    }
+    const schedule = await prisma.groupClassSchedule.findUnique({ where: { id: scheduleId } });
+    if (!schedule) return res.status(404).json({ success: false, message: 'Không tìm thấy lịch lớp học' });
+    if (schedule.trainerId !== actorId && !['ADMIN', 'STAFF'].includes(req.user?.role || '')) {
+      return res.status(403).json({ success: false, message: 'Bạn không phụ trách lớp học này' });
+    }
+    const now = Date.now();
+    if (!['OPEN', 'FULL'].includes(schedule.status) || now < schedule.startTime.getTime() - 15 * 60 * 1000 || now > schedule.endTime.getTime()) {
+      return res.status(400).json({ success: false, message: 'QR điểm danh chỉ mở từ 15 phút trước giờ học đến hết ca' });
+    }
+    const token = jwt.sign(
+      { type: 'GROUP_CLASS_CHECKIN', scheduleId },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '90s' },
+    );
+    return res.status(200).json({
+      success: true,
+      data: { token, qrCodeImage: await QRCode.toDataURL(token), expiresInSeconds: 90 },
+    });
+  } catch (error) {
+    console.error('Lỗi tạo QR lớp học nhóm:', error);
+    return res.status(500).json({ success: false, message: 'Không thể tạo QR điểm danh lớp học' });
+  }
+};
+
+export const getGroupClassAttendees = async (req: AuthRequest, res: Response) => {
+  try {
+    const scheduleId = Number(req.params.scheduleId);
+    const actorId = req.user?.userId;
+    if (!Number.isSafeInteger(scheduleId) || scheduleId <= 0 || !actorId) {
+      return res.status(400).json({ success: false, message: 'Lịch lớp học không hợp lệ' });
+    }
+    const schedule = await prisma.groupClassSchedule.findUnique({ where: { id: scheduleId } });
+    if (!schedule) return res.status(404).json({ success: false, message: 'Không tìm thấy lịch lớp học' });
+    if (schedule.trainerId !== actorId && !['ADMIN', 'STAFF'].includes(req.user?.role || '')) {
+      return res.status(403).json({ success: false, message: 'Bạn không phụ trách lớp học này' });
+    }
+    const bookings = await prisma.groupClassBooking.findMany({
+      where: { scheduleId, status: { in: ['BOOKED', 'CHECKED_IN'] } },
+      select: { id: true, status: true, user: { select: { id: true, fullName: true } } },
+      orderBy: { id: 'asc' },
+    });
+    return res.status(200).json({ success: true, data: bookings });
+  } catch (error) {
+    console.error('Lỗi tải danh sách lớp học nhóm:', error);
+    return res.status(500).json({ success: false, message: 'Không thể tải danh sách lớp học' });
+  }
+};
+
 export const checkInGroupClass = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
     const bookingId = Number(req.params.bookingId);
+    const qrToken = req.body?.qrToken;
 
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -252,19 +351,38 @@ export const checkInGroupClass = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: `Không thể check-in, trạng thái hiện tại: ${booking.status}` });
     }
 
-    // Optional: Có thể check điều kiện thời gian check-in (VD: trước giờ học 30p, sau giờ học không cho check-in)
+    if (typeof qrToken !== 'string' || !qrToken.trim()) {
+      return res.status(400).json({ success: false, message: 'Vui lòng quét mã QR của lớp học để check-in' });
+    }
+    try {
+      const payload = jwt.verify(qrToken.trim(), process.env.JWT_SECRET as string);
+      if (typeof payload === 'string' || payload.type !== 'GROUP_CLASS_CHECKIN' || payload.scheduleId !== booking.scheduleId) {
+        return res.status(400).json({ success: false, message: 'Mã QR không thuộc lớp học đã đăng ký' });
+      }
+    } catch {
+      return res.status(400).json({ success: false, message: 'Mã QR lớp học không hợp lệ hoặc đã hết hạn' });
+    }
+
     const now = new Date();
     const startTime = new Date(booking.schedule.startTime);
     const endTime = new Date(booking.schedule.endTime);
 
+    if (booking.schedule.status === 'CANCELLED' || booking.schedule.status === 'COMPLETED') {
+      return res.status(400).json({ success: false, message: 'Lớp học không còn mở điểm danh' });
+    }
+    if (now.getTime() < startTime.getTime() - 15 * 60 * 1000) {
+      return res.status(400).json({ success: false, message: 'Chỉ được check-in từ 15 phút trước giờ học' });
+    }
     if (now > endTime) {
        return res.status(400).json({ success: false, message: 'Lớp học đã kết thúc, không thể check-in' });
     }
 
-    const updatedBooking = await prisma.groupClassBooking.update({
-      where: { id: bookingId },
+    const claimed = await prisma.groupClassBooking.updateMany({
+      where: { id: bookingId, userId, status: 'BOOKED' },
       data: { status: 'CHECKED_IN' }
     });
+    if (claimed.count !== 1) return res.status(409).json({ success: false, message: 'Lớp học đã được check-in trước đó' });
+    const updatedBooking = await prisma.groupClassBooking.findUniqueOrThrow({ where: { id: bookingId } });
 
     return res.status(200).json({
       success: true,
@@ -305,24 +423,56 @@ export const createGroupClassSchedule = async (req: Request, res: Response) => {
   try {
     const { classId, trainerId, roomId, startTime, endTime, capacity } = req.body;
 
-    if (!classId || !trainerId || !startTime || !endTime) {
-       return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc' });
+    const parsedClassId = Number(classId);
+    const parsedTrainerId = Number(trainerId);
+    const parsedRoomId = roomId === undefined || roomId === null || roomId === '' ? null : Number(roomId);
+    const parsedCapacity = capacity === undefined || capacity === null || capacity === '' ? 20 : Number(capacity);
+    const parsedStartTime = new Date(startTime);
+    const parsedEndTime = new Date(endTime);
+
+    if (!Number.isSafeInteger(parsedClassId) || parsedClassId <= 0 ||
+        !Number.isSafeInteger(parsedTrainerId) || parsedTrainerId <= 0 ||
+        !startTime || !endTime) {
+       return res.status(400).json({ success: false, message: 'classId, trainerId, startTime và endTime là bắt buộc và phải hợp lệ' });
     }
+
+    if (parsedRoomId !== null && (!Number.isSafeInteger(parsedRoomId) || parsedRoomId <= 0)) {
+      return res.status(400).json({ success: false, message: 'roomId phải là số nguyên dương' });
+    }
+    if (!Number.isSafeInteger(parsedCapacity) || parsedCapacity <= 0) {
+      return res.status(400).json({ success: false, message: 'capacity phải là số nguyên dương' });
+    }
+    if (Number.isNaN(parsedStartTime.getTime()) || Number.isNaN(parsedEndTime.getTime()) || parsedEndTime <= parsedStartTime) {
+      return res.status(400).json({ success: false, message: 'startTime và endTime không hợp lệ hoặc endTime không sau startTime' });
+    }
+
+    const [groupClass, trainer, room] = await Promise.all([
+      prisma.groupClass.findUnique({ where: { id: parsedClassId }, select: { id: true } }),
+      prisma.user.findUnique({ where: { id: parsedTrainerId }, select: { id: true } }),
+      parsedRoomId === null
+        ? Promise.resolve({ id: null })
+        : prisma.room.findUnique({ where: { id: parsedRoomId }, select: { id: true } })
+    ]);
+
+    if (!groupClass) return res.status(404).json({ success: false, message: `Không tìm thấy lớp học với classId=${parsedClassId}` });
+    if (!trainer) return res.status(404).json({ success: false, message: `Không tìm thấy người dùng với trainerId=${parsedTrainerId}` });
+    if (!room) return res.status(404).json({ success: false, message: `Không tìm thấy phòng với roomId=${parsedRoomId}` });
 
     const schedule = await prisma.groupClassSchedule.create({
       data: {
-        classId: Number(classId),
-        trainerId: Number(trainerId),
-        roomId: roomId ? Number(roomId) : null,
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
-        capacity: Number(capacity || 20),
+        classId: parsedClassId,
+        trainerId: parsedTrainerId,
+        roomId: parsedRoomId,
+        startTime: parsedStartTime,
+        endTime: parsedEndTime,
+        capacity: parsedCapacity,
         status: 'OPEN'
       }
     });
 
     return res.status(201).json({ success: true, message: 'Lên lịch thành công', data: schedule });
   } catch (error: any) {
+    console.error('Lỗi createGroupClassSchedule:', error);
     return res.status(500).json({ success: false, message: 'Lỗi lên lịch lớp học' });
   }
 };

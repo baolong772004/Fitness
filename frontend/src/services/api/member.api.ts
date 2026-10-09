@@ -1,5 +1,19 @@
 import { request } from './client';
 
+export interface MemberScheduleEvent {
+  id: number;
+  scheduleId?: number;
+  bookingType: 'PERSONAL_TRAINING' | 'GROUP_CLASS';
+  title: string;
+  startTime: string;
+  endTime: string;
+  status: string;
+  trainerName?: string;
+  trainerAvatar?: string;
+  location?: string;
+  canCancel?: boolean;
+}
+
 export const memberApi = {
   async getMySchedule(params?: { fromDate?: string; toDate?: string; type?: 'ALL' | 'PT' | 'GROUP' }) {
     const q = new URLSearchParams();
@@ -9,18 +23,7 @@ export const memberApi = {
 
     const res = await request<{
       success: boolean;
-      data: Array<{
-        id: number;
-        bookingType: 'PERSONAL_TRAINING' | 'GROUP_CLASS';
-        title: string;
-        startTime: string;
-        endTime: string;
-        status: string;
-        trainerName?: string;
-        trainerAvatar?: string;
-        location?: string;
-        canCancel?: boolean;
-      }>;
+      data: MemberScheduleEvent[];
     }>(`/member/my-schedule?${q.toString()}`);
     return res.data;
   },

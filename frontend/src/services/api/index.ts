@@ -14,6 +14,7 @@ import { workoutLogApi } from './workoutLog.api';
 import { reviewApi } from './review.api';
 import { supportApi } from './support.api';
 import { facilityApi } from './facility.api';
+import { notificationApi } from './notification.api';
 
 // Health check
 export async function checkHealth(): Promise<boolean> {
@@ -43,6 +44,7 @@ export const api = {
   reviews: reviewApi,
   support: supportApi,
   facility: facilityApi,
+  notifications: notificationApi,
 };
 
 export default api;
@@ -64,7 +66,9 @@ export {
   reviewApi,
   supportApi,
   facilityApi,
+  notificationApi,
 };
+export type { ApiNotification } from './notification.api';
 
 // Re-export client utilities & types
 export * from './client';

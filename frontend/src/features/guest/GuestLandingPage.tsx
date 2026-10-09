@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api, ApiPackage, ApiGroupClassSchedule, ApiCoachProfile } from '../../services/api';
+import type { MemberScheduleEvent } from '../../services/api/member.api';
 import { soundEffects } from '../../services/audioService';
+import { WebcamQrScanner } from '../../components/common/WebcamQrScanner';
+import { EditorialRoute, GuestArticlePage, GuestArticlesSection } from './GuestArticles';
 import {
   QrCode,
   Calendar,
@@ -34,6 +37,29 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
   onOpenRegister,
   currentUser
 }) => {
+  const [editorialRoute, setEditorialRoute] = useState<EditorialRoute | null>(() => {
+    const route = new URLSearchParams(window.location.search).get('content');
+    return route ? route as EditorialRoute : null;
+  });
+
+  useEffect(() => {
+    const syncRoute = () => {
+      const route = new URLSearchParams(window.location.search).get('content');
+      setEditorialRoute(route ? route as EditorialRoute : null);
+    };
+    window.addEventListener('popstate', syncRoute);
+    return () => window.removeEventListener('popstate', syncRoute);
+  }, []);
+
+  const navigateEditorial = (route: EditorialRoute | null) => {
+    const url = new URL(window.location.href);
+    if (route) url.searchParams.set('content', route);
+    else url.searchParams.delete('content');
+    window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    setEditorialRoute(route);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Live Packages from Backend API
   const [livePackages, setLivePackages] = useState<ApiPackage[]>([]);
   const [isLoadingPackages, setIsLoadingPackages] = useState(false);
@@ -50,9 +76,16 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
   const [selfCheckinMsg, setSelfCheckinMsg] = useState<string | null>(null);
 
   // Interactive Class Schedule State
-  const [selectedDayIndex, setSelectedDayIndex] = useState(3); // Default T5
+  const [selectedDayIndex, setSelectedDayIndex] = useState(() => (new Date().getDay() + 6) % 7);
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-  const [bookedSessions, setBookedSessions] = useState<Set<string>>(new Set<string>());
+  const [myGroupBookings, setMyGroupBookings] = useState<MemberScheduleEvent[]>([]);
+  const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [isLoadingMyBookings, setIsLoadingMyBookings] = useState(false);
+  const [bookingStatusError, setBookingStatusError] = useState(false);
+  const [scheduleReloadKey, setScheduleReloadKey] = useState(0);
+  const [bookingLoadingId, setBookingLoadingId] = useState<number | null>(null);
+  const [classCheckInBooking, setClassCheckInBooking] = useState<MemberScheduleEvent | null>(null);
 
   // Fetch Live Data from Backend API
   const fetchLiveData = async () => {
@@ -65,14 +98,6 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
       setLivePackages([]);
     } finally {
       setIsLoadingPackages(false);
-    }
-
-    try {
-      const schedules = await api.groupClasses.getSchedules();
-      setLiveSchedules(schedules || []);
-    } catch (e) {
-      console.warn('API group classes fetch warning:', e);
-      setLiveSchedules([]);
     }
 
     try {
@@ -91,6 +116,78 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
   useEffect(() => {
     fetchLiveData();
   }, []);
+
+  const localDateKey = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+  const weekDays = React.useMemo(() => {
+    const today = new Date();
+    const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
+    const labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    return labels.map((day, index) => {
+      const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + index);
+      return { day, date: String(date.getDate()).padStart(2, '0'), fullDate: localDateKey(date) };
+    });
+  }, []);
+
+  const selectedDate = weekDays[selectedDayIndex].fullDate;
+
+  if (editorialRoute) {
+    return <GuestArticlePage route={editorialRoute} onNavigate={navigateEditorial} />;
+  }
+
+  useEffect(() => {
+    let active = true;
+    setIsLoadingSchedules(true);
+    setScheduleError(null);
+    setLiveSchedules([]);
+    setMyGroupBookings([]);
+    setIsLoadingMyBookings(Boolean(currentUser && api.auth.getToken()));
+    setBookingStatusError(false);
+
+    const loadSchedules = async () => {
+      if (!api.auth.getToken()) {
+        if (active) {
+          setScheduleError('Vui lòng đăng nhập để xem lịch lớp học nhóm.');
+          setIsLoadingSchedules(false);
+        }
+        return;
+      }
+      try {
+        const schedules = await api.groupClasses.getSchedules(selectedDate);
+        if (active) setLiveSchedules(schedules || []);
+      } catch (error: any) {
+        if (active) setScheduleError(error.message || 'Không tải được lịch lớp học.');
+      } finally {
+        if (active) setIsLoadingSchedules(false);
+      }
+    };
+
+    const loadBookings = async () => {
+      if (!currentUser || !api.auth.getToken()) return;
+      try {
+        const dayStart = new Date(`${selectedDate}T00:00:00`);
+        const dayEnd = new Date(`${selectedDate}T23:59:59.999`);
+        const bookings = await api.member.getMySchedule({
+          fromDate: dayStart.toISOString(),
+          toDate: dayEnd.toISOString(),
+          type: 'GROUP'
+        });
+        if (active) setMyGroupBookings(bookings.filter(item => item.bookingType === 'GROUP_CLASS'));
+      } catch (error) {
+        if (active) {
+          console.warn('Không tải được lịch đăng ký lớp nhóm:', error);
+          setBookingStatusError(true);
+        }
+      } finally {
+        if (active) setIsLoadingMyBookings(false);
+      }
+    };
+
+    void loadSchedules();
+    void loadBookings();
+    return () => { active = false; };
+  }, [selectedDate, currentUser?.email, scheduleReloadKey]);
 
   // Listen to tab changes or navbar event for QR Check-in
   useEffect(() => {
@@ -181,46 +278,16 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
     }
   };
 
-  // Dynamic Current Week Days
-  const weekDays = React.useMemo(() => {
-    const today = new Date();
-    const currentDay = today.getDay(); // 0 is Sun, 1 is Mon
-    const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + mondayOffset);
-
-    const labels = [
-      { day: 'T2', label: 'Thứ Hai' },
-      { day: 'T3', label: 'Thứ Ba' },
-      { day: 'T4', label: 'Thứ Tư' },
-      { day: 'T5', label: 'Thứ Năm' },
-      { day: 'T6', label: 'Thứ Sáu' },
-      { day: 'T7', label: 'Thứ Bảy' },
-      { day: 'CN', label: 'Chủ Nhật' }
-    ];
-
-    return labels.map((l, i) => {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      return {
-        day: l.day,
-        date: String(d.getDate()).padStart(2, '0'),
-        label: l.label,
-        fullDate: d.toISOString().slice(0, 10)
-      };
-    });
-  }, []);
-
-  const categories = ['ALL', 'STRENGTH', 'HYPERTROPHY', 'HIIT', 'CARDIO', 'POWERLIFTING'];
+  const categories = ['ALL', ...new Set(liveSchedules.map(s => s.groupClass?.name).filter((name): name is string => Boolean(name)))];
 
   // Dynamic mapped classes strictly from live backend
   const classesList = liveSchedules.map((s) => ({
-    id: `live-session-${s.id}`,
     scheduleId: s.id,
-    category: (s.groupClass?.name?.toUpperCase().includes('HIIT') ? 'HIIT' :
-      s.groupClass?.name?.toUpperCase().includes('POWER') ? 'POWERLIFTING' :
-        s.groupClass?.name?.toUpperCase().includes('STRENGTH') ? 'STRENGTH' : 'HYPERTROPHY'),
+    category: s.groupClass?.name || 'Lớp nhóm',
     title: s.groupClass?.name || `Lớp Nhóm #${s.classId}`,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    status: s.status,
     time: `${new Date(s.startTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - ${new Date(s.endTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`,
     coach: s.trainer?.fullName ? `Coach ${s.trainer.fullName}` : 'Coach Chuyên Nghiệp',
     avatar: s.trainer?.avatar || 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=120&auto=format&fit=crop&q=80',
@@ -235,45 +302,82 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
     return true;
   });
 
-  const [bookingLoadingId, setBookingLoadingId] = useState<string | null>(null);
+  const refreshSchedule = async () => {
+    const dayStart = new Date(`${selectedDate}T00:00:00`);
+    const dayEnd = new Date(`${selectedDate}T23:59:59.999`);
+    const [schedules, bookings] = await Promise.all([
+      api.groupClasses.getSchedules(selectedDate),
+      api.member.getMySchedule({ fromDate: dayStart.toISOString(), toDate: dayEnd.toISOString(), type: 'GROUP' })
+    ]);
+    setLiveSchedules(schedules || []);
+    setMyGroupBookings(bookings.filter(item => item.bookingType === 'GROUP_CLASS'));
+    setBookingStatusError(false);
+  };
 
-  const toggleBookSession = async (session: { id: string; scheduleId?: number; title: string }) => {
-    if (bookedSessions.has(session.id)) {
-      setBookedSessions(prev => {
-        const next = new Set(prev);
-        next.delete(session.id);
-        return next;
-      });
-      return;
-    }
-
+  const bookSession = async (session: { scheduleId: number; title: string }) => {
     if (!api.auth.getToken()) {
       soundEffects.playErrorBeep();
       alert('Vui lòng đăng nhập tài khoản để đặt chỗ tham gia lớp học nhóm!');
       onOpenLogin?.();
       return;
     }
-
-    if (session.scheduleId) {
-      setBookingLoadingId(session.id);
-      try {
-        await api.groupClasses.book(session.scheduleId);
-        soundEffects.playSuccessBeep();
-        setBookedSessions(prev => new Set(prev).add(session.id));
-        alert(`Đặt chỗ thành công lớp "${session.title}"! Vui lòng có mặt trước giờ tập 10 phút.`);
-        // Reload live schedules to update spots
-        api.groupClasses.getSchedules().then(res => {
-          if (res) setLiveSchedules(res);
-        }).catch(() => { });
-      } catch (err: any) {
-        soundEffects.playErrorBeep();
-        alert(`Không thể đặt chỗ: ${err.message || 'Lỗi hệ thống'}`);
-      } finally {
-        setBookingLoadingId(null);
-      }
-    } else {
-      setBookedSessions(prev => new Set(prev).add(session.id));
+    setBookingLoadingId(session.scheduleId);
+    try {
+      const result = await api.groupClasses.book(session.scheduleId);
+      setMyGroupBookings(prev => [...prev.filter(item => item.scheduleId !== session.scheduleId), {
+        id: result.data.booking.id,
+        scheduleId: session.scheduleId,
+        bookingType: 'GROUP_CLASS',
+        title: session.title,
+        startTime: '',
+        endTime: '',
+        status: 'BOOKED'
+      }]);
       soundEffects.playSuccessBeep();
+      alert(`Đặt chỗ thành công lớp "${session.title}"! Vui lòng có mặt trước giờ tập 10 phút.`);
+      await refreshSchedule().catch(error => console.warn('Không làm mới được lịch lớp:', error));
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(`Không thể đặt chỗ: ${err.message || 'Lỗi hệ thống'}`);
+    } finally {
+      setBookingLoadingId(null);
+    }
+  };
+
+  const updateBooking = async (booking: MemberScheduleEvent) => {
+    setBookingLoadingId(booking.scheduleId ?? null);
+    try {
+      const result = await api.groupClasses.cancel(booking.id);
+      setMyGroupBookings(prev => prev.map(item => item.id === booking.id
+        ? { ...item, status: 'CANCELLED' }
+        : item));
+      soundEffects.playSuccessBeep();
+      alert(result.message);
+      await refreshSchedule().catch(error => console.warn('Không làm mới được lịch lớp:', error));
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(err.message || 'Không thể cập nhật đăng ký lớp học.');
+    } finally {
+      setBookingLoadingId(null);
+    }
+  };
+
+  const scanClassQr = async (qrToken: string) => {
+    const booking = classCheckInBooking;
+    if (!booking) return;
+    setClassCheckInBooking(null);
+    setBookingLoadingId(booking.scheduleId ?? null);
+    try {
+      const result = await api.groupClasses.checkIn(booking.id, qrToken);
+      setMyGroupBookings(prev => prev.map(item => item.id === booking.id ? { ...item, status: 'CHECKED_IN' } : item));
+      soundEffects.playSuccessBeep();
+      alert(result.message);
+      await refreshSchedule();
+    } catch (error: any) {
+      soundEffects.playErrorBeep();
+      alert(error?.message || 'Không thể điểm danh lớp học bằng mã QR.');
+    } finally {
+      setBookingLoadingId(null);
     }
   };
 
@@ -882,8 +986,10 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                   key={w.day}
                   onClick={() => {
                     setSelectedDayIndex(index);
+                    setSelectedCategory('ALL');
                     soundEffects.playSuccessBeep();
                   }}
+                  disabled={bookingLoadingId !== null}
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -940,7 +1046,19 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
           </div>
 
           {/* Classes List Cards */}
-          {filteredClasses.length === 0 ? (
+          {isLoadingSchedules ? (
+            <div style={{ textAlign: 'center', padding: 48, color: '#FFFFFF' }}>
+              <Loader2 size={28} className="animate-spin" style={{ margin: '0 auto 12px' }} />
+              Đang tải lịch lớp học...
+            </div>
+          ) : scheduleError ? (
+            <div style={{ textAlign: 'center', padding: 48, color: '#FFFFFF' }}>
+              <p>{scheduleError}</p>
+              <button className="btn-secondary" onClick={() => api.auth.getToken() ? setScheduleReloadKey(key => key + 1) : onOpenLogin?.()}>
+                {api.auth.getToken() ? 'Thử lại' : 'Đăng nhập'}
+              </button>
+            </div>
+          ) : filteredClasses.length === 0 ? (
             <div style={{
               textAlign: 'center',
               padding: '48px 24px',
@@ -958,12 +1076,25 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
               </p>
             </div>
           ) : (
+            <>
+            {bookingStatusError && (
+              <div style={{ textAlign: 'center', padding: 16, color: '#FFFFFF', marginBottom: 16, background: 'rgba(80, 28, 10, 0.85)' }}>
+                Không tải được trạng thái đăng ký của bạn. <button className="btn-secondary" onClick={() => setScheduleReloadKey(key => key + 1)}>Thử lại</button>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20, width: '100%' }}>
               {filteredClasses.map(session => {
-                const isBooked = bookedSessions.has(session.id);
+                const booking = myGroupBookings.find(item => item.scheduleId === session.scheduleId &&
+                  (item.status === 'BOOKED' || item.status === 'CHECKED_IN'));
+                const now = Date.now();
+                const hasStarted = new Date(session.startTime).getTime() <= now;
+                const hasEnded = new Date(session.endTime).getTime() <= now;
+                const canCheckIn = now >= new Date(session.startTime).getTime() - 15 * 60 * 1000 && !hasEnded;
+                const isFull = session.status === 'FULL' || session.spots <= 0;
+                const canCancel = booking?.status === 'BOOKED' && new Date(session.startTime).getTime() - now >= 2 * 60 * 60 * 1000;
                 return (
                   <div
-                    key={session.id}
+                    key={session.scheduleId}
                     style={{
                       padding: '22px 22px',
                       borderRadius: 0,
@@ -1025,28 +1156,51 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                     </div>
 
                     <div style={{ marginTop: 24 }}>
-                      <button
-                        disabled={bookingLoadingId === session.id}
-                        onClick={() => toggleBookSession(session)}
-                        className={isBooked ? 'btn-secondary' : 'btn-primary'}
-                        style={{ width: '100%', padding: '11px 0', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                      >
-                        {bookingLoadingId === session.id ? (
-                          <>
-                            <Loader2 size={14} className="animate-spin" />
-                            <span>Đang xử lý đặt chỗ...</span>
-                          </>
-                        ) : isBooked ? (
-                          '✓ ĐÃ ĐẶT CHỖ THÀNH CÔNG'
-                        ) : (
-                          'ĐẶT CHỖ THAM GIA'
-                        )}
-                      </button>
+                      {booking ? (
+                        <>
+                          <div style={{ color: '#FFFFFF', fontSize: 12, fontWeight: 700, marginBottom: 10 }}>
+                            {booking.status === 'CHECKED_IN' ? '✓ ĐÃ CHECK-IN' : '✓ ĐÃ ĐẶT CHỖ'}
+                          </div>
+                          {booking.status === 'BOOKED' && (
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                className="btn-secondary"
+                                style={{ flex: 1, padding: '11px 8px', fontSize: 12 }}
+                                disabled={bookingLoadingId !== null || !canCancel}
+                                title={!canCancel ? 'Chỉ có thể hủy trước giờ học ít nhất 2 tiếng' : undefined}
+                                onClick={() => updateBooking(booking)}
+                              >
+                                HỦY ĐĂNG KÝ
+                              </button>
+                              <button
+                                className="btn-primary"
+                                style={{ flex: 1, padding: '11px 8px', fontSize: 12 }}
+                                disabled={bookingLoadingId !== null || !canCheckIn}
+                                onClick={() => setClassCheckInBooking(booking)}
+                              >
+                                QUÉT QR ĐIỂM DANH
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <button
+                          disabled={bookingLoadingId !== null || isLoadingMyBookings || bookingStatusError || isFull || hasStarted}
+                          onClick={() => bookSession(session)}
+                          className="btn-primary"
+                          style={{ width: '100%', padding: '11px 0', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                        >
+                          {bookingLoadingId === session.scheduleId ? (
+                            <><Loader2 size={14} className="animate-spin" /> ĐANG XỬ LÝ...</>
+                          ) : isLoadingMyBookings ? 'ĐANG KIỂM TRA ĐĂNG KÝ...' : hasStarted ? 'LỚP ĐÃ BẮT ĐẦU' : isFull ? 'ĐÃ HẾT CHỖ' : 'ĐẶT CHỖ THAM GIA'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
+            </>
           )}
         </div>
       </section>
@@ -1223,9 +1377,24 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
         </div>
       </section>
 
+      <GuestArticlesSection onNavigate={navigateEditorial} />
+
       {/* =========================================================================
           6. SHARP QR CHECK-IN MODAL (Góc vuông, Luxury High-Tech Style)
           ========================================================================= */}
+      {classCheckInBooking && (
+        <div role="dialog" aria-modal="true" aria-label="Quét QR điểm danh Workclass" style={{ position: 'fixed', inset: 0, zIndex: 4000, background: 'rgba(0,0,0,0.75)', display: 'grid', placeItems: 'center', padding: 16 }}>
+          <div style={{ width: 'min(100%, 420px)', maxHeight: '90vh', overflowY: 'auto', background: 'var(--bg-app)', color: 'var(--text-primary)', borderRadius: 16, padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <strong>Quét QR điểm danh Workclass</strong>
+              <button type="button" aria-label="Đóng" onClick={() => setClassCheckInBooking(null)}><X size={20} /></button>
+            </div>
+            <p style={{ fontSize: 13, marginBottom: 12 }}>Quét mã QR ca học do Coach hiển thị.</p>
+            <WebcamQrScanner onScanSuccess={scanClassQr} autoStart />
+          </div>
+        </div>
+      )}
+
       {isQRModalOpen && (
         <div
           style={{

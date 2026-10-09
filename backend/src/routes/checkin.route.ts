@@ -35,9 +35,7 @@ const router = Router();
  *       401:
  *         description: Chưa đăng nhập
  *       403:
- *         description: Gói tập đã hết hạn hoặc hết số buổi
- *       429:
- *         description: Check-in quá nhanh (Spam)
+ *         description: Không có gói hội viên còn hiệu lực để vào phòng tập
  *       500:
  *         description: Lỗi server
  */

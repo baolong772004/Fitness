@@ -81,6 +81,7 @@ export const getMySchedule = async (req: AuthRequest, res: Response) => {
 
     const normalizedGroupEvents = groupBookings.map((item) => ({
       id: item.id,
+      scheduleId: item.scheduleId,
       bookingType: 'GROUP_CLASS',
       title: item.schedule.groupClass.name,
       startTime: item.schedule.startTime,

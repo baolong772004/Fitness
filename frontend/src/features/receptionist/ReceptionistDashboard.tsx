@@ -42,11 +42,13 @@ import { StatCard, StaffPage, Field } from '@/components/staff/StaffKit';
 interface ReceptionistDashboardProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  autoOpenScanner?: boolean;
 }
 
 export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
   activeTab,
-  onTabChange
+  onTabChange,
+  autoOpenScanner = false
 }) => {
   const [members, setMembers] = useState<Member[]>([]);
   const [coaches, setCoaches] = useState<Coach[]>([]);
@@ -231,6 +233,10 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
     reloadData();
   }, []);
 
+  useEffect(() => {
+    if (autoOpenScanner && activeTab === 'checkin') setUseWebcamScanner(true);
+  }, [autoOpenScanner, activeTab]);
+
   // Handle Live Check-In Check (Luồng 3: Smart QR Check-in)
   const handlePerformCheckIn = async (member: Member) => {
     setVerifiedMember(member);
@@ -258,25 +264,29 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
     }
   };
 
-  // Real Webcam QR Scan handler via html5-qrcode
-  const handleWebcamScanSuccess = (decodedText: string) => {
-    const clean = decodedText.trim();
-    const matched = members.find(m =>
-      m.code.toLowerCase() === clean.toLowerCase() ||
-      m.phone === clean ||
-      m.id === clean ||
-      clean.toLowerCase().includes(m.code.toLowerCase()) ||
-      clean.includes(m.phone)
-    );
-
-    if (matched) {
-      handlePerformCheckIn(matched);
-    } else {
+  // Member QR is a short-lived signed token. Send it to the check-in API for
+  // validation instead of trying to match the token against a phone/member ID.
+  const handleWebcamScanSuccess = async (decodedText: string) => {
+    const checkinToken = decodedText.trim();
+    setVerifiedMember(null);
+    setCheckInResult(null);
+    try {
+      const result = await api.checkin.checkIn(checkinToken);
+      soundEffects.playSuccessBeep();
+      setCheckInResult({
+        status: 'approved',
+        message: result.message || 'Check-in thành công!',
+        details: result.data
+          ? `${result.data.fullName} · ${result.data.packageName} · Còn ${result.data.remainingDays} ngày · ${result.data.remainingSessions} buổi PT`
+          : 'Hội viên đã được check-in thành công.'
+      });
+      await reloadData();
+    } catch (error: any) {
       soundEffects.playErrorBeep();
       setCheckInResult({
         status: 'rejected',
-        message: 'MÃ QR KHÔNG TỒN TẠI TRONG HỆ THỐNG!',
-        details: `Đã đọc mã: "${clean}". Không khớp với mã thẻ hoặc số điện thoại của bất kỳ hội viên nào.`
+        message: 'Không thể check-in bằng mã QR',
+        details: error?.message || 'Mã đã hết hạn hoặc hội viên không có gói tập còn hiệu lực.'
       });
     }
   };

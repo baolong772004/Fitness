@@ -1,10 +1,91 @@
 import { Router } from 'express';
 import { PtController } from '../controllers/pt.controller.js';
 import { PaymentController } from '../controllers/payment.controller.js';
-import { authenticateToken } from '../middlewares/auth.middleware.js';
+import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 import { listPtChatMessages, sendPtChatMessage } from '../controllers/ptChat.controller.js';
+import { getCoachWorkspace, getCoachTrainees, updateCoachAvailability, getCoachPlans, createCoachPlan } from '../controllers/coachWorkspace.controller.js';
 
 const router = Router();
+
+/** @swagger
+ * /pt/coach/me:
+ *   get:
+ *     summary: Coach xem hồ sơ PT và lịch rảnh của chính mình
+ *     tags: [PersonalTrainer]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Hồ sơ Coach }
+ */
+router.get('/coach/me', authenticateToken, authorizeRoles('COACH', 'TRAINER'), getCoachWorkspace);
+
+/** @swagger
+ * /pt/coach/trainees:
+ *   get:
+ *     summary: Coach xem các học viên có gói PT được phân cho mình
+ *     tags: [PersonalTrainer]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Danh sách gói PT và học viên }
+ */
+router.get('/coach/trainees', authenticateToken, authorizeRoles('COACH', 'TRAINER'), getCoachTrainees);
+
+/** @swagger
+ * /pt/coach/availability:
+ *   put:
+ *     summary: Coach cập nhật lịch rảnh hàng tuần của chính mình
+ *     tags: [PersonalTrainer]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [schedules]
+ *             properties:
+ *               schedules:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [dayOfWeek, startTime, endTime]
+ *                   properties:
+ *                     dayOfWeek: { type: integer, minimum: 1, maximum: 7 }
+ *                     startTime: { type: string, example: '08:00' }
+ *                     endTime: { type: string, example: '12:00' }
+ *                     isAvailable: { type: boolean }
+ *     responses:
+ *       200: { description: Đã lưu lịch rảnh }
+ */
+router.put('/coach/availability', authenticateToken, authorizeRoles('COACH', 'TRAINER'), updateCoachAvailability);
+
+/** @swagger
+ * /pt/coach/plans:
+ *   get:
+ *     summary: Coach xem giáo án đã lưu của mình
+ *     tags: [PersonalTrainer]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Danh sách giáo án }
+ *   post:
+ *     summary: Coach lưu giáo án cho học viên được phân công
+ *     tags: [PersonalTrainer]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [memberId, title]
+ *             properties:
+ *               memberId: { type: integer }
+ *               title: { type: string }
+ *               description: { type: string }
+ *     responses:
+ *       201: { description: Đã lưu giáo án }
+ */
+router.get('/coach/plans', authenticateToken, authorizeRoles('COACH', 'TRAINER'), getCoachPlans);
+router.post('/coach/plans', authenticateToken, authorizeRoles('COACH', 'TRAINER'), createCoachPlan);
 
 /**
  * @swagger
@@ -151,6 +232,7 @@ router.patch('/booking/:id/status', authenticateToken, PtController.updateBookin
  *         description: Danh sách lịch đặt PT
  */
 router.get('/my-bookings', authenticateToken, PtController.getMyBookings);
+router.get('/my-trainees', authenticateToken, authorizeRoles('COACH', 'TRAINER'), PtController.getMyTrainees);
 
 /**
  * @swagger
@@ -280,6 +362,39 @@ router.post('/booking/:id/complete-session', authenticateToken, PtController.com
  *         description: Báo vắng thành công
  */
 router.post('/booking/:id/mark-absent', authenticateToken, PtController.markAbsent);
+
+/**
+ * @swagger
+ * /pt/booking/{id}/resolve-no-show:
+ *   post:
+ *     summary: Admin/Staff điều chỉnh buổi PT tự động ghi nhận vắng
+ *     tags: [PersonalTrainer]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [resolution, reason]
+ *             properties:
+ *               resolution:
+ *                 type: string
+ *                 enum: [ATTENDED, EXCUSED]
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Đã điều chỉnh buổi PT
+ */
+router.post('/booking/:id/resolve-no-show', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), PtController.resolveNoShow);
 
 /**
  * @swagger

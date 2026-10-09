@@ -38,6 +38,10 @@ class _PtChatScreenState extends State<PtChatScreen> {
   bool _closed = false;
   int? _lastFetchedId;
   String? _error;
+  Timer? _chatCloseTimer;
+
+  bool get _beforeEnd => widget.booking.endTime != null &&
+      DateTime.now().isBefore(widget.booking.endTime!);
 
   int get _myId => int.tryParse(widget.auth.currentMember?.id ?? '') ?? 0;
   String get _otherName => widget.isCoach
@@ -47,6 +51,12 @@ class _PtChatScreenState extends State<PtChatScreen> {
   @override
   void initState() {
     super.initState();
+    final endTime = widget.booking.endTime;
+    if (endTime != null && endTime.isAfter(DateTime.now())) {
+      _chatCloseTimer = Timer(endTime.difference(DateTime.now()), () {
+        if (mounted) setState(() => _canSend = false);
+      });
+    }
     unawaited(_loadLatest());
     _live.connect(
       bookingId: widget.booking.id,
@@ -72,6 +82,7 @@ class _PtChatScreenState extends State<PtChatScreen> {
 
   @override
   void dispose() {
+    _chatCloseTimer?.cancel();
     _live.dispose();
     _input.dispose();
     _scroll.dispose();
@@ -122,7 +133,7 @@ class _PtChatScreenState extends State<PtChatScreen> {
           _lastFetchedId = page.messages.last.id;
         }
         _hasMore = page.hasMore;
-        _canSend = page.canSend;
+        _canSend = page.canSend && _beforeEnd;
         _error = null;
         _loading = false;
       });
@@ -152,7 +163,7 @@ class _PtChatScreenState extends State<PtChatScreen> {
       setState(() {
         _mergeMessages(page.messages);
         _hasMore = page.hasMore;
-        _canSend = page.canSend;
+        _canSend = page.canSend && _beforeEnd;
       });
     } on AuthApiException catch (error) {
       if (_isCompletedError(error.message)) {
@@ -182,7 +193,7 @@ class _PtChatScreenState extends State<PtChatScreen> {
         if (!mounted) return;
         setState(() {
           _mergeMessages(page.messages);
-          _canSend = page.canSend;
+          _canSend = page.canSend && _beforeEnd;
         });
         if (page.messages.isNotEmpty) {
           cursor = page.messages.last.id;
@@ -210,7 +221,7 @@ class _PtChatScreenState extends State<PtChatScreen> {
 
   Future<void> _send() async {
     final content = _input.text.trim();
-    if (_sending || !_canSend || content.isEmpty) return;
+    if (_sending || !_canSend || !_beforeEnd || content.isEmpty) return;
     setState(() => _sending = true);
     try {
       final message = await widget.auth.sendPtChatMessage(
@@ -301,7 +312,7 @@ class _PtChatScreenState extends State<PtChatScreen> {
               ),
             ),
             Expanded(child: _messageArea()),
-            if (_canSend)
+            if (_canSend && _beforeEnd)
               _composer()
             else if (!_loading && _error == null)
               const Padding(

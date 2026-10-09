@@ -25,16 +25,14 @@ export const logSessionResult = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: 'Không tìm thấy buổi tập' });
     }
 
-    if (booking.coachId !== coachId) {
+    if (booking.type !== 'PT' || booking.coachId !== coachId) {
       return res.status(403).json({ success: false, message: 'Bạn không có quyền ghi log cho buổi tập này' });
     }
 
-    // 2. Cập nhật trạng thái buổi tập thành COMPLETED nếu chưa
+    // A workout log must not bypass the PT completion endpoint, which deducts
+    // the membership session.
     if (booking.status !== 'COMPLETED') {
-      await prisma.booking.update({
-        where: { id: booking.id },
-        data: { status: 'COMPLETED' },
-      });
+      return res.status(409).json({ success: false, message: 'Cần kết thúc buổi PT trước khi ghi nhật ký' });
     }
 
     // 3. Xử lý tạo/cập nhật SessionResult & SessionExercise trong Transaction
@@ -94,9 +92,19 @@ export const logSessionResult = async (req: AuthRequest, res: Response) => {
 export const logInBodyProgress = async (req: AuthRequest, res: Response) => {
   try {
     const { memberId, weight, bodyFat, muscleMass } = req.body;
+    const actorId = req.user?.userId;
+    const role = req.user?.role;
 
-    if (!memberId || weight === undefined) {
+    if (!Number.isSafeInteger(Number(memberId)) || Number(memberId) <= 0 ||
+        weight === undefined || !Number.isFinite(Number(weight)) || Number(weight) <= 0) {
       return res.status(400).json({ success: false, message: 'Thiếu memberId hoặc weight' });
+    }
+    if (role === 'COACH' || role === 'TRAINER') {
+      const assigned = await prisma.membership.findFirst({
+        where: { userId: Number(memberId), coachId: actorId, package: { type: 'PT' } },
+        select: { id: true },
+      });
+      if (!assigned) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này' });
     }
 
     const progress = await prisma.progressLog.create({
@@ -131,8 +139,18 @@ export const getMemberProgress = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.userId;
     const role = req.user?.role;
     
+    if (!Number.isSafeInteger(targetMemberId) || targetMemberId <= 0) {
+      return res.status(400).json({ success: false, message: 'memberId không hợp lệ' });
+    }
     if (role === 'MEMBER' && userId !== targetMemberId) {
        return res.status(403).json({ success: false, message: 'Không có quyền xem tiến độ của người khác' });
+    }
+    if (role === 'COACH' || role === 'TRAINER') {
+      const assigned = await prisma.membership.findFirst({
+        where: { userId: targetMemberId, coachId: userId, package: { type: 'PT' } },
+        select: { id: true },
+      });
+      if (!assigned) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này' });
     }
 
     const [inbodyLogs, workoutLogs] = await Promise.all([

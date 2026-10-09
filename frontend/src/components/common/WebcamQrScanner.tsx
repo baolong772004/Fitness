@@ -86,50 +86,77 @@ export const WebcamQrScanner: React.FC<WebcamQrScannerProps> = ({
         await stopScanner();
       }
 
-      const scanner = new Html5Qrcode(containerIdRef.current, {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.UPC_A
-        ],
-        verbose: false
-      });
-      scannerRef.current = scanner;
-
-      const cameraConfig = cameraId
-        ? { deviceId: { exact: cameraId } }
-        : { facingMode: 'environment' };
-
-      await scanner.start(
-        cameraConfig,
-        {
-          fps: fps,
-          qrbox: { width: qrbox, height: qrbox },
-          aspectRatio: 1.0
-        },
-        (decodedText) => {
-          if (isCooldownRef.current) return;
-          isCooldownRef.current = true;
-          setLastScannedText(decodedText);
-          onScanSuccess(decodedText);
-
-          // 2.5s cooldown before reading again
-          setTimeout(() => {
-            isCooldownRef.current = false;
-            setLastScannedText(null);
-          }, 2500);
-        },
-        (errMsg) => {
-          if (onScanError) onScanError(errMsg);
+      const formatsToSupport = [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.UPC_A
+      ];
+      const scanConfig = {
+        fps,
+        qrbox: { width: qrbox, height: qrbox },
+        aspectRatio: 1.0
+      };
+      const onDecoded = (decodedText: string) => {
+        if (isCooldownRef.current) return;
+        isCooldownRef.current = true;
+        setLastScannedText(decodedText);
+        onScanSuccess(decodedText);
+        setTimeout(() => {
+          isCooldownRef.current = false;
+          setLastScannedText(null);
+        }, 2500);
+      };
+      const startWith = async (cameraConfig: { deviceId: { exact: string } } | { facingMode: string }) => {
+        const scanner = new Html5Qrcode(containerIdRef.current, {
+          formatsToSupport,
+          verbose: false
+        });
+        scannerRef.current = scanner;
+        try {
+          await scanner.start(cameraConfig, scanConfig, onDecoded, (errMsg) => {
+            if (onScanError) onScanError(errMsg);
+          });
+        } catch (error) {
+          try { scanner.clear(); } catch {}
+          if (scannerRef.current === scanner) scannerRef.current = null;
+          throw error;
         }
-      );
+      };
+
+      // Some desktop cameras do not support the rear-facing constraint. Fall
+      // back to a concrete device ID if the browser cannot open that camera.
+      try {
+        await startWith(cameraId ? { deviceId: { exact: cameraId } } : { facingMode: 'environment' });
+      } catch (firstError: any) {
+        if (firstError?.name === 'NotAllowedError' || firstError?.name === 'SecurityError') throw firstError;
+        const devices = await Html5Qrcode.getCameras().catch(() => []);
+        const fallbackCamera = devices.find((device) => device.id !== cameraId) ?? devices[0];
+        if (!fallbackCamera) throw firstError;
+        await startWith({ deviceId: { exact: fallbackCamera.id } });
+      }
 
       setIsScanning(true);
       setHasStarted(true);
     } catch (err: any) {
       console.error('Failed to start camera:', err);
       setIsScanning(false);
+      if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') {
+        setErrorMessage('Trình duyệt chưa cấp quyền Camera. Hãy cho phép Camera trong cài đặt trang web rồi thử lại.');
+        return;
+      }
+      if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') {
+        setErrorMessage('Không tìm thấy Camera phù hợp. Hãy kiểm tra camera đã kết nối hoặc chọn thiết bị khác.');
+        return;
+      }
+      if (err?.name === 'NotReadableError' || err?.name === 'AbortError') {
+        setErrorMessage('Camera đang được ứng dụng khác sử dụng. Hãy đóng ứng dụng đó rồi thử lại.');
+        return;
+      }
+      if (typeof window !== 'undefined' && !window.isSecureContext) {
+        setErrorMessage('Trình duyệt chỉ cho phép dùng Camera trên HTTPS hoặc localhost. Hãy mở trang bằng địa chỉ an toàn.');
+        return;
+      }
       setErrorMessage(
         err?.message?.includes('Permission') || err?.name === 'NotAllowedError'
           ? 'Trình duyệt chưa được cấp quyền truy cập Camera. Vui lòng cho phép quyền Camera trên thanh địa chỉ.'

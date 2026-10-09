@@ -54,6 +54,26 @@ export class SubscriptionController {
         return res.status(400).json({ success: false, message: 'This package is no longer available' });
       }
 
+      if (pkg.type === 'PT') {
+        const now = new Date();
+        const activeGymMembership = await prisma.membership.findFirst({
+          where: {
+            userId: targetUserId,
+            status: 'ACTIVE',
+            startDate: { lte: now },
+            endDate: { gte: now },
+            package: { type: 'MEMBERSHIP' },
+          },
+          select: { id: true },
+        });
+        if (!activeGymMembership) {
+          return res.status(403).json({
+            success: false,
+            message: 'Cần có gói hội viên gym còn hạn để đăng ký gói PT.',
+          });
+        }
+      }
+
       // Calculate Dates
       const startDate = inputStartDate ? new Date(inputStartDate) : new Date();
       const endDate = new Date(startDate);
@@ -233,6 +253,26 @@ export class SubscriptionController {
       if (!gymPackage || !gymPackage.isActive) {
         return res.status(404).json({ success: false, message: 'Gói cước không hợp lệ' });
       }
+      if (gymPackage.type === 'PT') {
+        const now = new Date();
+        const activeGymMembership = await prisma.membership.findFirst({
+          where: {
+            userId,
+            status: 'ACTIVE',
+            startDate: { lte: now },
+            endDate: { gte: now },
+            package: { type: 'MEMBERSHIP' },
+          },
+          select: { id: true },
+        });
+        if (!activeGymMembership) {
+          return res.status(403).json({
+            success: false,
+            message: 'Cần có gói hội viên gym còn hạn để gia hạn gói PT.',
+          });
+        }
+      }
+
       const amount = Number(gymPackage.price);
       if (!Number.isSafeInteger(amount) || amount <= 0) {
         return res.status(400).json({ success: false, message: 'Giá gói tập phải là số nguyên dương hợp lệ' });
