@@ -34,13 +34,14 @@ export class PtController {
           user: { role: { in: ['COACH', 'TRAINER'] } },
         },
         select: {
+          id: true,
           userId: true,
           bio: true,
           specialization: true,
           rating: true,
           hourlyRate: true,
           user: {
-            select: { fullName: true, avatar: true },
+            select: { fullName: true, email: true, phone: true, avatar: true },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -51,6 +52,8 @@ export class PtController {
         data: trainers.map(({ user, ...trainer }) => ({
           ...trainer,
           fullName: user.fullName,
+          email: user.email,
+          phone: user.phone,
           avatar: user.avatar,
         })),
       });
@@ -346,7 +349,7 @@ export class PtController {
       const bookings = await prisma.booking.findMany({
         where: whereCondition,
         include: {
-          member: { select: { fullName: true, phone: true } },
+          member: { select: { id: true, fullName: true, email: true, phone: true, avatar: true } },
           coach: { select: { fullName: true, phone: true } },
           membership: { include: { package: { select: { name: true } } } },
           sessionResult: { include: { exercises: true } },
@@ -358,6 +361,68 @@ export class PtController {
     } catch (error: any) {
       console.error('Lỗi tải danh sách lịch:', error);
       return res.status(500).json({ success: false, message: 'Lỗi tải danh sách lịch hẹn' });
+    }
+  }
+
+  /**
+   * Lấy hồ sơ các học viên có gói PT đang được Coach hiện tại phụ trách.
+   * @route GET /api/pt/my-trainees
+   */
+  static async getMyTrainees(req: AuthRequest, res: Response) {
+    try {
+      const coachId = req.user?.userId;
+      if (!coachId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+      const memberships = await prisma.membership.findMany({
+        where: {
+          coachId,
+          status: 'ACTIVE',
+          package: { type: 'PT' },
+        },
+        select: {
+          id: true,
+          userId: true,
+          startDate: true,
+          endDate: true,
+          remainingSessions: true,
+          package: { select: { id: true, name: true, totalPtSessions: true } },
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              phone: true,
+              avatar: true,
+              gender: true,
+              dateOfBirth: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const membershipsByUser = new Map<number, typeof memberships>();
+      for (const membership of memberships) {
+        const userMemberships = membershipsByUser.get(membership.userId) ?? [];
+        userMemberships.push(membership);
+        membershipsByUser.set(membership.userId, userMemberships);
+      }
+
+      const trainees = Array.from(membershipsByUser.values(), (userMemberships) => ({
+        ...userMemberships[0].user,
+        memberships: userMemberships.map(({ id, startDate, endDate, remainingSessions, package: pkg }) => ({
+          id,
+          startDate,
+          endDate,
+          remainingSessions,
+          package: pkg,
+        })),
+      }));
+
+      return res.status(200).json({ success: true, data: trainees });
+    } catch (error: any) {
+      console.error('Lỗi tải hồ sơ học viên của Coach:', error);
+      return res.status(500).json({ success: false, message: 'Lỗi tải hồ sơ học viên' });
     }
   }
 

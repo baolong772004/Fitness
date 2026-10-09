@@ -17,6 +17,7 @@ import {
   Save
 } from 'lucide-react';
 import { ApiSubscription } from '../../services/api';
+import { MemberFitnessPanel } from './MemberFitnessPanel';
 
 interface SettingsPageProps {
   currentUser: User | null;
@@ -31,10 +32,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onLogout,
   onUpdateUser
 }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'subscriptions' | 'preferences'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'subscriptions' | 'schedule' | 'fitness' | 'preferences'>('profile');
   const [isSaving, setIsSaving] = useState(false);
   const [mySubscriptions, setMySubscriptions] = useState<ApiSubscription[]>([]);
   const [isLoadingSubs, setIsLoadingSubs] = useState(false);
+  const [mySchedule, setMySchedule] = useState<Array<{ id: number; bookingType: 'PERSONAL_TRAINING' | 'GROUP_CLASS'; title: string; startTime: string; endTime: string; status: string; trainerName?: string; location?: string; canCancel?: boolean }>>([]);
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
+  const [scheduleDetail, setScheduleDetail] = useState<any>(null);
   const [soundEffectsEnabled, setSoundEffectsEnabled] = useState<boolean>(() => {
     return localStorage.getItem('aura_sound_effects_enabled') !== 'false';
   });
@@ -68,6 +72,46 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         });
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'schedule') return;
+    setIsLoadingSchedule(true);
+    api.member.getMySchedule()
+      .then(items => setMySchedule(items || []))
+      .catch(err => { console.warn('Lỗi tải lịch tập cá nhân:', err); setMySchedule([]); })
+      .finally(() => setIsLoadingSchedule(false));
+  }, [activeTab]);
+
+  const showBookingDetail = async (item: typeof mySchedule[number]) => {
+    try {
+      setScheduleDetail(await api.member.getBookingDetail(item.bookingType === 'PERSONAL_TRAINING' ? 'PT' : 'GROUP', item.id));
+    } catch (err: any) {
+      alert(err.message || 'Không thể tải chi tiết buổi tập.');
+    }
+  };
+
+  const cancelGroupBooking = async (item: typeof mySchedule[number]) => {
+    if (!window.confirm('Bạn có chắc muốn hủy lịch lớp nhóm này?')) return;
+    try {
+      await api.groupClasses.cancel(item.id);
+      setMySchedule(items => items.map(entry => entry.id === item.id ? { ...entry, status: 'CANCELLED', canCancel: false } : entry));
+      setScheduleDetail(null);
+      soundEffects.playSuccessBeep();
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      alert(err.message || 'Không thể hủy lịch lớp.');
+    }
+  };
+
+  const renewSubscription = async (subscriptionId: number, packageId: number) => {
+    try {
+      const result = await api.subscriptions.renewSubscription({ subscriptionId, packageId });
+      if (result.data.checkoutUrl) window.open(result.data.checkoutUrl, '_blank');
+      else alert(`Đã tạo yêu cầu gia hạn #${result.data.orderCode}.`);
+    } catch (err: any) {
+      alert(err.message || 'Không thể tạo yêu cầu gia hạn.');
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -219,6 +263,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           >
             <CreditCard size={16} />
             <span>Gói Tập & Thẻ Hội Viên</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('schedule')}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+              background: activeTab === 'schedule' ? 'var(--color-primary)' : 'transparent',
+              color: activeTab === 'schedule' ? '#FFFFFF' : 'var(--text-muted)', border: 'none',
+              borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 6, textAlign: 'left'
+            }}
+          >
+            <Calendar size={16} />
+            <span>Lịch Tập Của Tôi</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('fitness')}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+              background: activeTab === 'fitness' ? 'var(--color-primary)' : 'transparent',
+              color: activeTab === 'fitness' ? '#FFFFFF' : 'var(--text-muted)', border: 'none',
+              borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 6, textAlign: 'left'
+            }}
+          >
+            <Sparkles size={16} />
+            <span>PT & Tiến Độ</span>
           </button>
 
           <button
@@ -530,6 +600,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                             </div>
                           )}
                         </div>
+                        {sub.status === 'EXPIRED' || sub.status === 'CANCELLED' ? (
+                          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                            <button type="button" className="btn-primary" onClick={() => renewSubscription(sub.id, sub.packageId)} style={{ padding: '8px 12px', fontSize: 12 }}>Gia hạn gói tập</button>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -537,6 +612,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               )}
             </div>
           )}
+
+          {activeTab === 'schedule' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 20 }}>
+                <div><h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800, margin: 0 }}>Lịch Tập Sắp Tới</h3><p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 0 }}>Bao gồm lịch PT và lớp nhóm trong 30 ngày tới.</p></div>
+                <button type="button" className="btn-secondary" onClick={() => { setIsLoadingSchedule(true); api.member.getMySchedule().then(items => setMySchedule(items || [])).finally(() => setIsLoadingSchedule(false)); }} style={{ padding: '8px 14px', fontSize: 12 }}>Làm Mới</button>
+              </div>
+              {isLoadingSchedule ? <div style={{ textAlign: 'center', padding: 36, color: 'var(--text-muted)' }}><Loader2 size={26} className="animate-spin" style={{ margin: '0 auto 10px' }} />Đang tải lịch tập...</div> : mySchedule.length === 0 ? <div style={{ padding: 36, textAlign: 'center', border: '1px dashed var(--aura-border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)' }}>Bạn chưa có buổi tập nào sắp tới.</div> : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{mySchedule.map(item => <div key={`${item.bookingType}-${item.id}`} style={{ padding: 14, border: '1px solid var(--aura-border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-app)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}><div><div style={{ display: 'flex', gap: 7, alignItems: 'center', marginBottom: 5 }}><span style={{ fontSize: 10, fontWeight: 800, color: 'var(--color-primary)' }}>{item.bookingType === 'PERSONAL_TRAINING' ? 'PT 1:1' : 'LỚP NHÓM'}</span><span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{item.status}</span></div><strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>{item.title}</strong><div style={{ marginTop: 5, fontSize: 12, color: 'var(--text-muted)' }}>{new Date(item.startTime).toLocaleString('vi-VN')} · {item.trainerName || 'HLV AURA'} · {item.location || 'AURA Fitness'}</div></div><div style={{ display: 'flex', gap: 8 }}><button type="button" className="btn-secondary" onClick={() => showBookingDetail(item)} style={{ padding: '7px 10px', fontSize: 11 }}>Chi tiết</button>{item.bookingType === 'GROUP_CLASS' && item.canCancel && <button type="button" className="btn-danger" onClick={() => cancelGroupBooking(item)} style={{ padding: '7px 10px', fontSize: 11 }}>Hủy lịch</button>}</div></div>)}</div>}
+              {scheduleDetail && <div style={{ marginTop: 18, padding: 14, borderRadius: 'var(--radius-sm)', background: 'var(--color-primary-light)', border: '1px solid var(--color-primary)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong>Chi tiết buổi tập</strong><button type="button" onClick={() => setScheduleDetail(null)} style={{ border: 0, background: 'transparent', cursor: 'pointer' }}>Đóng</button></div><pre style={{ margin: '10px 0 0', fontSize: 11, whiteSpace: 'pre-wrap', color: 'var(--text-muted)' }}>{JSON.stringify(scheduleDetail, null, 2)}</pre></div>}
+            </div>
+          )}
+
+          {activeTab === 'fitness' && currentUser && <MemberFitnessPanel userId={currentUser.id} />}
 
           {/* TAB 3: PREFERENCES & AUDIO */}
           {activeTab === 'preferences' && (

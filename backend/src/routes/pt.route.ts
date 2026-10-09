@@ -232,6 +232,7 @@ router.patch('/booking/:id/status', authenticateToken, PtController.updateBookin
  *         description: Danh sách lịch đặt PT
  */
 router.get('/my-bookings', authenticateToken, PtController.getMyBookings);
+router.get('/my-trainees', authenticateToken, authorizeRoles('COACH', 'TRAINER'), PtController.getMyTrainees);
 
 /**
  * @swagger

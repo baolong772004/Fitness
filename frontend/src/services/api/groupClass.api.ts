@@ -2,6 +2,20 @@ import { request } from './client';
 import { ApiGroupClass, ApiGroupClassBooking, ApiGroupClassSchedule } from './types';
 
 export const groupClassApi = {
+  async getAdminClasses() {
+    const res = await request<{ success: boolean; data: ApiGroupClass[] }>(
+      '/group-classes/admin/classes'
+    );
+    return res.data;
+  },
+
+  async getAdminSchedules() {
+    const res = await request<{ success: boolean; data: ApiGroupClassSchedule[] }>(
+      '/group-classes/admin/schedules'
+    );
+    return res.data;
+  },
+
   async getSchedules(date?: string) {
     const q = date ? `?date=${date}` : '';
     const res = await request<{ success: boolean; data: ApiGroupClassSchedule[] }>(

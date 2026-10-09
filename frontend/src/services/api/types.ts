@@ -170,6 +170,27 @@ export interface ApiCoachProfile {
   schedules?: ApiCoachSchedule[];
 }
 
+export interface ApiCoachTrainee {
+  id: number;
+  fullName: string;
+  email: string;
+  phone?: string | null;
+  avatar?: string | null;
+  gender?: string | null;
+  dateOfBirth?: string | null;
+  memberships: Array<{
+    id: number;
+    startDate: string;
+    endDate: string;
+    remainingSessions?: number | null;
+    package: {
+      id: number;
+      name: string;
+      totalPtSessions?: number | null;
+    };
+  }>;
+}
+
 export interface ApiGroupClass {
   id: number;
   name: string;

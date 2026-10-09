@@ -64,12 +64,15 @@ export const ptApi = {
     return request<{
       success: boolean;
       data: Array<{
+        id: number;
         userId: number;
         bio?: string;
         specialization?: string;
         rating?: number;
         hourlyRate: number;
         fullName: string;
+        email: string;
+        phone?: string | null;
         avatar?: string;
       }>;
     }>('/pt/trainers');
@@ -127,6 +130,11 @@ export const ptApi = {
     return res.data;
   },
 
+  async getMyTrainees() {
+    const res = await request<{ success: boolean; data: ApiCoachTrainee[] }>('/pt/my-trainees');
+    return res.data;
+  },
+
   async generateSessionQr(bookingId: number | string) {
     return request<{
       success: boolean;
@@ -177,9 +185,9 @@ export const ptApi = {
   async resolveNoShow(bookingId: number | string, resolution: 'ATTENDED' | 'EXCUSED', reason: string) {
     return request<{ success: boolean; message: string; data: ApiBooking }>(
       `/pt/booking/${bookingId}/resolve-no-show`, {
-        method: 'POST',
-        body: JSON.stringify({ resolution, reason })
-      }
+      method: 'POST',
+      body: JSON.stringify({ resolution, reason })
+    }
     );
   },
 
