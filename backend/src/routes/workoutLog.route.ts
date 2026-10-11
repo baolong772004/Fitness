@@ -100,7 +100,7 @@ router.post('/inbody', authenticateToken, authorizeRoles('STAFF', 'COACH', 'TRAI
  *           type: integer
  *     responses:
  *       200:
- *         description: Trả về biểu đồ InBody & Nhật ký buổi tập
+ *         description: Trả về inbodyLogs, workoutLogs và plans (buổi tập, bài tập, thực đơn theo ngày)
  */
 router.get('/progress/:memberId', authenticateToken, getMemberProgress);
 

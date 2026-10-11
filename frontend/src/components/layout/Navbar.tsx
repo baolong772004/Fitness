@@ -10,7 +10,6 @@ import {
   CreditCard,
   LifeBuoy,
   UserCheck,
-  Sparkles,
   Clock,
   BarChart3,
   FileText,
@@ -198,7 +197,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           { id: 'schedule', label: 'Lịch Dạy', icon: Calendar },
           { id: 'workclass', label: 'Workclass', icon: Layers },
           { id: 'trainees', label: 'Hồ Sơ Học Viên', icon: UserCheck },
-          { id: 'ai-workout', label: 'Giáo Án', icon: Sparkles },
+          { id: 'ai-workout', label: 'Giáo Án & Dinh Dưỡng', icon: FileText },
           { id: 'availability', label: 'Đăng Lịch Rảnh', icon: Clock }
         ];
       case 'admin':

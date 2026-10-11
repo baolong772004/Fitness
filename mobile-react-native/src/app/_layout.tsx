@@ -1,0 +1,36 @@
+import React from 'react';
+import { View } from 'react-native';
+import { Stack, usePathname } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { AuthProvider, useAuth } from '../lib/auth';
+import { aura } from '../lib/theme';
+import { AuraLoader } from '../components/AuraLoader';
+
+export default function RootLayout() {
+  return <AuthProvider><RootNavigation /></AuthProvider>;
+}
+
+function RootNavigation() {
+  const pathname = usePathname();
+  const { ready } = useAuth();
+  const lightTab = ['/booking', '/notifications', '/(tabs)/booking', '/(tabs)/notifications'].includes(pathname);
+  return <View style={{ flex: 1 }}><StatusBar style={lightTab ? 'dark' : 'light'} /><Stack screenOptions={{ headerStyle: { backgroundColor: aura.espresso }, headerTintColor: '#fff', headerTitleStyle: { fontWeight: '800' }, contentStyle: { backgroundColor: aura.cream } }}>
+    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <Stack.Screen name="auth" options={{ title: 'Đăng nhập' }} />
+    <Stack.Screen name="forgot-password" options={{ title: 'Khôi phục mật khẩu' }} />
+    <Stack.Screen name="packages" options={{ title: 'Gói tập Aura' }} />
+    <Stack.Screen name="subscriptions" options={{ title: 'Gói tập của tôi' }} />
+    <Stack.Screen name="classes" options={{ title: 'Workout Class' }} />
+    <Stack.Screen name="pt" options={{ title: 'Lịch tập cùng PT' }} />
+    <Stack.Screen name="pt-book" options={{ title: 'Đặt lịch PT' }} />
+    <Stack.Screen name="pt-chat" options={{ title: 'Nhắn tin PT' }} />
+    <Stack.Screen name="pt-qr" options={{ title: 'QR buổi tập PT' }} />
+    <Stack.Screen name="scanner" options={{ title: 'Quét mã QR' }} />
+    <Stack.Screen name="checkout" options={{ title: 'Thanh toán PayOS' }} />
+    <Stack.Screen name="progress" options={{ title: 'Tiến độ tập luyện' }} />
+    <Stack.Screen name="history" options={{ title: 'Lịch sử điểm danh' }} />
+    <Stack.Screen name="change-password" options={{ title: 'Đổi mật khẩu' }} />
+    <Stack.Screen name="article" options={{ headerShown: false }} />
+    <Stack.Screen name="articles" options={{ title: 'Tin tức & hướng dẫn' }} />
+  </Stack>{!ready && <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: aura.cream, alignItems: 'center', justifyContent: 'center' }}><AuraLoader size={68} /></View>}</View>;
+}

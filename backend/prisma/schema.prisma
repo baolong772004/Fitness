@@ -339,6 +339,8 @@ model WorkoutPlan {
   coach       User     @relation("CoachCreatedPlans", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   title       String
   description String?
+  sessionsJson String?  @db.NVarChar(Max)
+  mealsJson    String?  @db.NVarChar(Max)
   createdAt   DateTime @default(now())
 }
 

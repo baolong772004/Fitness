@@ -1,4 +1,5 @@
 import { request } from './client';
+import type { CoachWorkoutPlan } from './pt.api';
 import { ApiProgressLog, ApiSessionResult } from './types';
 
 export const workoutLogApi = {
@@ -46,6 +47,7 @@ export const workoutLogApi = {
       data: {
         inbodyLogs: ApiProgressLog[];
         workoutLogs: any[];
+        plans: Array<Omit<CoachWorkoutPlan, 'member'> & { coach: { fullName: string } }>;
       };
     }>(`/workouts/progress/${memberId}`);
     return res.data;

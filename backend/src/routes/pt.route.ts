@@ -67,7 +67,7 @@ router.put('/coach/availability', authenticateToken, authorizeRoles('COACH', 'TR
  *     responses:
  *       200: { description: Danh sách giáo án }
  *   post:
- *     summary: Coach lưu giáo án cho học viên được phân công
+ *     summary: Coach lưu giáo án theo buổi và thực đơn theo ngày cho học viên được phân công
  *     tags: [PersonalTrainer]
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
@@ -81,6 +81,46 @@ router.put('/coach/availability', authenticateToken, authorizeRoles('COACH', 'TR
  *               memberId: { type: integer }
  *               title: { type: string }
  *               description: { type: string }
+ *               sessions:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [dayOfWeek, title, exercises]
+ *                   properties:
+ *                     dayOfWeek: { type: integer, minimum: 1, maximum: 7, description: '1 = Thứ Hai' }
+ *                     title: { type: string }
+ *                     notes: { type: string }
+ *                     exercises:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         required: [exerciseName, sets, reps]
+ *                         properties:
+ *                           exerciseName: { type: string }
+ *                           sets: { type: integer }
+ *                           reps: { type: integer }
+ *                           weightKg: { type: number, nullable: true }
+ *                           notes: { type: string }
+ *               mealDays:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [dayOfWeek, meals]
+ *                   properties:
+ *                     dayOfWeek: { type: integer, minimum: 1, maximum: 7 }
+ *                     notes: { type: string }
+ *                     meals:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         required: [mealType, food, portion]
+ *                         properties:
+ *                           mealType: { type: string, enum: [BREAKFAST, LUNCH, DINNER, SNACK] }
+ *                           time: { type: string, example: '07:00' }
+ *                           food: { type: string }
+ *                           portion: { type: string }
+ *                           calories: { type: integer, nullable: true }
+ *                           notes: { type: string }
  *     responses:
  *       201: { description: Đã lưu giáo án }
  */
