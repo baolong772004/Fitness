@@ -657,6 +657,27 @@ class AuthService {
     );
   }
 
+  Future<Map<String, dynamic>> getMemberWorkoutProgress() async {
+    final token = accessToken;
+    final memberId = int.tryParse(currentMember?.id ?? '');
+    if (token == null || token.isEmpty || memberId == null || memberId <= 0) {
+      throw const AuthApiException(
+        'Vui lòng đăng nhập lại để xem tiến độ tập luyện.',
+      );
+    }
+    final response = await _get(
+      '/workouts/progress/$memberId',
+      bearerToken: token,
+    );
+    final data = _asMap(response['data']);
+    if (data == null) {
+      throw const AuthApiException(
+        'Máy chủ chưa trả về dữ liệu tiến độ tập luyện.',
+      );
+    }
+    return data;
+  }
+
   Future<List<FitnessPackage>> getFitnessPackages({String? type}) async {
     final query = type == null ? '' : '?type=$type';
     final response = await _get('/packages$query');
@@ -757,11 +778,9 @@ class AuthService {
     if (token == null || token.isEmpty) {
       throw const AuthApiException('Vui lòng đăng nhập để check-in lớp nhóm.');
     }
-    await _post(
-      '/group-classes/check-in/$bookingId',
-      {'qrToken': qrToken},
-      bearerToken: token,
-    );
+    await _post('/group-classes/check-in/$bookingId', {
+      'qrToken': qrToken,
+    }, bearerToken: token);
   }
 
   Future<List<FitnessCoach>> getAvailablePtCoaches() async {

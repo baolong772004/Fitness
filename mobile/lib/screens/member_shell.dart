@@ -15,6 +15,7 @@ import 'my_subscriptions_screen.dart';
 import 'notifications_screen.dart';
 import 'package_store_screen.dart';
 import 'pt_journey_screen.dart';
+import 'workout_progress_screen.dart';
 
 class MemberShell extends StatefulWidget {
   const MemberShell({super.key, required this.auth});
@@ -354,6 +355,25 @@ class _MemberShellState extends State<MemberShell> {
     );
   }
 
+  Future<void> _openWorkoutProgress() async {
+    if (widget.auth.currentMember == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => WorkoutProgressScreen(auth: widget.auth),
+      ),
+    );
+  }
+
+  Future<void> _openCoachPlans() async {
+    if (widget.auth.currentMember == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            WorkoutProgressScreen(auth: widget.auth, plansOnly: true),
+      ),
+    );
+  }
+
   Future<void> _openPackageStore() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -668,6 +688,16 @@ class _MemberShellState extends State<MemberShell> {
               'Hợp đồng hội viên',
               'Thông tin hợp đồng hiện chưa được đồng bộ vào ứng dụng.',
             ),
+          ),
+          _accountMenuItem(
+            icon: Icons.insights_rounded,
+            title: 'Tiến độ tập luyện',
+            onTap: _openWorkoutProgress,
+          ),
+          _accountMenuItem(
+            icon: Icons.menu_book_rounded,
+            title: 'Giáo án & Dinh dưỡng',
+            onTap: _openCoachPlans,
           ),
           _accountMenuItem(
             icon: Icons.fact_check_outlined,

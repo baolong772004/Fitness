@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
+import { presentWorkoutPlan } from '../services/workoutPlan.service.js';
 
 const prisma = new PrismaClient();
 
@@ -153,7 +154,7 @@ export const getMemberProgress = async (req: AuthRequest, res: Response) => {
       if (!assigned) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này' });
     }
 
-    const [inbodyLogs, workoutLogs] = await Promise.all([
+    const [inbodyLogs, workoutLogs, workoutPlans] = await Promise.all([
       // Lấy lịch sử InBody (Đo cân nặng, mỡ)
       prisma.progressLog.findMany({
         where: { memberId: targetMemberId },
@@ -175,7 +176,13 @@ export const getMemberProgress = async (req: AuthRequest, res: Response) => {
         },
         orderBy: { startTime: 'desc' },
         take: 10,
-      })
+      }),
+      prisma.workoutPlan.findMany({
+        where: { memberId: targetMemberId },
+        include: { coach: { select: { fullName: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
     ]);
 
     return res.status(200).json({
@@ -183,6 +190,7 @@ export const getMemberProgress = async (req: AuthRequest, res: Response) => {
       data: {
         inbodyLogs,
         workoutLogs,
+        plans: workoutPlans.map(presentWorkoutPlan),
       },
     });
   } catch (error: any) {

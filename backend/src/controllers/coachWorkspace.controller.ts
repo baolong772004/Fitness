@@ -1,6 +1,7 @@
 import type { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
+import { normalizeWorkoutPlanContent, presentWorkoutPlan } from '../services/workoutPlan.service.js';
 
 const prisma = new PrismaClient();
 const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -116,7 +117,7 @@ export async function getCoachPlans(req: AuthRequest, res: Response) {
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
-    return res.json({ success: true, data: plans });
+    return res.json({ success: true, data: plans.map(presentWorkoutPlan) });
   } catch (error) {
     console.error('Lỗi tải giáo án Coach:', error);
     return res.status(500).json({ success: false, message: 'Không thể tải giáo án' });
@@ -132,6 +133,12 @@ export async function createCoachPlan(req: AuthRequest, res: Response) {
   if (!Number.isSafeInteger(memberId) || memberId <= 0 || !title || title.length > 200 || description.length > 5000) {
     return res.status(400).json({ success: false, message: 'Cần học viên, tiêu đề và nội dung giáo án hợp lệ' });
   }
+  let content: ReturnType<typeof normalizeWorkoutPlanContent>;
+  try {
+    content = normalizeWorkoutPlanContent(req.body ?? {});
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Nội dung giáo án không hợp lệ' });
+  }
   try {
     const assigned = await prisma.membership.findFirst({
       where: { userId: memberId, coachId, package: { type: 'PT' } },
@@ -139,10 +146,10 @@ export async function createCoachPlan(req: AuthRequest, res: Response) {
     });
     if (!assigned) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này' });
     const plan = await prisma.workoutPlan.create({
-      data: { coachId, memberId, title, description },
+      data: { coachId, memberId, title, description, ...content },
       include: { member: { select: { id: true, fullName: true } } },
     });
-    return res.status(201).json({ success: true, message: 'Đã lưu giáo án', data: plan });
+    return res.status(201).json({ success: true, message: 'Đã lưu giáo án', data: presentWorkoutPlan(plan) });
   } catch (error) {
     console.error('Lỗi lưu giáo án Coach:', error);
     return res.status(500).json({ success: false, message: 'Không thể lưu giáo án' });

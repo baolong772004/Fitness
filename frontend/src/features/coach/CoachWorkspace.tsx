@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { CalendarDays, Check, Clock3, MessageSquare, Plus, QrCode, RefreshCw, Save, UserRound, X } from 'lucide-react';
 import { api, type ApiBooking, type ApiCoachProfile, type ApiCoachSchedule, type ApiGroupClassSchedule, type ApiProgressLog } from '../../services/api';
-import type { CoachTraineeMembership, CoachWorkoutPlan } from '../../services/api/pt.api';
+import type { CoachPlanDraft, CoachTraineeMembership, CoachWorkoutPlan } from '../../services/api/pt.api';
+import { CoachPlanEditor, CoachSavedPlan } from './CoachPlanEditor';
 import { StaffPage } from '@/components/staff/StaffKit';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,9 +56,6 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   const [weight, setWeight] = useState('');
   const [bodyFat, setBodyFat] = useState('');
   const [muscleMass, setMuscleMass] = useState('');
-  const [planMemberId, setPlanMemberId] = useState('');
-  const [planTitle, setPlanTitle] = useState('');
-  const [planDescription, setPlanDescription] = useState('');
   const [qr, setQr] = useState<{ booking: ApiBooking; image: string } | null>(null);
   const [chatBooking, setChatBooking] = useState<ApiBooking | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -241,15 +239,8 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
     if (saved) setSlotVersion(value => value + 1);
   };
 
-  const savePlan = async () => {
-    const memberId = Number(planMemberId);
-    if (!Number.isSafeInteger(memberId) || !planTitle.trim()) {
-      setNotice('Chọn học viên và nhập tên giáo án.');
-      return;
-    }
-    const saved = await run(() => api.pt.createCoachPlan({ memberId, title: planTitle.trim(), description: planDescription.trim() }), 'Đã lưu giáo án cho học viên.');
-    if (saved) { setPlanTitle(''); setPlanDescription(''); }
-  };
+  const savePlan = (draft: CoachPlanDraft) =>
+    run(() => api.pt.createCoachPlan(draft), 'Đã lưu giáo án và thực đơn cho học viên.');
 
   const saveInBody = async () => {
     if (!selectedMemberId || !Number.isFinite(Number(weight)) || Number(weight) <= 0) {
@@ -374,16 +365,13 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
           </CardContent></Card>
         </div>}
 
-        {activeTab === 'ai-workout' && <div className="grid gap-5 lg:grid-cols-2">
-          <Card><CardHeader><CardTitle>Tạo giáo án cho học viên</CardTitle><CardDescription>Giáo án được lưu vào hồ sơ học viên. Backend hiện chưa có API tạo nội dung bằng AI.</CardDescription></CardHeader><CardContent className="space-y-3">
-            <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={planMemberId} onChange={e => setPlanMemberId(e.target.value)}><option value="">Chọn học viên</option>{[...new Map(trainees.map(row => [row.userId, row])).values()].map(row => <option key={row.userId} value={row.userId}>{row.user.fullName}</option>)}</select>
-            <Input placeholder="Tên giáo án" value={planTitle} onChange={e => setPlanTitle(e.target.value)} />
-            <Textarea rows={8} placeholder="Mục tiêu, bài tập, số hiệp, lưu ý..." value={planDescription} onChange={e => setPlanDescription(e.target.value)} />
-            <Button disabled={busy} onClick={() => void savePlan()}><Save className="size-4" /> Lưu giáo án</Button>
+        {activeTab === 'ai-workout' && <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+          <Card><CardHeader><CardTitle>Giáo án & Dinh dưỡng</CardTitle><CardDescription>Lên bài tập theo buổi và bữa ăn theo ngày cho học viên được phân công.</CardDescription></CardHeader><CardContent>
+            <CoachPlanEditor trainees={[...new Map(trainees.map(row => [row.userId, row])).values()].map(row => ({ id: row.userId, name: row.user.fullName }))} busy={busy} onSave={savePlan} />
           </CardContent></Card>
-          <Card><CardHeader><CardTitle>Giáo án đã lưu</CardTitle></CardHeader><CardContent className="max-h-[34rem] space-y-2 overflow-y-auto">
+          <Card><CardHeader><CardTitle>Giáo án đã lưu</CardTitle></CardHeader><CardContent className="max-h-[48rem] space-y-2 overflow-y-auto">
             {plans.length === 0 && <p className="text-sm text-muted-foreground">Chưa có giáo án nào.</p>}
-            {plans.map(plan => <div key={plan.id} className="rounded-lg border p-3 text-sm"><strong>{plan.title}</strong><p className="text-xs text-muted-foreground">{plan.member.fullName} · {gymDay(plan.createdAt)}</p><p className="mt-2 whitespace-pre-wrap">{plan.description}</p></div>)}
+            {plans.map(plan => <CoachSavedPlan key={plan.id} plan={plan} />)}
           </CardContent></Card>
         </div>}
 

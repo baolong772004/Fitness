@@ -1,5 +1,5 @@
 import { request } from './client';
-import { ApiBooking, ApiCoachProfile, ApiCoachSchedule, ApiSubscription } from './types';
+import { ApiBooking, ApiCoachProfile, ApiCoachSchedule, ApiCoachTrainee, ApiSubscription } from './types';
 
 export interface CoachTraineeMembership {
   id: number;
@@ -27,8 +27,48 @@ export interface CoachWorkoutPlan {
   memberId: number;
   title: string;
   description: string | null;
+  sessions: CoachPlanSession[];
+  mealDays: CoachMealDay[];
   createdAt: string;
   member: { id: number; fullName: string };
+}
+
+export interface CoachPlanExercise {
+  exerciseName: string;
+  sets: number;
+  reps: number;
+  weightKg: number | null;
+  notes: string;
+}
+
+export interface CoachPlanSession {
+  dayOfWeek: number;
+  title: string;
+  notes: string;
+  exercises: CoachPlanExercise[];
+}
+
+export interface CoachPlanMeal {
+  mealType: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+  time: string;
+  food: string;
+  portion: string;
+  calories: number | null;
+  notes: string;
+}
+
+export interface CoachMealDay {
+  dayOfWeek: number;
+  notes: string;
+  meals: CoachPlanMeal[];
+}
+
+export interface CoachPlanDraft {
+  memberId: number;
+  title: string;
+  description: string;
+  sessions: CoachPlanSession[];
+  mealDays: CoachMealDay[];
 }
 
 export const ptApi = {
@@ -54,7 +94,7 @@ export const ptApi = {
     return res.data;
   },
 
-  async createCoachPlan(payload: { memberId: number; title: string; description: string }) {
+  async createCoachPlan(payload: CoachPlanDraft) {
     return request<{ success: boolean; message: string; data: CoachWorkoutPlan }>('/pt/coach/plans', {
       method: 'POST',
       body: JSON.stringify(payload)
