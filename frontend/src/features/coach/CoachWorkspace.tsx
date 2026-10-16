@@ -240,7 +240,9 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   };
 
   const savePlan = (draft: CoachPlanDraft) =>
-    run(() => api.pt.createCoachPlan(draft), 'Đã lưu giáo án và thực đơn cho học viên.');
+    run(() => api.pt.createCoachPlan(draft), 'Đã lưu giáo án mẫu.');
+
+  const generatePlan = (memberId: number | null, request: string) => api.pt.generateCoachPlan(memberId, request);
 
   const saveInBody = async () => {
     if (!selectedMemberId || !Number.isFinite(Number(weight)) || Number(weight) <= 0) {
@@ -366,8 +368,8 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
         </div>}
 
         {activeTab === 'ai-workout' && <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-          <Card><CardHeader><CardTitle>Giáo án & Dinh dưỡng</CardTitle><CardDescription>Lên bài tập theo buổi và bữa ăn theo ngày cho học viên được phân công.</CardDescription></CardHeader><CardContent>
-            <CoachPlanEditor trainees={[...new Map(trainees.map(row => [row.userId, row])).values()].map(row => ({ id: row.userId, name: row.user.fullName }))} busy={busy} onSave={savePlan} />
+          <Card><CardHeader><CardTitle>Giáo án & Dinh dưỡng</CardTitle><CardDescription>Soạn giáo án mẫu trước; gán và gửi cho học viên sau khi chốt lịch.</CardDescription></CardHeader><CardContent>
+            <CoachPlanEditor busy={busy} onSave={savePlan} onGenerate={generatePlan} />
           </CardContent></Card>
           <Card><CardHeader><CardTitle>Giáo án đã lưu</CardTitle></CardHeader><CardContent className="max-h-[48rem] space-y-2 overflow-y-auto">
             {plans.length === 0 && <p className="text-sm text-muted-foreground">Chưa có giáo án nào.</p>}

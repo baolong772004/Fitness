@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import jwt from 'jsonwebtoken';
 import QRCode from 'qrcode';
@@ -7,7 +7,7 @@ import { createUserNotification } from '../services/notification.service.js';
 import { closePtChatRoom } from '../sockets/ptChat.socket.js';
 import { resolveAutomaticPtNoShow } from '../services/ptNoShow.service.js';
 
-const prisma = new PrismaClient();
+
 const PT_CHECKIN_EARLY_WINDOW_MS = 15 * 60 * 1000;
 
 const getPtCheckInWindowError = (

@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import jwt from 'jsonwebtoken';
 import QRCode from 'qrcode';
 
-const prisma = new PrismaClient();
+
 
 export class CheckInController {
   /**

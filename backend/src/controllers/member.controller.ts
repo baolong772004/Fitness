@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 
-const prisma = new PrismaClient();
+
 
 /**
  * API: Lấy danh sách lịch tập tổng hợp của Member (Gồm PT Booking & Group Class Booking)

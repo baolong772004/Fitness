@@ -3,7 +3,7 @@ import { PtController } from '../controllers/pt.controller.js';
 import { PaymentController } from '../controllers/payment.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 import { listPtChatMessages, sendPtChatMessage } from '../controllers/ptChat.controller.js';
-import { getCoachWorkspace, getCoachTrainees, updateCoachAvailability, getCoachPlans, createCoachPlan } from '../controllers/coachWorkspace.controller.js';
+import { getCoachWorkspace, getCoachTrainees, updateCoachAvailability, getCoachPlans, createCoachPlan, generateCoachPlan } from '../controllers/coachWorkspace.controller.js';
 
 const router = Router();
 
@@ -76,9 +76,9 @@ router.put('/coach/availability', authenticateToken, authorizeRoles('COACH', 'TR
  *         application/json:
  *           schema:
  *             type: object
- *             required: [memberId, title]
+ *             required: [title]
  *             properties:
- *               memberId: { type: integer }
+ *               memberId: { type: integer, nullable: true, description: 'Tùy chọn; có thể gán sau khi học viên chốt lịch' }
  *               title: { type: string }
  *               description: { type: string }
  *               sessions:
@@ -125,6 +125,7 @@ router.put('/coach/availability', authenticateToken, authorizeRoles('COACH', 'TR
  *       201: { description: Đã lưu giáo án }
  */
 router.get('/coach/plans', authenticateToken, authorizeRoles('COACH', 'TRAINER'), getCoachPlans);
+router.post('/coach/plans/generate', authenticateToken, authorizeRoles('COACH', 'TRAINER'), generateCoachPlan);
 router.post('/coach/plans', authenticateToken, authorizeRoles('COACH', 'TRAINER'), createCoachPlan);
 
 /**

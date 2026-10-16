@@ -1,10 +1,10 @@
 import type { Server as HttpServer } from 'http';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import { getPtChatAccess, PtChatError } from '../services/ptChat.service.js';
 
-const prisma = new PrismaClient();
+
 let chatIo: Server | null = null;
 
 export const ptChatRoom = (bookingId: number) => `pt-booking:${bookingId}`;

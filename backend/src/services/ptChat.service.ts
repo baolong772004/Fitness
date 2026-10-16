@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 
-const prisma = new PrismaClient();
+
 
 export class PtChatError extends Error {
   constructor(public status: number, message: string) {

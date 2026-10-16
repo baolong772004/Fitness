@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 
-const prisma = new PrismaClient();
+
 
 /**
  * API 1: Lấy danh sách Coach (kèm bộ lọc)

@@ -1,0 +1,879 @@
+
+> backend@1.0.0 predev
+> prisma generate
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+
+✔ Generated Prisma Client (v6.19.3) to .\..\node_modules\@prisma\client in 147ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+
+
+> backend@1.0.0 dev
+> tsx watch src/server.js
+
+◇ injected env (0) from .env
+Database connected successfully via Prisma
+Server running on http://localhost:5000
+API docs: http://localhost:5000/api-docs
+GET /health 200 1.383 ms - 54
+GET /api/packages? 200 15.413 ms - 326
+GET /api/admin-trainers? 401 0.409 ms - 63
+GET /api/packages? 304 7.901 ms - -
+GET /api/admin-trainers? 401 0.330 ms - 63
+GET /api/packages? 200 8.120 ms - 326
+GET /api/packages? 304 7.507 ms - -
+GET /api/admin-trainers? 401 0.215 ms - 63
+GET /api/admin-trainers? 401 0.214 ms - 63
+POST /api/auth/login 200 83.173 ms - 667
+GET /api/notifications?limit=8 200 29.262 ms - 101
+GET /api/pt/coach/me 200 53.895 ms - 342
+GET /api/pt/my-bookings 200 46.711 ms - 26
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 31.850 ms - 58
+GET /api/pt/coach/trainees 200 63.884 ms - 26
+GET /api/group-classes/schedules?date=2026-10-16 200 34.907 ms - 26
+GET /api/pt/coach/me 304 17.875 ms - -
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 11.637 ms - 58
+GET /api/pt/my-bookings 304 28.333 ms - -
+GET /api/pt/coach/trainees 304 16.954 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 19.626 ms - -
+POST /api/auth/login 200 68.457 ms - 667
+GET /api/notifications?limit=8 200 36.070 ms - 101
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 48.877 ms - 58
+GET /api/pt/coach/me 200 71.093 ms - 342
+GET /api/pt/coach/trainees 200 103.907 ms - 26
+GET /api/group-classes/schedules?date=2026-10-16 200 97.927 ms - 26
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 44.832 ms - 58
+GET /api/pt/my-bookings 200 130.108 ms - 26
+GET /api/pt/coach/me 304 52.921 ms - -
+GET /api/pt/coach/trainees 304 46.316 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 42.969 ms - -
+GET /api/pt/my-bookings 304 40.088 ms - -
+GET /api/pt/my-bookings 304 21.539 ms - -
+GET /api/pt/my-bookings 304 13.433 ms - -
+GET /api/packages? 304 13.839 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 23.342 ms - -
+GET /api/packages? 304 12.098 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 24.035 ms - -
+GET /api/notifications?limit=8 304 29.837 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 40.531 ms - -
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 25.036 ms - 58
+GET /api/pt/coach/me 304 54.590 ms - -
+GET /api/pt/coach/trainees 304 53.509 ms - -
+GET /api/admin-trainers? 403 0.524 ms - 91
+GET /api/admin-trainers? 403 0.532 ms - 91
+GET /api/pt/my-bookings 304 71.881 ms - -
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 26.904 ms - 58
+GET /api/group-classes/schedules?date=2026-10-16 304 53.237 ms - -
+GET /api/pt/coach/me 304 40.691 ms - -
+GET /api/pt/coach/trainees 304 40.036 ms - -
+GET /api/pt/my-bookings 304 34.228 ms - -
+GET /api/notifications?limit=8 304 8.307 ms - -
+GET /api/pt/my-bookings 304 12.719 ms - -
+GET /api/pt/my-bookings 304 16.664 ms - -
+GET /api/pt/my-bookings 304 15.071 ms - -
+GET /api/notifications?limit=8 304 5.787 ms - -
+GET /api/notifications?limit=8 304 7.828 ms - -
+GET /api/pt/my-bookings 304 14.207 ms - -
+GET /api/pt/my-bookings 304 16.231 ms - -
+GET /api/pt/my-bookings 304 13.546 ms - -
+GET /api/notifications?limit=8 304 5.810 ms - -
+GET /api/notifications?limit=8 304 7.531 ms - -
+GET /api/pt/my-bookings 304 14.239 ms - -
+GET /api/pt/my-bookings 304 83.361 ms - -
+GET /api/pt/my-bookings 304 13.987 ms - -
+GET /api/notifications?limit=8 304 7.065 ms - -
+GET /api/notifications?limit=8 304 14.604 ms - -
+GET /api/pt/my-bookings 304 23.765 ms - -
+GET /api/pt/my-bookings 304 15.839 ms - -
+GET /api/pt/my-bookings 304 26.316 ms - -
+GET /api/notifications?limit=8 304 6.809 ms - -
+GET /api/notifications?limit=8 304 9.490 ms - -
+GET /api/pt/my-bookings 304 18.978 ms - -
+GET /api/pt/my-bookings 304 14.762 ms - -
+GET /api/notifications?limit=8 304 6.560 ms - -
+GET /api/notifications?limit=8 304 10.685 ms - -
+GET /api/notifications?limit=8 304 97.985 ms - -
+GET /api/notifications?limit=8 304 33.280 ms - -
+GET /api/notifications?limit=8 304 168.544 ms - -
+GET /api/packages? 304 104.313 ms - -
+GET /api/packages? 304 95.102 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 192.352 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 48.378 ms - -
+GET /api/notifications?limit=8 304 82.695 ms - -
+GET /api/pt/my-bookings 304 369.940 ms - -
+GET /api/pt/coach/me 304 416.243 ms - -
+GET /api/pt/coach/trainees 304 315.054 ms - -
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 350.432 ms - 58
+GET /api/group-classes/schedules?date=2026-10-16 304 351.656 ms - -
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 97.628 ms - 58
+GET /api/pt/coach/me 304 225.081 ms - -
+GET /api/pt/coach/trainees 304 239.694 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 368.492 ms - -
+GET /api/pt/my-bookings 304 421.060 ms - -
+GET /api/admin-trainers? 403 2.662 ms - 91
+GET /api/admin-trainers? 403 1.319 ms - 91
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 61.560 ms - 58
+GET /api/pt/coach/trainees 304 80.950 ms - -
+GET /api/pt/coach/me 304 103.821 ms - -
+GET /api/pt/my-bookings 304 111.843 ms - -
+GET /api/notifications?limit=8 304 788.176 ms - -
+GET /api/notifications?limit=8 304 1056.738 ms - -
+GET /api/notifications?limit=8 304 304.848 ms - -
+GET /api/notifications?limit=8 304 38.072 ms - -
+GET /api/notifications?limit=8 304 28.063 ms - -
+GET /api/notifications?limit=8 304 50.801 ms - -
+GET /api/notifications?limit=8 304 38.910 ms - -
+GET /api/notifications?limit=8 304 18.851 ms - -
+POST /api/auth/login 200 209.653 ms - 673
+GET /api/notifications/unread-count 200 13.872 ms - 41
+GET /api/subscriptions/my-subscriptions 200 109.695 ms - 634
+GET /api/pt/my-bookings 200 57.487 ms - 26
+GET /api/packages 200 14.432 ms - 326
+GET /api/subscriptions/my-subscriptions 304 13.545 ms - -
+GET /api/subscriptions/my-subscriptions 304 31.205 ms - -
+GET /api/pt/my-bookings 304 40.329 ms - -
+GET /api/notifications?limit=8 304 8.976 ms - -
+GET /api/notifications?limit=8 304 26.261 ms - -
+GET /api/notifications?limit=8 304 44.898 ms - -
+GET /api/notifications/unread-count 304 8.101 ms - -
+GET /api/pt/my-bookings 304 27.362 ms - -
+GET /api/subscriptions/my-subscriptions 304 11.831 ms - -
+GET /api/packages 304 6.288 ms - -
+GET /api/subscriptions/my-subscriptions 304 15.769 ms - -
+GET /api/subscriptions/my-subscriptions 304 21.981 ms - -
+GET /api/pt/my-bookings 304 28.231 ms - -
+GET /api/notifications/unread-count 304 11.513 ms - -
+GET /api/subscriptions/my-subscriptions 304 10.831 ms - -
+GET /api/pt/my-bookings 304 19.608 ms - -
+GET /api/subscriptions/my-subscriptions 304 11.834 ms - -
+GET /api/packages 304 7.877 ms - -
+GET /api/subscriptions/my-subscriptions 304 11.911 ms - -
+GET /api/subscriptions/my-subscriptions 304 14.146 ms - -
+GET /api/notifications/unread-count 304 10.017 ms - -
+GET /api/subscriptions/my-subscriptions 304 13.802 ms - -
+GET /api/pt/my-bookings 304 28.088 ms - -
+GET /api/notifications?limit=8 304 18.443 ms - -
+GET /api/packages? 304 11.983 ms - -
+GET /api/packages? 304 14.432 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 29.149 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 15.067 ms - -
+GET /api/notifications?limit=8 304 47.721 ms - -
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 84.849 ms - 58
+GET /api/group-classes/schedules?date=2026-10-16 304 127.326 ms - -
+GET /api/pt/coach/trainees 304 131.710 ms - -
+GET /api/pt/coach/me 304 150.649 ms - -
+GET /api/admin-trainers? 403 0.619 ms - 91
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 33.814 ms - 58
+GET /api/pt/my-bookings 304 156.958 ms - -
+GET /api/admin-trainers? 403 2.020 ms - 91
+GET /api/group-classes/schedules?date=2026-10-16 304 69.295 ms - -
+GET /api/pt/coach/trainees 304 56.778 ms - -
+GET /api/pt/coach/me 304 66.640 ms - -
+GET /api/pt/my-bookings 304 67.098 ms - -
+GET /api/notifications/unread-count 304 6.027 ms - -
+GET /api/notifications/unread-count 304 6.996 ms - -
+GET /api/notifications?limit=8 304 14.691 ms - -
+GET /api/notifications/unread-count 304 5.988 ms - -
+GET /api/notifications/unread-count 304 6.156 ms - -
+GET /api/notifications?limit=8 304 12.608 ms - -
+GET /api/notifications/unread-count 304 5.430 ms - -
+GET /api/notifications/unread-count 304 9.588 ms - -
+GET /api/notifications?limit=8 304 15.058 ms - -
+4:39:47 PM [tsx] change in ./src\services\geminiPlan.service.ts Restarting...
+4:39:48 PM [tsx] change in ./src\controllers\coachWorkspace.controller.ts Restarting...
+◇ injected env (0) from .env
+Database connected successfully via Prisma
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+    at Server.setupListenHandle [as _listen2] (node:net:2009:16)
+    at listenInCluster (node:net:2066:12)
+    at node:net:2275:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2045:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 5000
+}
+
+Node.js v24.18.0
+4:41:41 PM [tsx] change in ./src\services\geminiPlan.service.ts Rerunning...
+◇ injected env (0) from .env
+Database connected successfully via Prisma
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+    at Server.setupListenHandle [as _listen2] (node:net:2009:16)
+    at listenInCluster (node:net:2066:12)
+    at node:net:2275:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2045:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 5000
+}
+
+Node.js v24.18.0
+4:42:12 PM [tsx] change in ./src\services\geminiPlan.service.ts Rerunning...
+◇ injected env (0) from .env
+Database connected successfully via Prisma
+Server running on http://localhost:5000
+API docs: http://localhost:5000/api-docs
+GET /api/notifications?limit=8 304 26.604 ms - -
+4:42:33 PM [tsx] change in ./src\services\geminiPlan.service.ts Restarting...
+◇ injected env (0) from .env
+Database connected successfully via Prisma
+Server running on http://localhost:5000
+API docs: http://localhost:5000/api-docs
+GET /api/notifications/unread-count 304 14.931 ms - -
+GET /api/notifications/unread-count 304 8.140 ms - -
+GET /api/packages? 304 31.029 ms - -
+GET /api/packages? 304 36.514 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 108.865 ms - -
+GET /api/notifications?limit=8 304 95.305 ms - -
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 141.761 ms - 58
+GET /api/admin-trainers? 403 2.341 ms - 91
+GET /api/admin-trainers? 403 1.067 ms - 91
+GET /api/pt/coach/me 304 240.546 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 256.880 ms - -
+GET /api/pt/coach/trainees 304 255.091 ms - -
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 80.608 ms - 58
+GET /api/pt/my-bookings 304 284.992 ms - -
+GET /api/pt/coach/me 304 41.693 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 32.633 ms - -
+GET /api/pt/coach/trainees 304 35.991 ms - -
+GET /api/pt/my-bookings 304 37.917 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 15.012 ms - -
+GET /api/notifications/unread-count 304 6.786 ms - -
+POST /api/pt/coach/plans/generate 200 11043.939 ms - 3436
+GET /api/packages? 304 17.675 ms - -
+GET /api/packages? 304 16.763 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 44.780 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 33.873 ms - -
+GET /api/notifications?limit=8 304 62.305 ms - -
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 73.245 ms - 58
+GET /api/admin-trainers? 403 2.339 ms - 91
+GET /api/group-classes/schedules?date=2026-10-16 304 159.189 ms - -
+GET /api/admin-trainers? 403 1.717 ms - 91
+GET /api/pt/coach/me 304 147.480 ms - -
+GET /api/pt/coach/trainees 304 153.061 ms - -
+Lỗi tải giáo án Coach: PrismaClientKnownRequestError: 
+Invalid `prisma.workoutPlan.findMany()` invocation in
+D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:44
+
+  112 const coachId = req.user?.userId;
+  113 if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  114 try {
+→ 115   const plans = await prisma.workoutPlan.findMany(
+The column `mealsJson` does not exist in the current database.
+    at di.handleRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at di.handleAndLogRequestError (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at di.request (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (D:\FPT\WDP301\Fitness\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async getCoachPlans (D:\FPT\WDP301\Fitness\backend\src\controllers\coachWorkspace.controller.ts:115:19) {
+  code: 'P2022',
+  meta: {
+    modelName: 'WorkoutPlan',
+    driverAdapterError: DriverAdapterError: ColumnNotFound
+        at PrismaMssqlAdapter.onError (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:641:11)
+        at PrismaMssqlAdapter.performIO (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:636:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async PrismaMssqlAdapter.queryRaw (file:///D:/FPT/WDP301/Fitness/node_modules/@prisma/adapter-mssql/dist/index.mjs:613:49)
+        at async <anonymous> (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:68:22)
+        at async Un (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\tracing.ts:56:10)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:175:26)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:119:29)
+        at async e.interpretNode (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:261:41)
+        at async e.run (D:\FPT\WDP301\Fitness\node_modules\@prisma\client-engine-runtime\src\interpreter\query-interpreter.ts:83:23) {
+      cause: [Object]
+    }
+  },
+  clientVersion: '6.19.3'
+}
+GET /api/pt/coach/plans 500 62.727 ms - 58
+GET /api/pt/my-bookings 304 189.905 ms - -
+GET /api/group-classes/schedules?date=2026-10-16 304 68.618 ms - -
+GET /api/pt/coach/me 304 69.668 ms - -
+GET /api/pt/coach/trainees 304 52.670 ms - -
+GET /api/pt/my-bookings 304 53.418 ms - -
+GET /api/notifications/unread-count 304 7.497 ms - -
+POST /api/pt/coach/plans/generate 200 7634.574 ms - 4652
+GET /api/notifications/unread-count 304 5.674 ms - -
+GET /api/notifications?limit=8 304 12.396 ms - -
+GET /api/notifications/unread-count 304 13.785 ms - -
+GET /api/notifications/unread-count 304 10.663 ms - -
+GET /api/notifications?limit=8 304 15.199 ms - -
+GET /api/notifications/unread-count 304 6.319 ms - -
+GET /api/notifications/unread-count 304 4.698 ms - -
+GET /api/notifications?limit=8 304 14.226 ms - -
+GET /api/notifications/unread-count 304 7.175 ms - -
+GET /api/notifications/unread-count 304 6.023 ms - -
+4:47:41 PM [tsx] change in ./src\controllers\coachWorkspace.controller.ts Restarting...
+◇ injected env (0) from .env
+Database connected successfully via Prisma
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+    at Server.setupListenHandle [as _listen2] (node:net:2009:16)
+    at listenInCluster (node:net:2066:12)
+    at node:net:2275:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2045:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 5000
+}
+
+Node.js v24.18.0
+4:47:51 PM [tsx] change in ./..\node_modules\.prisma\client\query_compiler_bg.js Rerunning...
+◇ injected env (0) from .env
+Database connected successfully via Prisma
+Server running on http://localhost:5000
+API docs: http://localhost:5000/api-docs
+GET /api/notifications?limit=8 304 24.200 ms - -
+GET /api/notifications/unread-count 304 9.843 ms - -
+4:48:17 PM [tsx] unlink in ./..\node_modules\.prisma\client\default.js Restarting...
+◇ injected env (0) from .env
+Database connected successfully via Prisma
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+    at Server.setupListenHandle [as _listen2] (node:net:2009:16)
+    at listenInCluster (node:net:2066:12)
+    at node:net:2275:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2045:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 5000
+}
+
+Node.js v24.18.0
+4:48:44 PM [tsx] change in ./src\routes\pt.route.ts Rerunning...
+◇ injected env (0) from .env
+Database connected successfully via Prisma
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+    at Server.setupListenHandle [as _listen2] (node:net:2009:16)
+    at listenInCluster (node:net:2066:12)
+    at node:net:2275:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2045:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 5000
+}
+
+Node.js v24.18.0

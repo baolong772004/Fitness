@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 
-const prisma = new PrismaClient();
+
 
 export class PackageController {
   static async createPackage(req: Request, res: Response, next: NextFunction) {

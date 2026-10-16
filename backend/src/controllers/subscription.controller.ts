@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import {
   generateOrderCode,
@@ -8,7 +8,7 @@ import {
   markPaymentFailed,
 } from '../services/payment.service.js';
 
-const prisma = new PrismaClient();
+
 
 export class SubscriptionController {
   static async createSubscription(req: AuthRequest, res: Response, next: NextFunction) {

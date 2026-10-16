@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import {
   generateOrderCode,
@@ -9,7 +9,7 @@ import {
   markPaymentPaid,
 } from '../services/payment.service.js';
 
-const prisma = new PrismaClient();
+
 
 export class PaymentController {
   static async createPtCheckoutSession(req: AuthRequest, res: Response) {

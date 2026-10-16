@@ -1,8 +1,8 @@
 import { randomInt } from 'node:crypto';
 import PayOS from '@payos/node';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 
-const prisma = new PrismaClient();
+
 
 export function getPayOS(): PayOS | null {
   const clientId = process.env.PAYOS_CLIENT_ID?.trim();

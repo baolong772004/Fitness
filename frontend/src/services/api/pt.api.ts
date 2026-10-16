@@ -24,13 +24,13 @@ export interface CoachTraineeMembership {
 
 export interface CoachWorkoutPlan {
   id: number;
-  memberId: number;
+    memberId: number | null;
   title: string;
   description: string | null;
   sessions: CoachPlanSession[];
   mealDays: CoachMealDay[];
   createdAt: string;
-  member: { id: number; fullName: string };
+    member: { id: number; fullName: string } | null;
 }
 
 export interface CoachPlanExercise {
@@ -64,12 +64,14 @@ export interface CoachMealDay {
 }
 
 export interface CoachPlanDraft {
-  memberId: number;
+    memberId?: number | null;
   title: string;
   description: string;
   sessions: CoachPlanSession[];
   mealDays: CoachMealDay[];
 }
+
+export type GeneratedCoachPlan = Omit<CoachPlanDraft, 'memberId'>;
 
 export const ptApi = {
   async getCoachWorkspace() {
@@ -99,6 +101,14 @@ export const ptApi = {
       method: 'POST',
       body: JSON.stringify(payload)
     });
+  },
+
+  async generateCoachPlan(memberId: number | null, aiRequest: string) {
+    const res = await request<{ success: boolean; data: GeneratedCoachPlan }>('/pt/coach/plans/generate', {
+      method: 'POST',
+      body: JSON.stringify({ ...(memberId ? { memberId } : {}), request: aiRequest })
+    });
+    return res.data;
   },
   async getAvailableTrainers() {
     return request<{
