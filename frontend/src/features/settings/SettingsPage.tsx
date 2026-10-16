@@ -533,10 +533,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                                 padding: '3px 8px',
                                 borderRadius: 4,
                                 textTransform: 'uppercase',
-                                background: isActive ? 'var(--color-success-bg)' : 'rgba(150, 150, 150, 0.15)',
-                                color: isActive ? 'var(--color-success)' : 'var(--text-muted)'
+                                background: isActive ? 'var(--color-success-bg)' : sub.status === 'PENDING_ACTIVATION' ? 'rgba(254, 116, 19, 0.15)' : 'rgba(150, 150, 150, 0.15)',
+                                color: isActive ? 'var(--color-success)' : sub.status === 'PENDING_ACTIVATION' ? 'var(--color-primary)' : 'var(--text-muted)'
                               }}>
-                                {isActive ? 'Đang Hoạt Động' : sub.status}
+                                {isActive ? 'Đang Hoạt Động' : sub.status === 'PENDING_ACTIVATION' ? 'Chờ Kích Hoạt' : sub.status === 'PENDING' ? 'Chờ Thanh Toán' : sub.status}
                               </span>
                             </div>
 

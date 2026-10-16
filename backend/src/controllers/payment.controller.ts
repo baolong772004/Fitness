@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import {
   generateOrderCode,
@@ -8,6 +8,8 @@ import {
   markPaymentFailed,
   markPaymentPaid,
 } from '../services/payment.service.js';
+import { reconcileGymMembershipStates, refreshGymMembershipStates } from '../services/membership.service.js';
+import { lockGymMember } from '../services/gymMembershipLock.service.js';
 
 const prisma = new PrismaClient();
 
@@ -46,6 +48,7 @@ export class PaymentController {
 
       let ptCoachId: number | null = null;
       if (gymPackage.type === 'PT') {
+        await refreshGymMembershipStates(userId);
         const parsedTrainerId = Number(trainerId);
         if (!Number.isSafeInteger(parsedTrainerId) || parsedTrainerId <= 0) {
           return res.status(400).json({ message: 'trainerId is required for a PT package' });
@@ -82,27 +85,6 @@ export class PaymentController {
         return res.status(400).json({ message: 'trainerId can only be used with a PT package' });
       }
 
-      // Repeat purchases of an existing package must use /subscriptions/renew
-      // so payment extends the existing membership instead of creating a parallel one.
-      const existingMembership = await prisma.membership.findFirst({
-        where: {
-          userId,
-          packageId: gymPackage.id,
-          status: { in: ['ACTIVE', 'PENDING', 'EXPIRED'] },
-        },
-        select: { id: true, status: true, remainingSessions: true },
-      });
-      const blocksPurchase = existingMembership &&
-        (gymPackage.type !== 'PT' || existingMembership.status === 'PENDING' ||
-          (existingMembership.remainingSessions ?? 0) > 0);
-      if (blocksPurchase && existingMembership) {
-        return res.status(409).json({
-          message: 'Bạn đã có gói tập này. Vui lòng gia hạn membership hiện tại.',
-          subscriptionId: existingMembership.id,
-          status: existingMembership.status,
-        });
-      }
-
       const amount = Number(gymPackage.price);
       if (!Number.isSafeInteger(amount) || amount <= 0) {
         return res.status(400).json({ message: 'Giá gói tập phải là số nguyên dương hợp lệ' });
@@ -124,11 +106,30 @@ export class PaymentController {
 
       // Dùng Prisma Transaction để đảm bảo tính toàn vẹn dữ liệu
       const result = await prisma.$transaction(async (tx) => {
+        await lockGymMember(tx, userId);
+        await reconcileGymMembershipStates(tx, userId, new Date());
+        const matchingMemberships = await tx.membership.findMany({
+          where: {
+            userId,
+            packageId: gymPackage.id,
+            status: { in: ['ACTIVE', 'PENDING', 'PENDING_ACTIVATION', 'EXPIRED'] },
+          },
+          select: { id: true, status: true, remainingSessions: true },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        });
+        const existingMembership = matchingMemberships.find(item => item.status === 'PENDING')
+          ?? matchingMemberships.find(item => item.status === 'PENDING_ACTIVATION')
+          ?? matchingMemberships[0];
+        const blocksPurchase = existingMembership &&
+          (gymPackage.type !== 'PT' || existingMembership.status === 'PENDING');
+        if (blocksPurchase) return { blocked: existingMembership, subscription: null };
+
         // a. Tạo Membership (Tương đương Subscription) PENDING
         const subscription = await tx.membership.create({
           data: {
             userId,
             packageId: gymPackage.id,
+            isGymMembership: gymPackage.type === 'MEMBERSHIP',
             coachId: ptCoachId,
             startDate,
             endDate,
@@ -150,8 +151,20 @@ export class PaymentController {
           },
         });
 
-        return { subscription, payment };
-      });
+        return { blocked: null, subscription, payment };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 30000 });
+      if (result.blocked) {
+        return res.status(409).json({
+          message: result.blocked.status === 'PENDING_ACTIVATION'
+            ? `Bạn đã sở hữu gói ${gymPackage.name} đang chờ kích hoạt. Gói này sẽ tự động kích hoạt khi đến lượt sử dụng.`
+            : result.blocked.status === 'PENDING'
+              ? `Bạn đã có đơn mua gói ${gymPackage.name} đang chờ thanh toán. Vui lòng hoàn tất đơn đó hoặc liên hệ hỗ trợ để hủy.`
+            : 'Bạn đã có gói tập này. Vui lòng gia hạn membership hiện tại.',
+          subscriptionId: result.blocked.id,
+          status: result.blocked.status,
+        });
+      }
+      if (!result.subscription) throw new Error('Checkout membership was not created');
       paymentCreated = true;
 
       // Chuẩn hoá description theo chuẩn PayOS (Không dấu, không đặc biệt, max 25 ký tự)
@@ -231,6 +244,14 @@ export class PaymentController {
         }
         if (result.result === 'NOT_FOUND') return res.status(404).json({ message: 'Không tìm thấy đơn thanh toán' });
 
+        if (result.result === 'PAID_REVIEW' || result.result === 'ALREADY_PAID_REVIEW') {
+          return res.status(200).json({
+            success: false,
+            status: 'PAID_REVIEW',
+            message: 'Đã nhận tiền nhưng đơn gia hạn không còn hợp lệ. Gói tập chưa được gia hạn; vui lòng liên hệ hỗ trợ để xử lý hoàn tiền.',
+          });
+        }
+
         return res.status(200).json({
           success: true,
           status: 'PAID',
@@ -288,6 +309,9 @@ export class PaymentController {
           }
           if (result.result === 'NOT_FOUND') {
             return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+          }
+          if (result.result === 'PAID_REVIEW') {
+            console.error(`Paid Gym renewal requires refund review for order ${webhookData.orderCode}`);
           }
         }
       }

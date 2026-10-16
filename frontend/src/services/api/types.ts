@@ -43,7 +43,7 @@ export interface ApiSubscription {
   remainingSessions?: number | null;
   usedMakeupCount?: number;
   maxMakeupAllowed?: number;
-  status: 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED' | 'COMPLETED';
+  status: 'PENDING' | 'PENDING_ACTIVATION' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED' | 'COMPLETED';
   createdAt?: string;
   updatedAt?: string;
   package?: ApiPackage;

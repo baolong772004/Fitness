@@ -1,12 +1,36 @@
 import { PrismaClient } from '@prisma/client';
-import { closePtChatRoom } from '../sockets/ptChat.socket.js';
+import { lockPtMembership } from './ptBooking.service.js';
 
 const prisma = new PrismaClient();
 const NO_SHOW_GRACE_MS = 15 * 60 * 1000;
 const SCAN_INTERVAL_MS = 60 * 1000;
 
+async function expireMakeupRight(requestId: number, cutoff: Date) {
+  return prisma.$transaction(async (tx) => {
+    const request = await tx.makeUpRequest.findUnique({
+      where: { id: requestId }, include: { originalBooking: true },
+    });
+    const membershipId = request?.originalBooking.membershipId;
+    if (!request || !membershipId) return null;
+    await lockPtMembership(tx, membershipId);
+    const claimed = await tx.makeUpRequest.updateMany({ where: {
+      id: requestId, status: 'PENDING', expiresAt: { lte: cutoff },
+    }, data: { status: 'EXPIRED' } });
+    if (claimed.count !== 1) return null;
+    await tx.notification.create({ data: {
+      userId: request.originalBooking.memberId,
+      title: 'Quyền học bù PT đã hết hạn',
+      message: 'Bạn không đặt học bù trong 7 ngày. Quyền học bù đã hết hạn; buổi PT chưa bị trừ và vẫn dùng được nếu gói còn hiệu lực.',
+    } });
+    return requestId;
+  }, { isolationLevel: 'Serializable', maxWait: 15000, timeout: 20000 });
+}
+
 async function markPtNoShow(bookingId: number, cutoff: Date) {
   const result = await prisma.$transaction(async (tx) => {
+    const current = await tx.booking.findUnique({ where: { id: bookingId }, select: { membershipId: true } });
+    if (!current?.membershipId) return null;
+    await lockPtMembership(tx, current.membershipId);
     const claimed = await tx.booking.updateMany({
       where: {
         id: bookingId,
@@ -18,55 +42,38 @@ async function markPtNoShow(bookingId: number, cutoff: Date) {
         status: 'ABSENT_NO_REFUND',
         absenceReason: 'Tự động ghi nhận vắng vì không check-in buổi PT',
         absenceReportedAt: new Date(),
-        cancelledBy: 'SYSTEM_NO_SHOW_NO_DEBIT',
+        cancelledBy: 'SYSTEM_NO_SHOW',
       },
     });
     if (claimed.count === 0) return null;
 
     const booking = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
-    let debited = false;
-
-    if (booking.membershipId !== null) {
-      const updated = await tx.membership.updateMany({
-        where: {
-          id: booking.membershipId,
-          remainingSessions: { gt: 0 },
-        },
-        data: { remainingSessions: { decrement: 1 } },
-      });
-      debited = updated.count === 1;
-      if (debited) {
-        const membership = await tx.membership.findUniqueOrThrow({
-          where: { id: booking.membershipId },
+    const updated = await tx.membership.updateMany({
+      where: { id: current.membershipId, remainingSessions: { gt: 0 } },
+      data: { remainingSessions: { decrement: 1 } },
+    });
+    if (updated.count !== 1) throw new Error(`PT booking ${bookingId} has no remaining session to debit`);
+    const membership = await tx.membership.findUniqueOrThrow({
+          where: { id: current.membershipId },
           select: { remainingSessions: true, package: { select: { type: true } } },
-        });
-        if (membership.remainingSessions === 0 && membership.package.type === 'PT') {
-          await tx.membership.update({
-            where: { id: booking.membershipId },
-            data: { status: 'COMPLETED' },
-          });
-        }
-        await tx.booking.update({
-          where: { id: bookingId },
-          data: { cancelledBy: 'SYSTEM_NO_SHOW' },
-        });
-      }
+    });
+    if (membership.remainingSessions === 0 && membership.package.type === 'PT') {
+      await tx.membership.update({
+        where: { id: current.membershipId }, data: { status: 'COMPLETED' },
+      });
     }
 
     await tx.notification.create({
       data: {
         userId: booking.memberId,
         title: 'Vắng buổi tập PT',
-        message: debited
-          ? `Bạn không check-in buổi PT lúc ${booking.startTime.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}. Hệ thống đã trừ 1 buổi trong gói.`
-          : `Bạn không check-in buổi PT lúc ${booking.startTime.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}. Gói hiện không còn lượt để trừ; vui lòng liên hệ quầy lễ tân.`,
+        message: `Bạn không check-in buổi PT lúc ${booking.startTime.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}. Hệ thống đã trừ 1 buổi trong gói.`,
       },
     });
 
-    return { bookingId, debited };
-  }, { isolationLevel: 'Serializable' });
+    return { bookingId, debited: true };
+  }, { isolationLevel: 'Serializable', maxWait: 15000, timeout: 20000 });
 
-  if (result) closePtChatRoom(result.bookingId);
   return result;
 }
 
@@ -77,6 +84,9 @@ export async function resolveAutomaticPtNoShow(
   reason: string,
 ) {
   return prisma.$transaction(async (tx) => {
+    const current = await tx.booking.findUnique({ where: { id: bookingId }, select: { membershipId: true } });
+    if (!current?.membershipId) return null;
+    await lockPtMembership(tx, current.membershipId);
     const claimed = await tx.booking.updateMany({
       where: {
         id: bookingId,
@@ -128,7 +138,7 @@ export async function resolveAutomaticPtNoShow(
     });
 
     return booking;
-  }, { isolationLevel: 'Serializable' });
+  }, { isolationLevel: 'Serializable', maxWait: 15000, timeout: 20000 });
 }
 
 export function startPtNoShowWorker() {
@@ -160,6 +170,18 @@ export function startPtNoShowWorker() {
           } catch (error) {
             console.error(`Lỗi xử lý PT no-show #${candidate.id}:`, error);
           }
+        }
+      }
+      cursor = 0;
+      while (true) {
+        const expired = await prisma.makeUpRequest.findMany({ where: {
+          id: { gt: cursor }, status: 'PENDING', expiresAt: { lte: new Date() },
+        }, select: { id: true }, orderBy: { id: 'asc' }, take: 100 });
+        if (expired.length === 0) break;
+        for (const item of expired) {
+          cursor = item.id;
+          try { await expireMakeupRight(item.id, new Date()); }
+          catch (error) { console.error(`Lỗi xử lý quyền học bù PT #${item.id}:`, error); }
         }
       }
     } catch (error) {

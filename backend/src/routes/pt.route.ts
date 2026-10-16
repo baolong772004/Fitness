@@ -3,7 +3,8 @@ import { PtController } from '../controllers/pt.controller.js';
 import { PaymentController } from '../controllers/payment.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 import { listPtChatMessages, sendPtChatMessage } from '../controllers/ptChat.controller.js';
-import { getCoachWorkspace, getCoachTrainees, updateCoachAvailability, getCoachPlans, createCoachPlan } from '../controllers/coachWorkspace.controller.js';
+import { getCoachWorkspace, getCoachTrainees, getCoachPlans, createCoachPlan } from '../controllers/coachWorkspace.controller.js';
+import { getCoachAvailability, putCoachWeekly, putCoachDates, deleteCoachDate, deleteCoachSlot, requestCoachScheduleChange, listCoachChangeRequests } from '../controllers/ptAvailability.controller.js';
 
 const router = Router();
 
@@ -56,7 +57,13 @@ router.get('/coach/trainees', authenticateToken, authorizeRoles('COACH', 'TRAINE
  *     responses:
  *       200: { description: Đã lưu lịch rảnh }
  */
-router.put('/coach/availability', authenticateToken, authorizeRoles('COACH', 'TRAINER'), updateCoachAvailability);
+router.get('/coach/availability', authenticateToken, authorizeRoles('COACH', 'TRAINER'), getCoachAvailability);
+router.put('/coach/availability', authenticateToken, authorizeRoles('COACH', 'TRAINER'), putCoachWeekly);
+router.put('/coach/availability/dates', authenticateToken, authorizeRoles('COACH', 'TRAINER'), putCoachDates);
+router.delete('/coach/availability/dates/:date', authenticateToken, authorizeRoles('COACH', 'TRAINER'), deleteCoachDate);
+router.delete('/coach/availability/slots', authenticateToken, authorizeRoles('COACH', 'TRAINER'), deleteCoachSlot);
+router.post('/coach/availability/change-requests', authenticateToken, authorizeRoles('COACH', 'TRAINER'), requestCoachScheduleChange);
+router.get('/coach/availability/change-requests', authenticateToken, authorizeRoles('COACH', 'TRAINER'), listCoachChangeRequests);
 
 /** @swagger
  * /pt/coach/plans:
@@ -229,6 +236,30 @@ router.get('/trainers/:trainerId/slots', authenticateToken, PtController.getTrai
  */
 router.post('/booking', authenticateToken, PtController.createBooking);
 
+/** @swagger
+ * /pt/booking/batch:
+ *   post:
+ *     summary: Đặt nhiều buổi PT trong một giao dịch
+ *     tags: [PersonalTrainer]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ptSubscriptionId, bookingDates]
+ *             properties:
+ *               ptSubscriptionId: { type: integer }
+ *               coachId: { type: integer }
+ *               bookingDates:
+ *                 type: array
+ *                 items: { type: string, format: date-time }
+ *     responses:
+ *       201: { description: Tất cả buổi PT đã được xác nhận }
+ */
+router.post('/booking/batch', authenticateToken, PtController.createBookingsBatch);
+
 /**
  * @swagger
  * /pt/booking/{id}/status:
@@ -378,7 +409,7 @@ router.post('/booking/:id/complete-session', authenticateToken, PtController.com
  * @swagger
  * /pt/booking/{id}/mark-absent:
  *   post:
- *     summary: Báo vắng/hủy lịch học (Hội viên/PT)
+ *     summary: Hội viên báo vắng; Coach gửi yêu cầu cho Admin xử lý
  *     tags: [PersonalTrainer]
  *     security:
  *       - bearerAuth: []

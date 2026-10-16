@@ -26,7 +26,7 @@ export default function Checkout() {
     finally { inFlight.current = false; setChecking(false); }
   }, [checkout.orderCode]);
   useEffect(() => {
-    if (['PAID', 'CANCELLED', 'FAILED', 'EXPIRED'].includes(status)) return;
+    if (['PAID', 'PAID_REVIEW', 'CANCELLED', 'FAILED', 'EXPIRED'].includes(status)) return;
     void check(true);
     const timer = setInterval(() => void check(true), 5000);
     return () => clearInterval(timer);
@@ -43,11 +43,12 @@ export default function Checkout() {
     finally { setOpeningSchedule(false); }
   };
   if (!checkout.orderCode) return <Page><Empty title="Không có đơn thanh toán" /><Button title="Quay lại" onPress={() => router.back()} /></Page>;
-  const finished = ['PAID', 'CANCELLED', 'FAILED', 'EXPIRED'].includes(status);
+  const finished = ['PAID', 'PAID_REVIEW', 'CANCELLED', 'FAILED', 'EXPIRED'].includes(status);
   const paid = status === 'PAID';
-  const statusColor = paid ? aura.green : finished ? '#B3261E' : aura.caramel;
+  const review = status === 'PAID_REVIEW';
+  const statusColor = paid ? aura.green : review ? aura.caramel : finished ? '#B3261E' : aura.caramel;
   return <Page><LinearGradient colors={[aura.espresso, aura.darkCoffee]} style={{ borderRadius: 21, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 12 }}><Ionicons name="lock-closed" size={25} color={aura.latte} /><View style={{ flex: 1 }}><Text style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{packageInfo.name || 'Gói tập Aura'}</Text><Text style={{ color: '#E8D8CF', fontSize: 11, marginTop: 4 }}>Đơn hàng #{checkout.orderCode}</Text></View><Text style={{ color: '#fff', fontWeight: '900' }}>{money(packageInfo.price)}</Text></LinearGradient>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: `${statusColor}44`, backgroundColor: `${statusColor}18` }}><Ionicons name={paid ? 'checkmark-circle' : finished ? 'close-circle' : 'time-outline'} size={20} color={statusColor} /><Text style={{ flex: 1, color: statusColor, fontSize: 12, fontWeight: '800' }}>{paid ? kind === 'renew' ? 'Thanh toán thành công. Thời hạn gói tập đã được gia hạn.' : 'Thanh toán thành công. Gói tập đã được xác nhận.' : finished ? status === 'EXPIRED' ? 'Đơn thanh toán đã hết hạn. Hãy quay lại để tạo đơn mới.' : 'Đơn thanh toán đã bị hủy. Hãy quay lại để tạo đơn mới.' : statusError || 'Đang chờ PayOS xác nhận thanh toán…'}</Text></View>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: `${statusColor}44`, backgroundColor: `${statusColor}18` }}><Ionicons name={paid ? 'checkmark-circle' : review ? 'alert-circle' : finished ? 'close-circle' : 'time-outline'} size={20} color={statusColor} /><Text style={{ flex: 1, color: statusColor, fontSize: 12, fontWeight: '800' }}>{paid ? kind === 'renew' ? 'Thanh toán thành công. Thời hạn gói tập đã được gia hạn.' : 'Thanh toán thành công. Gói tập đã được xác nhận.' : review ? 'Đã nhận tiền nhưng đơn gia hạn không còn hợp lệ. Gói chưa được gia hạn; vui lòng liên hệ hỗ trợ để xử lý hoàn tiền.' : finished ? status === 'EXPIRED' ? 'Đơn thanh toán đã hết hạn. Hãy quay lại để tạo đơn mới.' : 'Đơn thanh toán đã bị hủy. Hãy quay lại để tạo đơn mới.' : statusError || 'Đang chờ PayOS xác nhận thanh toán…'}</Text></View>
     <Card style={{ alignItems: 'center', gap: 12, padding: 20 }}><Text style={{ color: aura.darkCoffee, fontWeight: '900', fontSize: 15 }}>Quét mã bằng ứng dụng ngân hàng</Text><Text style={{ color: aura.muted, textAlign: 'center', fontSize: 12 }}>Hoặc mở trang PayOS để chọn phương thức thanh toán.</Text>
       {checkout.qrCode && <View style={{ backgroundColor: aura.white, padding: 12, borderWidth: 1, borderColor: aura.border, borderRadius: 18 }}><QRCode value={String(checkout.qrCode)} size={230} /></View>}
       {!finished && checkout.checkoutUrl && <View style={{ width: '100%' }}><Button title="Mở trang PayOS" icon="open-outline" onPress={() => void Linking.openURL(String(checkout.checkoutUrl)).catch(showError)} /></View>}

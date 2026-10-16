@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
-import { Tabs, usePathname } from 'expo-router';
+import { Pressable, Text, View } from 'react-native';
+import { Tabs, router, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { aura } from '../../lib/theme';
@@ -43,5 +43,5 @@ export default function TabLayout() {
     <Tabs.Screen name="qr" options={{ title: 'QR' }} />
     <Tabs.Screen name="notifications" options={{ title: 'Hộp thư' }} />
     <Tabs.Screen name="account" options={{ title: 'Tài khoản' }} />
-  </Tabs>{!pathname.endsWith('/qr') && <Pressable accessibilityLabel="Hỗ trợ Aura Fitness" onPress={() => Alert.alert('Hỗ trợ Aura Fitness', 'Liên hệ hotline 1900 1234 hoặc quầy lễ tân để được hỗ trợ.')} style={{ position: 'absolute', right: 20, bottom: 86 + insets.bottom, width: 47, height: 47, borderRadius: 24, backgroundColor: aura.white, borderWidth: 3, borderColor: aura.darkCoffee, alignItems: 'center', justifyContent: 'center', elevation: 7, shadowColor: '#000', shadowOpacity: .22, shadowRadius: 8 }}><Ionicons name="mail-unread-outline" size={22} color={aura.darkCoffee} /></Pressable>}</View>;
+  </Tabs>{!pathname.endsWith('/qr') && <Pressable accessibilityRole="button" accessibilityLabel="Mở tin nhắn PT" onPress={() => router.push(user ? '/pt-chat' : '/auth')} style={{ position: 'absolute', right: 20, bottom: 86 + insets.bottom, width: 47, height: 47, borderRadius: 24, backgroundColor: aura.white, borderWidth: 3, borderColor: aura.darkCoffee, alignItems: 'center', justifyContent: 'center', elevation: 7, shadowColor: '#000', shadowOpacity: .22, shadowRadius: 8 }}><Ionicons name="chatbubbles-outline" size={22} color={aura.darkCoffee} /></Pressable>}</View>;
 }

@@ -22,8 +22,9 @@ function RootNavigation() {
     <Stack.Screen name="subscriptions" options={{ title: 'Gói tập của tôi' }} />
     <Stack.Screen name="classes" options={{ title: 'Workout Class' }} />
     <Stack.Screen name="pt" options={{ title: 'Lịch tập cùng PT' }} />
+    <Stack.Screen name="coach-availability" options={{ title: 'Đăng ký lịch Coach' }} />
     <Stack.Screen name="pt-book" options={{ title: 'Đặt lịch PT' }} />
-    <Stack.Screen name="pt-chat" options={{ title: 'Nhắn tin PT' }} />
+    <Stack.Screen name="pt-chat" options={{ title: 'Tin nhắn PT' }} />
     <Stack.Screen name="pt-qr" options={{ title: 'QR buổi tập PT' }} />
     <Stack.Screen name="scanner" options={{ title: 'Quét mã QR' }} />
     <Stack.Screen name="checkout" options={{ title: 'Thanh toán PayOS' }} />

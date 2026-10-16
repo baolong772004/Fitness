@@ -7,7 +7,7 @@ import {
   getPtChatMessages,
   PtChatError,
 } from '../services/ptChat.service.js';
-import { emitPtChatMessage } from '../sockets/ptChat.socket.js';
+import { emitPtChatMessage, emitPtChatRead } from '../sockets/ptChat.socket.js';
 
 function handleError(res: Response, error: unknown) {
   if (error instanceof PtChatError) {
@@ -38,7 +38,8 @@ export async function listPtChatMessages(req: AuthRequest, res: Response) {
     const limit = Number.isSafeInteger(requestedLimit) && requestedLimit > 0
       ? Math.min(requestedLimit, 50)
       : 30;
-    const result = await getPtChatMessages(bookingId, beforeId, afterId, limit);
+    const result = await getPtChatMessages(access.bookingIds, userId, beforeId, afterId, limit);
+    if (result.readIds.length) emitPtChatRead(access.pair.memberId, access.pair.coachId, result.readIds, new Date());
     return res.status(200).json({ success: true, data: result.messages, hasMore: result.hasMore, canSend: access.canSend });
   } catch (error) {
     return handleError(res, error);
@@ -63,7 +64,7 @@ export async function sendPtChatMessage(req: AuthRequest, res: Response) {
     }
 
     const message = await createPtChatMessage(bookingId, userId, content);
-    emitPtChatMessage(bookingId, message);
+    emitPtChatMessage(access.pair.memberId, access.pair.coachId, message);
     const recipientId = userId === access.booking.memberId
       ? access.booking.coachId
       : access.booking.memberId;
@@ -71,7 +72,7 @@ export async function sendPtChatMessage(req: AuthRequest, res: Response) {
       await createUserNotification({
         userId: recipientId,
         title: `Tin nhắn mới từ ${message.sender.fullName}`,
-        message: `Lịch PT #${bookingId}: ${content.length > 100 ? `${content.slice(0, 100)}…` : content}`,
+        message: content.length > 100 ? `${content.slice(0, 100)}…` : content,
       });
     }
     return res.status(201).json({ success: true, data: message });

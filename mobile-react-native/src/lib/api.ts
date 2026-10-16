@@ -55,6 +55,20 @@ const get = <T = any>(path: string) => request<T>('GET', path);
 const post = <T = any>(path: string, body: unknown = {}) => request<T>('POST', path, body);
 
 export const api = {
+  coachAvailability: async () => (await get('/pt/coach/availability')).data as {
+    calendar: { openTime: string; closeTime: string; slotMinutes: number; breakMinutes: number };
+    slots: { startTime: string; endTime: string; startMinute: number; endMinute: number }[];
+    schedules: { dayOfWeek: number; startTime: string; endTime: string; isAvailable: boolean }[];
+    dates: { date: string; shifts: { startTime: string; endTime: string }[] }[];
+    closures: { id: number; startAt: string; endAt: string; reason: string }[];
+    bookings: { id: number; startTime: string; endTime: string; status: string }[];
+  },
+  saveCoachWeekly: (schedules: { dayOfWeek: number; startTime: string; endTime: string }[]) => request('PUT', '/pt/coach/availability', { schedules }),
+  saveCoachDates: (dates: { date: string; shifts: { startTime: string; endTime: string }[] }[]) => request('PUT', '/pt/coach/availability/dates', { dates }),
+  resetCoachDate: (date: string) => request('DELETE', `/pt/coach/availability/dates/${date}`),
+  coachChangeRequests: async () => (await get('/pt/coach/availability/change-requests')).data as { id: number; bookingId: number; status: string; reason: string }[],
+  coachSlots: async (coachId: number, date: string) => (await get(`/pt/trainers/${coachId}/slots?date=${date}`)).slots as { startTime: string; endTime: string; status: string }[],
+  removeCoachSlot: (date: string, startTime: string) => request('DELETE', `/pt/coach/availability/slots?date=${date}&startTime=${encodeURIComponent(startTime)}`),
   async login(email: string, password: string): Promise<Session> {
     const result = await post('/auth/login', { email: email.trim().toLowerCase(), password });
     const data = asRecord(result.data);
@@ -91,10 +105,11 @@ export const api = {
   cancelClass: (bookingId: number) => post(`/group-classes/cancel/${bookingId}`),
   checkInClass: (bookingId: number, qrToken: string) => post(`/group-classes/check-in/${bookingId}`, { qrToken }),
   ptBookings: async () => list<any>((await get('/pt/my-bookings')).data),
+  ptTrainers: async () => list<any>((await get('/pt/trainers')).data),
   ptSlots: async (trainerId: number, date: Date) => list<any>((await get(`/pt/trainers/${trainerId}/slots?date=${dayKey(date)}`)).slots),
-  bookPt: (ptSubscriptionId: number, bookingDate: string) => post('/pt/booking', { ptSubscriptionId, bookingDate }),
+  bookPt: (ptSubscriptionId: number, bookingDate: string, coachId?: number) => post('/pt/booking', { ptSubscriptionId, bookingDate, coachId }),
+  bookPtBatch: (ptSubscriptionId: number, bookingDates: string[], coachId?: number) => post('/pt/booking/batch', { ptSubscriptionId, bookingDates, coachId }),
   makeupPt: (originalBookingId: number, newBookingDate: string) => post('/pt/booking/schedule-makeup', { originalBookingId, newBookingDate }),
-  reviewPt: (bookingId: number, accept: boolean) => request('PATCH', `/pt/booking/${bookingId}/status`, { status: accept ? 'CONFIRMED' : 'REJECTED' }),
   absentPt: (bookingId: number, reason: string) => post(`/pt/booking/${bookingId}/mark-absent`, { reason }),
   ptQr: (bookingId: number) => post(`/pt/booking/${bookingId}/generate-session-qr`),
   startPt: (qrToken: string) => post('/pt/booking/start-session', { qrToken }),

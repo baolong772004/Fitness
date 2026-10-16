@@ -1,8 +1,17 @@
 import { Router } from 'express';
 import { getTrainersList, setupTrainerProfile, toggleTrainerStatus } from '../controllers/adminTrainer.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
+import { getMasterCalendar, putMasterCalendar, addClosure, removeClosure, getCoachCalendarOverview, getCalendarAudit, listCoachChangeRequests, resolveCoachScheduleChange } from '../controllers/ptAvailability.controller.js';
 
 const router = Router();
+router.get('/calendar', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getMasterCalendar);
+router.put('/calendar', authenticateToken, authorizeRoles('ADMIN'), putMasterCalendar);
+router.post('/calendar/closures', authenticateToken, authorizeRoles('ADMIN'), addClosure);
+router.delete('/calendar/closures/:id', authenticateToken, authorizeRoles('ADMIN'), removeClosure);
+router.get('/calendar/coaches', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getCoachCalendarOverview);
+router.get('/calendar/audit', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getCalendarAudit);
+router.get('/calendar/change-requests', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), listCoachChangeRequests);
+router.patch('/calendar/change-requests/:id', authenticateToken, authorizeRoles('ADMIN'), resolveCoachScheduleChange);
 
 /**
  * @swagger
@@ -53,7 +62,7 @@ router.get('/', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getTrainers
  * @swagger
  * /admin-trainers/setup:
  *   post:
- *     summary: Cấu hình Hồ sơ, Giá & Lịch làm việc cho Coach
+ *     summary: Cấu hình hồ sơ và giá cho Coach; Coach tự đăng ký lịch
  *     tags: [AdminTrainer]
  *     security:
  *       - bearerAuth: []
@@ -76,22 +85,6 @@ router.get('/', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getTrainers
  *                 type: number
  *               experienceYears:
  *                 type: integer
- *               workingSchedules:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     dayOfWeek:
- *                       type: integer
- *                       description: 0 (Chủ nhật) -> 6 (Thứ 7)
- *                     startTime:
- *                       type: string
- *                       description: HH:mm (VD 08:00)
- *                     endTime:
- *                       type: string
- *                       description: HH:mm (VD 17:00)
- *                     isAvailable:
- *                       type: boolean
  *     responses:
  *       200:
  *         description: Cấu hình thành công
