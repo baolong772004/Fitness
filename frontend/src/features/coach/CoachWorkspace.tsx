@@ -242,6 +242,15 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   const savePlan = (draft: CoachPlanDraft) =>
     run(() => api.pt.createCoachPlan(draft), 'Đã lưu giáo án mẫu.');
 
+  const assignPlan = (plan: CoachWorkoutPlan, memberId: number) =>
+    run(() => api.pt.createCoachPlan({
+      memberId,
+      title: plan.title,
+      description: plan.description || '',
+      sessions: plan.sessions,
+      mealDays: plan.mealDays,
+    }), 'Đã gán giáo án cho học viên.');
+
   const generatePlan = (memberId: number | null, request: string) => api.pt.generateCoachPlan(memberId, request);
 
   const saveInBody = async () => {
@@ -268,6 +277,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   const dayBookings = bookings.filter(booking => gymDay(booking.startTime) === date).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const pending = bookings.filter(booking => ['PENDING', 'UPCOMING'].includes(booking.status) && new Date(booking.startTime) > new Date());
   const selectedTrainee = trainees.find(row => row.userId === selectedMemberId);
+  const assignableTrainees = [...new Map(trainees.map(row => [row.user.id, row.user])).values()];
 
   return (
     <StaffPage>
@@ -373,7 +383,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
           </CardContent></Card>
           <Card><CardHeader><CardTitle>Giáo án đã lưu</CardTitle></CardHeader><CardContent className="max-h-[48rem] space-y-2 overflow-y-auto">
             {plans.length === 0 && <p className="text-sm text-muted-foreground">Chưa có giáo án nào.</p>}
-            {plans.map(plan => <CoachSavedPlan key={plan.id} plan={plan} />)}
+            {plans.map(plan => <CoachSavedPlan key={plan.id} plan={plan} trainees={assignableTrainees} busy={busy} onAssign={assignPlan} />)}
           </CardContent></Card>
         </div>}
 

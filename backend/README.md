@@ -1,6 +1,6 @@
 # Backend setup
 
-1. Copy `.env.example` to `.env` and set `DATABASE_URL`, `MONGODB_URI`, `JWT_SECRET`, and the three PayOS credentials.
+1. Copy `.env.example` to `.env` and set `DATABASE_URL`, `MONGODB_URI`, `JWT_SECRET`, and the three PayOS credentials. For local Windows Authentication, use `integratedSecurity=true`; Prisma Client uses the currently logged-in Windows account.
 2. Create the SQL Server database named in `DATABASE_URL` and a MongoDB database, locally or on MongoDB Atlas.
 3. From this directory, run `npm install`, `npx prisma migrate deploy`, and `npx prisma generate`. On a new empty database, the `0_init` migration creates the existing application schema before the Gym safety migration.
 4. Start the API with `npm run dev`.
