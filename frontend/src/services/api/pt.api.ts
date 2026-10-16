@@ -72,6 +72,32 @@ export interface CoachPlanDraft {
 }
 
 export const ptApi = {
+  async getCoachAvailability() {
+    const res = await request<{ success: boolean; data: {
+      calendar: { openTime: string; closeTime: string; slotMinutes: number; breakMinutes: number };
+      slots: Array<{ startTime: string; endTime: string; startMinute: number; endMinute: number }>;
+      closures: Array<{ id: number; startAt: string; endAt: string; kind: string; reason: string }>;
+      bookings: Array<{ id: number; startTime: string; endTime: string; status: string }>;
+      schedules: ApiCoachSchedule[];
+      dates: Array<{ date: string; shifts: Array<{ startTime: string; endTime: string }> }>;
+    } }>('/pt/coach/availability');
+    return res.data;
+  },
+  async saveCoachDates(dates: Array<{ date: string; shifts: Array<{ startTime: string; endTime: string }> }>) {
+    return request<{ success: boolean; message: string }>('/pt/coach/availability/dates', {
+      method: 'PUT', body: JSON.stringify({ dates }),
+    });
+  },
+  async resetCoachDate(date: string) {
+    return request<{ success: boolean; message: string }>(`/pt/coach/availability/dates/${date}`, { method: 'DELETE' });
+  },
+  async removeCoachSlot(date: string, startTime: string) {
+    return request<{ success: boolean; message: string }>(`/pt/coach/availability/slots?date=${date}&startTime=${encodeURIComponent(startTime)}`, { method: 'DELETE' });
+  },
+  async getCoachChangeRequests() {
+    const res = await request<{ success: boolean; data: Array<{ id: number; bookingId: number; reason: string; status: string; createdAt: string }> }>('/pt/coach/availability/change-requests');
+    return res.data;
+  },
   async getCoachWorkspace() {
     const res = await request<{ success: boolean; data: ApiCoachProfile & { schedules: ApiCoachSchedule[] } }>('/pt/coach/me');
     return res.data;

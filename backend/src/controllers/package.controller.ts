@@ -13,7 +13,10 @@ export class PackageController {
         return res.status(400).json({ success: false, message: 'Package type must be either MEMBERSHIP or PT' });
       }
       if (type === 'PT' && (!Number.isSafeInteger(Number(totalPtSessions)) || Number(totalPtSessions) <= 0)) {
-        return res.status(400).json({ success: false, message: 'PT packages must have a positive totalPtSessions value' });
+        return res.status(400).json({ success: false, message: 'Gói PT cần có tổng số buổi PT 1:1 lớn hơn 0.' });
+      }
+      if (type === 'MEMBERSHIP' && (!Number.isSafeInteger(Number(trialPtSessions ?? 0)) || Number(trialPtSessions ?? 0) < 0)) {
+        return res.status(400).json({ success: false, message: 'Số buổi PT tặng kèm phải là số nguyên không âm.' });
       }
 
       const newPackage = await prisma.package.create({
@@ -23,8 +26,8 @@ export class PackageController {
           description,
           price,
           durationDays,
-          trialPtSessions: trialPtSessions || 0,
-          totalPtSessions: totalPtSessions || null
+          trialPtSessions: type === 'PT' ? 0 : Number(trialPtSessions ?? 0),
+          totalPtSessions: type === 'PT' ? Number(totalPtSessions) : null
         }
       });
 
@@ -56,8 +59,8 @@ export class PackageController {
 
   static async getPackageById(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       const pkg = await prisma.package.findUnique({
         where: { id }
@@ -73,8 +76,8 @@ export class PackageController {
 
   static async updatePackage(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       const { name, type, description, price, durationDays, trialPtSessions, totalPtSessions, isActive } = req.body;
 
@@ -84,7 +87,11 @@ export class PackageController {
       const effectiveType = type ?? pkgExists.type;
       const effectivePtSessions = totalPtSessions ?? pkgExists.totalPtSessions;
       if (effectiveType === 'PT' && (!Number.isSafeInteger(Number(effectivePtSessions)) || Number(effectivePtSessions) <= 0)) {
-        return res.status(400).json({ success: false, message: 'PT packages must have a positive totalPtSessions value' });
+        return res.status(400).json({ success: false, message: 'Gói PT cần có tổng số buổi PT 1:1 lớn hơn 0.' });
+      }
+      if (effectiveType === 'MEMBERSHIP' && trialPtSessions !== undefined &&
+          (!Number.isSafeInteger(Number(trialPtSessions)) || Number(trialPtSessions) < 0)) {
+        return res.status(400).json({ success: false, message: 'Số buổi PT tặng kèm phải là số nguyên không âm.' });
       }
 
       const updatedPackage = await prisma.package.update({
@@ -95,8 +102,8 @@ export class PackageController {
           description,
           price,
           durationDays,
-          trialPtSessions,
-          totalPtSessions,
+          trialPtSessions: effectiveType === 'PT' ? 0 : trialPtSessions === undefined ? undefined : Number(trialPtSessions),
+          totalPtSessions: effectiveType === 'MEMBERSHIP' ? null : totalPtSessions === undefined ? undefined : Number(totalPtSessions),
           isActive
         }
       });
@@ -109,8 +116,8 @@ export class PackageController {
 
   static async deletePackage(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       const pkgExists = await prisma.package.findUnique({ where: { id } });
       if (!pkgExists) return res.status(404).json({ success: false, message: 'Package not found' });

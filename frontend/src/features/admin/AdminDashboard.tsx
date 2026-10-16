@@ -47,6 +47,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { StatCard, StaffPage, Field } from '@/components/staff/StaffKit';
+import { PtMasterCalendar } from './PtMasterCalendar';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -60,6 +61,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [members, setMembers] = useState<Member[]>([]);
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [packages, setPackages] = useState<PackagePlan[]>([]);
+  const [packageStatusFilter, setPackageStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -147,17 +149,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     // 1. Fetch live Packages from backend
     try {
       const livePkgs = await api.packages.getPackages({ includeInactive: true });
-      if (livePkgs && livePkgs.length > 0) {
+      if (livePkgs) {
         const mappedPkgs: PackagePlan[] = livePkgs.map(p => ({
           id: String(p.id),
           name: p.name,
           type: p.type === 'PT' ? 'hybrid_pt' : 'standard_gym',
           durationMonths: Math.max(1, Math.round(p.durationDays / 30)),
           priceVND: Number(p.price),
-          unlimitedGymAccess: true,
-          ptSessionsIncluded: p.trialPtSessions || p.totalPtSessions || 0,
+          unlimitedGymAccess: p.type === 'MEMBERSHIP',
+          ptSessionsIncluded: p.type === 'PT' ? (p.totalPtSessions || 0) : (p.trialPtSessions || 0),
+          trialPtSessions: p.trialPtSessions || 0,
+          totalPtSessions: p.totalPtSessions || 0,
           description: p.description || '',
-          features: ['Ra vào phòng tập 24/7', `${p.durationDays} ngày hiệu lực`, `${p.trialPtSessions || 0} buổi PT`]
+          isActive: p.isActive,
+          features: p.type === 'PT'
+            ? [`${p.totalPtSessions || 0} buổi PT 1:1`, `${p.durationDays} ngày hiệu lực`]
+            : ['Ra vào phòng tập 24/7', `${p.durationDays} ngày hiệu lực`, `${p.trialPtSessions || 0} buổi PT tặng kèm`]
         }));
         setPackages(mappedPkgs);
       }
@@ -440,7 +447,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         type: newPackageForm.type,
         durationDays: newPackageForm.durationDays,
         price: newPackageForm.price,
-        trialPtSessions: newPackageForm.trialPtSessions,
+        trialPtSessions: newPackageForm.type === 'PT' ? 0 : newPackageForm.trialPtSessions,
         totalPtSessions: newPackageForm.type === 'PT' ? newPackageForm.totalPtSessions : undefined,
         description: newPackageForm.description
       });
@@ -457,16 +464,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // Handle Delete Package via Live Backend REST API
-  const handleDeletePackage = async (packageId: string | number, packageName: string) => {
-    if (!window.confirm(`Bạn có chắc muốn xoá gói tập "${packageName}"?`)) return;
+  const handleTogglePackageStatus = async (pkg: PackagePlan) => {
+    const currentlyActive = pkg.isActive !== false;
+    const confirmation = currentlyActive
+      ? `Ngừng bán gói "${pkg.name}"? Gói sẽ không còn xuất hiện để mua mới; thông tin và lịch sử sử dụng vẫn được giữ.`
+      : `Bật bán lại gói "${pkg.name}"? Hội viên sẽ có thể mua gói này.`;
+    if (!window.confirm(confirmation)) return;
     try {
-      await api.packages.deletePackage(packageId);
+      if (currentlyActive) await api.packages.deletePackage(pkg.id);
+      else await api.packages.updatePackage(pkg.id, { isActive: true });
       soundEffects.playSuccessBeep();
       await reloadData();
-      alert(`Đã xoá gói tập "${packageName}" thành công.`);
+      alert(currentlyActive ? `Đã ngừng bán gói "${pkg.name}".` : `Đã bật bán lại gói "${pkg.name}".`);
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(`Lỗi khi xoá: ${err.message}`);
+      alert(`Lỗi cập nhật trạng thái gói: ${err.message}`);
     }
   };
 
@@ -560,10 +572,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       type: pkg.type === 'hybrid_pt' ? 'PT' : 'MEMBERSHIP',
       durationDays: pkg.durationMonths * 30,
       price: pkg.priceVND,
-      trialPtSessions: 2,
-      totalPtSessions: pkg.ptSessionsIncluded || 0,
+      trialPtSessions: pkg.trialPtSessions ?? (pkg.type === 'standard_gym' ? pkg.ptSessionsIncluded : 0),
+      totalPtSessions: pkg.totalPtSessions ?? (pkg.type === 'hybrid_pt' ? pkg.ptSessionsIncluded : 0),
       description: pkg.description,
-      isActive: true
+      isActive: pkg.isActive !== false
     });
     setIsEditingPackage(true);
   };
@@ -578,7 +590,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         type: editPackageForm.type,
         durationDays: editPackageForm.durationDays,
         price: editPackageForm.price,
-        trialPtSessions: editPackageForm.trialPtSessions,
+        trialPtSessions: editPackageForm.type === 'PT' ? 0 : editPackageForm.trialPtSessions,
         totalPtSessions: editPackageForm.type === 'PT' ? editPackageForm.totalPtSessions : undefined,
         description: editPackageForm.description,
         isActive: editPackageForm.isActive
@@ -1537,6 +1549,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </DialogContent>
       </Dialog>
 
+      {activeTab === 'pt-calendar' && <PtMasterCalendar />}
       {/* TAB 4: Coaches Management & Pricing */}
       {activeTab === 'coaches-config' && (
         <Card>
@@ -1678,15 +1691,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </CardAction>
           </CardHeader>
           <CardContent>
+            <div className="mb-5 flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold">Trạng thái kinh doanh</p>
+                <p className="text-xs text-muted-foreground">Ngừng bán chỉ ẩn gói khỏi danh sách mua; dữ liệu và lịch sử vẫn được giữ.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant={packageStatusFilter === 'all' ? 'default' : 'outline'} onClick={() => setPackageStatusFilter('all')}>
+                  Tất cả ({packages.length})
+                </Button>
+                <Button size="sm" variant={packageStatusFilter === 'active' ? 'default' : 'outline'} onClick={() => setPackageStatusFilter('active')}>
+                  Đang bán ({packages.filter(pkg => pkg.isActive !== false).length})
+                </Button>
+                <Button size="sm" variant={packageStatusFilter === 'inactive' ? 'default' : 'outline'} onClick={() => setPackageStatusFilter('inactive')}>
+                  Đã ngừng bán ({packages.filter(pkg => pkg.isActive === false).length})
+                </Button>
+              </div>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {packages.map(pkg => (
-                <div key={pkg.id} className="p-4 rounded-lg border bg-card flex flex-col justify-between">
+              {packages.filter(pkg => packageStatusFilter === 'all' || (packageStatusFilter === 'active' ? pkg.isActive !== false : pkg.isActive === false)).map(pkg => (
+                <div key={pkg.id} className={`flex flex-col justify-between rounded-lg border bg-card p-4 ${pkg.isActive === false ? 'border-dashed border-muted-foreground/50 bg-muted/30' : ''}`}>
                   <div>
                     <div className="flex justify-between items-start mb-2">
                       <h4 className="font-semibold text-foreground text-base">{pkg.name}</h4>
-                      <Badge variant={pkg.type === 'hybrid_pt' ? 'soft' : pkg.type === 'specialized_course' ? 'info' : 'secondary'}>
-                        {pkg.type === 'hybrid_pt' ? 'Hybrid PT' : pkg.type === 'specialized_course' ? 'Chuyên Biệt' : 'Standard'}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <Badge variant={pkg.type === 'hybrid_pt' ? 'soft' : pkg.type === 'specialized_course' ? 'info' : 'secondary'}>
+                          {pkg.type === 'hybrid_pt' ? 'Hybrid PT' : pkg.type === 'specialized_course' ? 'Chuyên Biệt' : 'Standard'}
+                        </Badge>
+                        <Badge className={pkg.isActive === false ? 'border border-red-200 bg-red-50 text-red-700' : 'border border-emerald-200 bg-emerald-50 text-emerald-700'}>
+                          {pkg.isActive === false ? 'ĐÃ NGỪNG BÁN' : 'ĐANG BÁN'}
+                        </Badge>
+                      </div>
                     </div>
 
                     <div className="text-xl font-bold text-primary mb-2">
@@ -1714,22 +1749,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         size="sm"
                         onClick={() => handleOpenEditPackage(pkg)}
                         title="Chỉnh sửa gói tập"
+                        aria-label={`Chỉnh sửa gói ${pkg.name}`}
                       >
                         <Edit3 className="size-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleDeletePackage(pkg.id, pkg.name)}
-                        title="Xóa gói tập"
+                        className={pkg.isActive === false ? 'text-emerald-700 hover:text-emerald-800' : 'text-destructive hover:text-destructive'}
+                        onClick={() => handleTogglePackageStatus(pkg)}
+                        title={pkg.isActive === false ? 'Bật bán lại gói' : 'Ngừng bán gói'}
+                        aria-label={pkg.isActive === false ? `Bật bán lại gói ${pkg.name}` : `Ngừng bán gói ${pkg.name}`}
                       >
-                        <Trash2 className="size-4" />
+                        {pkg.isActive === false ? <CheckCircle2 className="size-4" /> : <Trash2 className="size-4" />}
                       </Button>
                     </div>
                   </div>
                 </div>
               ))}
+              {packages.filter(pkg => packageStatusFilter === 'all' || (packageStatusFilter === 'active' ? pkg.isActive !== false : pkg.isActive === false)).length === 0 && (
+                <div className="col-span-full rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  Không có gói nào trong trạng thái này.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1756,7 +1798,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div className="grid sm:grid-cols-2 gap-3">
                 <Field label="Loại Gói">
-                  <Select value={newPackageForm.type} onValueChange={(v) => setNewPackageForm({ ...newPackageForm, type: v as any })}>
+                  <Select value={newPackageForm.type} onValueChange={(v) => setNewPackageForm(current => ({ ...current, type: v as 'MEMBERSHIP' | 'PT' }))}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="MEMBERSHIP">MEMBERSHIP (Thẻ Hội Viên)</SelectItem>
@@ -1787,15 +1829,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   />
                 </Field>
 
-                <Field label="Số Buổi PT Tặng Kèm">
+                <Field label={newPackageForm.type === 'PT' ? 'Tổng Số Buổi PT 1:1 *' : 'Số Buổi PT Tặng Kèm'}>
                   <Input
                     type="number"
-                    min="0"
-                    value={newPackageForm.trialPtSessions}
-                    onChange={(e) => setNewPackageForm({ ...newPackageForm, trialPtSessions: parseInt(e.target.value) || 0 })}
+                    min={newPackageForm.type === 'PT' ? 1 : 0}
+                    required={newPackageForm.type === 'PT'}
+                    value={newPackageForm.type === 'PT' ? newPackageForm.totalPtSessions : newPackageForm.trialPtSessions}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10) || 0;
+                      setNewPackageForm(current => current.type === 'PT'
+                        ? { ...current, totalPtSessions: value }
+                        : { ...current, trialPtSessions: value });
+                    }}
                   />
                 </Field>
               </div>
+              {newPackageForm.type === 'PT' && <p className="text-xs text-muted-foreground">Đây là số buổi PT khách mua trong gói, không phải số buổi tặng kèm.</p>}
 
               <Field label="Mô Tả Gói">
                 <Textarea
@@ -1870,7 +1919,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <Field label={editPackageForm.type === 'PT' ? 'Tổng Số Buổi PT 1:1 *' : 'Số Buổi PT Tặng Thử'}>
                   <Input
                     type="number"
-                    min="0"
+                    min={editPackageForm.type === 'PT' ? 1 : 0}
+                    required={editPackageForm.type === 'PT'}
                     value={editPackageForm.type === 'PT' ? editPackageForm.totalPtSessions : editPackageForm.trialPtSessions}
                     onChange={(e) => {
                       const val = parseInt(e.target.value) || 0;

@@ -1,9 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { io } from 'socket.io-client';
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { api } from '../../lib/api';
+import { api, sessionStore, SOCKET_URL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { aura, dateLabel, list, timeLabel } from '../../lib/theme';
 import { Button, Card, Empty, Page, showError } from '../../components/ui';
@@ -29,6 +30,15 @@ export default function Notifications() {
     finally { setLoading(false); }
   }, [user, setUnreadCount]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
+  useEffect(() => {
+    const token = sessionStore.token();
+    if (!user || !token) return;
+    const socket = io(SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'] });
+    socket.on('notification:new', (notification: any) => {
+      setRows(previous => previous.some(row => Number(row.id) === Number(notification.id)) ? previous : [notification, ...previous]);
+    });
+    return () => { socket.disconnect(); };
+  }, [user]);
   const markRead = async (row: any) => { if (row.isRead) return; try { await api.readNotification(Number(row.id)); setRows(previous => previous.map(item => Number(item.id) === Number(row.id) ? { ...item, isRead: true } : item)); setUnreadCount(Math.max(0, unreadCount - 1)); } catch (cause) { showError(cause); } };
   const markAll = async () => { setMarkingAll(true); try { await api.readAllNotifications(); setRows(previous => previous.map(item => ({ ...item, isRead: true }))); setUnreadCount(0); } catch (cause) { showError(cause); } finally { setMarkingAll(false); } };
   return <Page refresh={user ? () => void load() : undefined} loading={loading}>

@@ -90,8 +90,11 @@ export interface PackagePlan {
   priceVND: number;
   unlimitedGymAccess: boolean;
   ptSessionsIncluded: number;
+  trialPtSessions?: number;
+  totalPtSessions?: number;
   description: string;
   features: string[];
+  isActive?: boolean;
   isPopular?: boolean;
   // Specialized course properties
   courseDetails?: {

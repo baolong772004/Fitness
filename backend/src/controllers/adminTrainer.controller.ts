@@ -65,7 +65,7 @@ export const getTrainersList = async (req: AuthRequest, res: Response) => {
 }
 
 /**
- * API 2: Tạo mới hoặc Cập nhật Hồ sơ Coach (Gồm Chuyên môn, Giá, Lịch làm việc)
+ * API 2: Tạo mới hoặc cập nhật hồ sơ Coach (chuyên môn và giá)
  * @route POST /api/admin/trainers/setup
  */
 export const setupTrainerProfile = async (req: AuthRequest, res: Response) => {
@@ -76,42 +76,16 @@ export const setupTrainerProfile = async (req: AuthRequest, res: Response) => {
       specialties, // Dạng mảng string hoặc string
       hourlyRate,
       experienceYears,
-      workingSchedules, // Mảng lịch: [{ dayOfWeek: 1, startTime: "08:00", endTime: "17:00" }]
+      workingSchedules,
     } = req.body;
 
     if (!userId || hourlyRate === undefined) {
       return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ thông tin bắt buộc (userId, hourlyRate)' });
     }
-
     if (workingSchedules !== undefined) {
-      if (!Array.isArray(workingSchedules)) {
-        return res.status(400).json({ success: false, message: 'workingSchedules phải là một mảng' });
-      }
-      for (const [index, schedule] of workingSchedules.entries()) {
-        const day = Number(schedule?.dayOfWeek);
-        const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-        if (!Number.isInteger(day) || day < 1 || day > 7) {
-          return res.status(400).json({
-            success: false,
-            message: `workingSchedules[${index}].dayOfWeek phải từ 1 (Thứ Hai) đến 7 (Chủ Nhật)`,
-          });
-        }
-        if (!timePattern.test(schedule?.startTime ?? '') || !timePattern.test(schedule?.endTime ?? '')) {
-          return res.status(400).json({
-            success: false,
-            message: `workingSchedules[${index}] cần dùng giờ HH:mm, ví dụ 02:00`,
-          });
-        }
-        if (schedule.endTime <= schedule.startTime) {
-          return res.status(400).json({
-            success: false,
-            message: `workingSchedules[${index}].endTime phải sau startTime`,
-          });
-        }
-      }
+      return res.status(400).json({ success: false, message: 'Coach tự đăng ký lịch qua /api/pt/coach/availability; Admin chỉ cấu hình hồ sơ và lịch chung.' });
     }
 
-    // Đảm bảo user có tồn tại và đang có role là COACH
     const user = await prisma.user.findUnique({ where: { id: Number(userId) } });
     if (!user) {
        return res.status(404).json({ success: false, message: 'Không tìm thấy User' });
@@ -143,39 +117,12 @@ export const setupTrainerProfile = async (req: AuthRequest, res: Response) => {
         },
       });
 
-      // 2. Cập nhật Lịch làm việc
-      if (workingSchedules && Array.isArray(workingSchedules)) {
-        await tx.coachSchedule.deleteMany({
-          where: { coachProfileId: profile.id },
-        });
-
-        const schedulesData = workingSchedules.map((schedule: any) => {
-          const day = Number(schedule.dayOfWeek);
-          if (day < 1 || day > 7) {
-            throw new Error(`dayOfWeek phải nằm trong khoảng từ 1 (Thứ Hai) đến 7 (Chủ Nhật). Giá trị hiện tại: ${day}`);
-          }
-          return {
-            coachProfileId: profile.id,
-            dayOfWeek: day,
-            startTime: schedule.startTime,
-            endTime: schedule.endTime,
-            isAvailable: schedule.isAvailable ?? true,
-          };
-        });
-
-        if (schedulesData.length > 0) {
-            await tx.coachSchedule.createMany({
-            data: schedulesData,
-            });
-        }
-      }
-
       return profile;
     });
 
     return res.status(200).json({
       success: true,
-      message: 'Thiết lập thông tin & Lịch làm việc cho Coach thành công!',
+      message: 'Đã lưu hồ sơ Coach. Coach tự đăng ký lịch làm việc.',
       data: result,
     });
   } catch (error: any) {

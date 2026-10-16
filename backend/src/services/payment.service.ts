@@ -1,8 +1,20 @@
 import { randomInt } from 'node:crypto';
 import PayOS from '@payos/node';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { lockGymMember } from './gymMembershipLock.service.js';
+import { reconcileGymMembershipStates } from './membership.service.js';
 
 const prisma = new PrismaClient();
+
+function addDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function laterDate(first: Date, second: Date) {
+  return first > second ? first : second;
+}
 
 export function getPayOS(): PayOS | null {
   const clientId = process.env.PAYOS_CLIENT_ID?.trim();
@@ -28,7 +40,11 @@ export function getPayOSRedirectUrls() {
 }
 
 export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
+  const paymentOwner = await prisma.payment.findUnique({ where: { orderCode }, select: { userId: true } });
+  if (!paymentOwner) return { result: 'NOT_FOUND' as const };
+
   return prisma.$transaction(async (tx) => {
+    await lockGymMember(tx, paymentOwner.userId);
     const payment = await tx.payment.findUnique({ where: { orderCode } });
     if (!payment) return { result: 'NOT_FOUND' as const };
 
@@ -37,29 +53,120 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
     }
 
     if (payment.status === 'PAID') return { result: 'ALREADY_PAID' as const };
+    if (payment.status === 'PAID_REVIEW') return { result: 'ALREADY_PAID_REVIEW' as const };
 
+    await reconcileGymMembershipStates(tx, paymentOwner.userId, new Date());
+
+    // A renewal order may have been created while the target was Expired, then
+    // another verified payment queued that target before this callback arrived.
+    // The money has arrived, but extending a queued Gym package would violate
+    // the rule that a Pending Activation package cannot be renewed.
+    const renewalTarget = payment.membershipId !== null && payment.renewalDurationDays !== null
+      ? await tx.membership.findUnique({
+          where: { id: payment.membershipId },
+          include: { package: true },
+        })
+      : null;
+    const purchaseTarget = payment.membershipId !== null && payment.renewalDurationDays === null
+      ? await tx.membership.findUnique({ where: { id: payment.membershipId }, include: { package: true } })
+      : null;
+    let ptPurchaseUnavailable = false;
+    if (purchaseTarget?.package.type === 'PT') {
+      const [gym, coach] = await Promise.all([
+        tx.membership.findFirst({ where: {
+          userId: purchaseTarget.userId, status: 'ACTIVE',
+          startDate: { lte: new Date() }, endDate: { gte: new Date() },
+          package: { type: 'MEMBERSHIP' },
+        }, select: { id: true } }),
+        tx.coachProfile.findFirst({ where: {
+          userId: purchaseTarget.coachId ?? -1, status: 'ACTIVE', user: { status: 'ACTIVE' },
+        }, select: { id: true } }),
+      ]);
+      ptPurchaseUnavailable = !gym || !coach;
+    }
+    const requiresReview = renewalTarget?.package.type === 'PT' ||
+      (renewalTarget?.package.type === 'MEMBERSHIP' && !['ACTIVE', 'EXPIRED'].includes(renewalTarget.status)) ||
+      ptPurchaseUnavailable;
+
+    const paidAt = new Date();
     const updated = await tx.payment.updateMany({
       where: { id: payment.id, status: { in: ['PENDING', 'FAILED', 'CANCELLED'] } },
-      data: { status: 'PAID' },
+      data: { status: requiresReview ? 'PAID_REVIEW' : 'PAID', paidAt },
     });
     if (updated.count === 0) return { result: 'NOT_PENDING' as const };
+    if (requiresReview) return { result: 'PAID_REVIEW' as const };
 
     if (payment.membershipId !== null) {
       if (payment.renewalDurationDays !== null) {
         const membership = await tx.membership.findUnique({
           where: { id: payment.membershipId },
+          include: { package: true },
         });
         if (!membership) throw new Error('Membership for payment was not found');
 
         const now = new Date();
-        const baseDate = membership.endDate > now ? membership.endDate : now;
-        const newEndDate = new Date(baseDate);
-        newEndDate.setDate(newEndDate.getDate() + payment.renewalDurationDays);
+        if (membership.package.type === 'MEMBERSHIP') {
+          const lastOrder = await tx.membership.aggregate({
+            where: { userId: membership.userId, isGymMembership: true },
+            _max: { activationOrder: true },
+          });
+          const otherMemberships = await tx.membership.findMany({
+            where: {
+              userId: membership.userId,
+              id: { not: membership.id },
+              package: { type: 'MEMBERSHIP' },
+              status: { in: ['ACTIVE', 'PENDING_ACTIVATION'] },
+              endDate: { gte: now },
+            },
+            select: { id: true, startDate: true, endDate: true, status: true },
+          });
+          const otherActive = otherMemberships.filter(item => item.status === 'ACTIVE' && item.startDate <= now);
 
-        await tx.membership.update({
-          where: { id: payment.membershipId },
-          data: { endDate: newEndDate, status: 'ACTIVE' },
-        });
+          if (membership.status !== 'PENDING_ACTIVATION' && (otherActive.length > 0 || membership.status !== 'ACTIVE')) {
+            const latestEnd = otherMemberships.reduce((latest, item) => laterDate(latest, item.endDate), now);
+            const startDate = latestEnd > now ? new Date(latestEnd.getTime() + 1) : now;
+            await tx.membership.update({
+              where: { id: membership.id },
+              data: {
+                startDate,
+                endDate: addDays(startDate, payment.renewalDurationDays),
+                status: startDate > now ? 'PENDING_ACTIVATION' : 'ACTIVE',
+                activationOrder: (lastOrder._max.activationOrder ?? 0) + 1,
+                activatedAt: startDate > now ? null : now,
+              },
+            });
+          } else {
+            const previousEnd = membership.endDate;
+            const newEndDate = addDays(laterDate(previousEnd, now), payment.renewalDurationDays);
+            await tx.membership.update({
+              where: { id: membership.id },
+              data: {
+                endDate: newEndDate,
+                status: membership.status === 'PENDING_ACTIVATION' ? 'PENDING_ACTIVATION' : 'ACTIVE',
+              },
+            });
+
+            const queuedMemberships = await tx.membership.findMany({
+              where: {
+                userId: membership.userId,
+                id: { not: membership.id },
+                package: { type: 'MEMBERSHIP' },
+                status: 'PENDING_ACTIVATION',
+                startDate: { gt: previousEnd },
+              },
+              select: { id: true, startDate: true, endDate: true },
+            });
+            await Promise.all(queuedMemberships.map(item => tx.membership.update({
+              where: { id: item.id },
+              data: {
+                startDate: addDays(item.startDate, payment.renewalDurationDays!),
+                endDate: addDays(item.endDate, payment.renewalDurationDays!),
+              },
+            })));
+          }
+        } else {
+          throw new Error('PT time extension requires a separately priced product');
+        }
       } else {
         const membership = await tx.membership.findUnique({
           where: { id: payment.membershipId },
@@ -67,22 +174,54 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
         });
         if (!membership) throw new Error('Membership for payment was not found');
 
-        const startDate = new Date();
-        const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + membership.package.durationDays);
+        const now = new Date();
+        let startDate = now;
+        let status = 'ACTIVE';
+        let activationOrder: number | null = null;
+        if (membership.package.type === 'MEMBERSHIP') {
+          const lastOrder = await tx.membership.aggregate({
+            where: { userId: membership.userId, isGymMembership: true },
+            _max: { activationOrder: true },
+          });
+          activationOrder = (lastOrder._max.activationOrder ?? 0) + 1;
+          const existingGymMemberships = await tx.membership.findMany({
+            where: {
+              userId: membership.userId,
+              id: { not: membership.id },
+              package: { type: 'MEMBERSHIP' },
+              status: { in: ['ACTIVE', 'PENDING_ACTIVATION'] },
+              endDate: { gte: now },
+            },
+            select: { endDate: true },
+          });
+          const latestEnd = existingGymMemberships.reduce((latest, item) => laterDate(latest, item.endDate), now);
+          if (latestEnd > now) {
+            startDate = new Date(latestEnd.getTime() + 1);
+            status = 'PENDING_ACTIVATION';
+          }
+        }
+        const endDate = addDays(startDate, membership.package.durationDays);
         await tx.membership.update({
           where: { id: payment.membershipId },
-          data: { startDate, endDate, status: 'ACTIVE' },
+          data: {
+            startDate, endDate, status,
+            activationOrder,
+            activatedAt: membership.package.type === 'MEMBERSHIP' && status === 'PENDING_ACTIVATION' ? null : now,
+          },
         });
       }
     }
 
     return { result: 'PAID' as const };
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 30000 });
 }
 
 export async function markPaymentFailed(orderCode: bigint) {
+  const paymentOwner = await prisma.payment.findUnique({ where: { orderCode }, select: { userId: true } });
+  if (!paymentOwner) return;
+
   return prisma.$transaction(async (tx) => {
+    await lockGymMember(tx, paymentOwner.userId);
     const payment = await tx.payment.findUnique({ where: { orderCode } });
     if (!payment || payment.status !== 'PENDING') return;
 
@@ -100,5 +239,5 @@ export async function markPaymentFailed(orderCode: bigint) {
         data: { status: 'CANCELLED' },
       });
     }
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 30000 });
 }

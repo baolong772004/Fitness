@@ -64,6 +64,7 @@ model CoachProfile {
 
   pricing        CoachPricing[]
   schedules      CoachSchedule[]
+  dateAvailability CoachDateAvailability[]
   reviews        Review[]
 }
 
@@ -84,6 +85,52 @@ model CoachSchedule {
   startTime      String       
   endTime        String       
   isAvailable    Boolean      @default(true)
+}
+
+model CoachDateAvailability {
+  id             Int          @id @default(autoincrement())
+  coachProfileId Int
+  coachProfile   CoachProfile @relation(fields: [coachProfileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  date           String       @db.VarChar(10) // Asia/Ho_Chi_Minh YYYY-MM-DD
+  shifts         String       @db.NVarChar(Max) // JSON array; [] means day off
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([coachProfileId, date])
+}
+
+model GymCalendarConfig {
+  id           Int      @id
+  openTime     String   @default("06:00") @db.VarChar(5)
+  closeTime    String   @default("22:00") @db.VarChar(5)
+  slotMinutes  Int      @default(60)
+  breakMinutes Int      @default(0)
+  updatedAt    DateTime @updatedAt
+}
+
+model GymClosure {
+  id        Int      @id @default(autoincrement())
+  startAt   DateTime
+  endAt     DateTime
+  kind      String   @db.VarChar(20) // HOLIDAY | CLOSED | MAINTENANCE
+  reason    String   @db.NVarChar(500)
+  createdAt DateTime @default(now())
+
+  @@index([startAt, endAt])
+}
+
+model CoachScheduleChangeRequest {
+  id          Int      @id @default(autoincrement())
+  coachId     Int
+  bookingId   Int
+  reason      String   @db.NVarChar(500)
+  status      String   @default("PENDING") @db.VarChar(20)
+  handledById Int?
+  adminNote   String?  @db.NVarChar(500)
+  createdAt   DateTime @default(now())
+  handledAt   DateTime?
+
+  @@index([status, createdAt])
+  @@index([bookingId, status])
 }
 
 // ==========================================
@@ -118,6 +165,9 @@ model Membership {
   maxMakeupAllowed  Int        @default(3)
   usedMakeupCount   Int        @default(0)
   status            String     @default("ACTIVE")
+  isGymMembership   Boolean    @default(false)
+  activationOrder   Int?
+  activatedAt       DateTime?
   coachId           Int?
   coach             User?      @relation("TrainerMemberships", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   createdAt         DateTime   @default(now())
@@ -239,6 +289,7 @@ model Booking {
   ptChatMessages     PtChatMessage[]
 }
 
+// Legacy SQL rows are imported once into MongoDB; new PT chat messages use MongoDB.
 model PtChatMessage {
   id        Int      @id @default(autoincrement())
   bookingId Int
@@ -321,6 +372,7 @@ model Payment {
   amount        Decimal       @db.Decimal(18, 2)
   method        String
   status        String        @default("PENDING")
+  paidAt        DateTime?
   orderCode     BigInt?       @unique
   transactionNo String?       @unique
   renewalDurationDays Int?

@@ -1,5 +1,7 @@
 import type { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { emitCoachScheduleChanged } from '../sockets/ptChat.socket.js';
+import { lockPtCoach, PtBookingError, PT_BOOKING_HOLD_STATUSES } from '../services/ptBooking.service.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { normalizeWorkoutPlanContent, presentWorkoutPlan } from '../services/workoutPlan.service.js';
 
@@ -89,6 +91,23 @@ export async function updateCoachAvailability(req: AuthRequest, res: Response) {
       return res.status(403).json({ success: false, message: 'Hồ sơ Coach không thể cập nhật lịch' });
     }
     const result = await prisma.$transaction(async (tx) => {
+      await lockPtCoach(tx, coachId);
+      const futureBookings = await tx.booking.findMany({ where: {
+        coachId, type: 'PT', status: { in: PT_BOOKING_HOLD_STATUSES }, startTime: { gt: new Date() },
+      }, select: { startTime: true } });
+      for (const booking of futureBookings) {
+        const local = new Date(booking.startTime.getTime() + 7 * 60 * 60 * 1000);
+        const dayOfWeek = local.getUTCDay() || 7;
+        const minute = local.getUTCHours() * 60 + local.getUTCMinutes();
+        const covered = normalized.some(row => {
+          if (!row.isAvailable || row.dayOfWeek !== dayOfWeek) return false;
+          const [fromHour, fromMinute] = row.startTime.split(':').map(Number);
+          const [toHour, toMinute] = row.endTime.split(':').map(Number);
+          const from = fromHour * 60 + fromMinute, to = toHour * 60 + toMinute;
+          return minute >= from && minute + 60 <= to && (minute - from) % 60 === 0;
+        });
+        if (!covered) throw new PtBookingError(409, 'Lịch mới không bao phủ các buổi PT đã xác nhận.');
+      }
       await tx.coachSchedule.deleteMany({ where: { coachProfileId: profile.id } });
       if (normalized.length > 0) {
         await tx.coachSchedule.createMany({
@@ -100,8 +119,10 @@ export async function updateCoachAvailability(req: AuthRequest, res: Response) {
         orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
       });
     });
+    emitCoachScheduleChanged(coachId);
     return res.json({ success: true, message: 'Đã lưu lịch rảnh', data: result });
   } catch (error) {
+    if (error instanceof PtBookingError) return res.status(error.status).json({ success: false, message: error.message });
     console.error('Lỗi lưu lịch Coach:', error);
     return res.status(500).json({ success: false, message: 'Không thể lưu lịch rảnh' });
   }

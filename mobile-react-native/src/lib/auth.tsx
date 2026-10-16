@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api, sessionStore, type Session, type User } from './api';
+import { SOCKET_URL } from './api';
+import { io } from 'socket.io-client';
 
 type AuthContextValue = {
   user: User | null;
@@ -24,6 +26,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     catch { setUnreadCount(0); }
   }, []);
   useEffect(() => { sessionStore.restore().then(session => { setUser(session?.user ?? null); if (session) void refreshUnreadCount(); }).finally(() => setReady(true)); }, [refreshUnreadCount]);
+  useEffect(() => {
+    const token = sessionStore.token();
+    if (!user || !token) return;
+    const socket = io(SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'] });
+    socket.on('notification:new', () => setUnreadCount(count => count + 1));
+    return () => { socket.disconnect(); };
+  }, [user]);
   const accept = useCallback(async (session: Session) => { await sessionStore.save(session); setUser(session.user); void refreshUnreadCount(); }, [refreshUnreadCount]);
   const signIn = useCallback(async (email: string, password: string) => accept(await api.login(email, password)), [accept]);
   const signUp = useCallback(async (name: string, email: string, password: string, phone: string) => accept(await api.register(name, email, password, phone)), [accept]);

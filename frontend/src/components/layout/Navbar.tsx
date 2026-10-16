@@ -206,6 +206,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           { id: 'members-360', label: 'Quản Lý Hội Viên', icon: Users },
           { id: 'tickets-management', label: 'Xử Lý Yêu Cầu', icon: LifeBuoy },
           { id: 'coaches-config', label: 'Quản Lý HLV', icon: UserCheck },
+          { id: 'pt-calendar', label: 'Lịch PT chung', icon: Calendar },
           { id: 'packages-engine', label: 'Gói Tập & Dịch Vụ', icon: Package },
           { id: 'facilities', label: 'Cơ Sở Vật Chất', icon: Wrench },
           { id: 'group-classes', label: 'Lớp Nhóm & Lịch', icon: Layers },

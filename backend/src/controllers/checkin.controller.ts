@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import jwt from 'jsonwebtoken';
 import QRCode from 'qrcode';
+import { reconcileGymMembershipStates } from '../services/membership.service.js';
+import { lockGymMember } from '../services/gymMembershipLock.service.js';
 
 const prisma = new PrismaClient();
 
@@ -41,62 +43,95 @@ export class CheckInController {
         return res.status(404).json({ message: 'Người dùng không tồn tại trong hệ thống' });
       }
 
-      // 2. Find an eligible gym membership by status and validity dates.
       const currentDate = new Date();
-      const activeMembership = await prisma.membership.findFirst({
-        where: {
-          userId: userId,
-          status: { in: ['ACTIVE', 'COMPLETED'] },
-          startDate: { lte: currentDate },
-          endDate: { gte: currentDate },
-          package: { type: 'MEMBERSHIP' }
-        },
-        orderBy: { endDate: 'asc' },
-        include: {
-          package: true
-        }
-      });
+      const result = await prisma.$transaction(async tx => {
+        await lockGymMember(tx, userId);
+        await reconcileGymMembershipStates(tx, userId, new Date());
 
-      if (!activeMembership) {
-        // Ghi lại lịch sử check-in THẤT BẠI
+        let membership = await tx.membership.findFirst({
+          where: {
+            userId,
+            status: 'ACTIVE',
+            startDate: { lte: currentDate },
+            endDate: { gte: currentDate },
+            package: { type: 'MEMBERSHIP' },
+          },
+          orderBy: { endDate: 'asc' },
+          include: { package: true },
+        });
+
+        if (!membership) {
+          const legacy = await tx.membership.findFirst({
+            where: {
+              userId,
+              status: 'COMPLETED',
+              startDate: { lte: currentDate },
+              endDate: { gte: currentDate },
+              package: { type: 'MEMBERSHIP' },
+            },
+            orderBy: { endDate: 'asc' },
+            include: { package: true },
+          });
+          if (legacy) {
+            const overlappingPending = await tx.membership.findFirst({
+              where: {
+                userId,
+                status: 'PENDING_ACTIVATION',
+                package: { type: 'MEMBERSHIP' },
+                startDate: { lte: legacy.endDate },
+                endDate: { gte: currentDate },
+              },
+              select: { id: true },
+            });
+            if (!overlappingPending) {
+              const lastOrder = await tx.membership.aggregate({
+                where: { userId, isGymMembership: true },
+                _max: { activationOrder: true },
+              });
+              membership = await tx.membership.update({
+                where: { id: legacy.id },
+                data: {
+                  status: 'ACTIVE',
+                  isGymMembership: true,
+                  activationOrder: legacy.activationOrder ?? (lastOrder._max.activationOrder ?? 0) + 1,
+                  activatedAt: new Date(),
+                },
+                include: { package: true },
+              });
+            }
+          }
+        }
+
+        if (!membership) return null;
+        const checkIn = await tx.checkIn.create({
+          data: {
+            memberId: userId,
+            membershipId: membership.id,
+            status: 'SUCCESS',
+            method: 'QR_CODE',
+          },
+        });
+        return { checkIn, membership };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 30000 });
+
+      if (!result) {
         await prisma.checkIn.create({
           data: {
             memberId: userId,
             status: 'FAILED',
             method: 'QR_CODE',
-            rejectReason: 'Không có gói hội viên đang hoạt động hoặc gói đã hết hạn'
-          }
+            rejectReason: 'Không có gói hội viên đang hoạt động hoặc gói đã hết hạn',
+          },
         });
         return res.status(403).json({ message: 'Bạn không có gói hội viên đang hoạt động hoặc gói đã hết hạn' });
       }
 
-      // Older PT flows could mark a gym membership COMPLETED after its last
-      // included PT session. Restore that membership while recording entry.
-      const result = await prisma.$transaction(async (tx) => {
-        if (activeMembership.status === 'COMPLETED') {
-          await tx.membership.updateMany({
-            where: { id: activeMembership.id, status: 'COMPLETED' },
-            data: { status: 'ACTIVE' }
-          });
-        }
-        return tx.checkIn.create({
-          data: {
-            memberId: userId,
-            membershipId: activeMembership.id,
-            status: 'SUCCESS',
-            method: 'QR_CODE'
-          }
-        });
-      });
-
-      // Remaining PT session balance is reported without changing it here.
-
+      const activeMembership = result.membership;
       const remainingDays = Math.max(0, Math.ceil((activeMembership.endDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)));
-
       return res.status(200).json({
         message: 'Check-in thành công! Chúc bạn tập luyện vui vẻ.',
         data: {
-          checkInId: result.id,
+          checkInId: result.checkIn.id,
           fullName: user.fullName,
           packageName: activeMembership.package.name,
           remainingDays: remainingDays,

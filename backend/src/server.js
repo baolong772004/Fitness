@@ -8,9 +8,12 @@ import { createServer } from 'node:http';
 import rootRouter from './routes/index.js';
 import errorHandler from './middlewares/errorHandler.js';
 import connectDB from './config/db.js';
+import { connectMongoDB } from './config/mongo.js';
 import swaggerSpec from './config/swagger.js';
 import { configurePtChatSocket } from './sockets/ptChat.socket.js';
 import { startPtNoShowWorker } from './services/ptNoShow.service.js';
+import { assertGymMembershipSafetyReady, startGymMembershipWorker } from './services/membership.service.js';
+import { migrateLegacyPtChatMessages } from './services/ptChat.service.js';
 
 dotenv.config();
 
@@ -48,7 +51,11 @@ app.use(errorHandler);
 
 const startServer = async () => {
     await connectDB();
+    await assertGymMembershipSafetyReady();
+    const mongoReady = await connectMongoDB();
+    if (mongoReady) await migrateLegacyPtChatMessages();
     startPtNoShowWorker();
+    startGymMembershipWorker();
 
     httpServer.listen(PORT, '0.0.0.0', () => {
         console.log(`Server running on http://localhost:${PORT}`);
