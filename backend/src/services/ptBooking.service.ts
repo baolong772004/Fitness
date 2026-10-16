@@ -1,8 +1,8 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { lockGymMember } from './gymMembershipLock.service.js';
 import { availableSlots, vietnamDate } from './ptCalendar.service.js';
 
-const prisma = new PrismaClient();
 const HOUR = 60 * 60 * 1000;
 export const PT_BOOKING_HOLD_STATUSES = ['PENDING', 'UPCOMING', 'CONFIRMED', 'IN_PROGRESS'];
 

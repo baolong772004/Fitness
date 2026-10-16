@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { lockPtMembership } from './ptBooking.service.js';
 
-const prisma = new PrismaClient();
 const NO_SHOW_GRACE_MS = 15 * 60 * 1000;
 const SCAN_INTERVAL_MS = 60 * 1000;
 

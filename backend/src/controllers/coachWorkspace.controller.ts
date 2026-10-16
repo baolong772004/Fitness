@@ -1,11 +1,10 @@
 import type { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { emitCoachScheduleChanged } from '../sockets/ptChat.socket.js';
-import { lockPtCoach, PtBookingError, PT_BOOKING_HOLD_STATUSES } from '../services/ptBooking.service.js';
+import prisma from '../config/prisma.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { normalizeWorkoutPlanContent, presentWorkoutPlan } from '../services/workoutPlan.service.js';
+import { generateCoachPlanWithGemini } from '../services/geminiPlan.service.js';
 
-const prisma = new PrismaClient();
+
 const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 export async function getCoachWorkspace(req: AuthRequest, res: Response) {
@@ -91,23 +90,6 @@ export async function updateCoachAvailability(req: AuthRequest, res: Response) {
       return res.status(403).json({ success: false, message: 'Hồ sơ Coach không thể cập nhật lịch' });
     }
     const result = await prisma.$transaction(async (tx) => {
-      await lockPtCoach(tx, coachId);
-      const futureBookings = await tx.booking.findMany({ where: {
-        coachId, type: 'PT', status: { in: PT_BOOKING_HOLD_STATUSES }, startTime: { gt: new Date() },
-      }, select: { startTime: true } });
-      for (const booking of futureBookings) {
-        const local = new Date(booking.startTime.getTime() + 7 * 60 * 60 * 1000);
-        const dayOfWeek = local.getUTCDay() || 7;
-        const minute = local.getUTCHours() * 60 + local.getUTCMinutes();
-        const covered = normalized.some(row => {
-          if (!row.isAvailable || row.dayOfWeek !== dayOfWeek) return false;
-          const [fromHour, fromMinute] = row.startTime.split(':').map(Number);
-          const [toHour, toMinute] = row.endTime.split(':').map(Number);
-          const from = fromHour * 60 + fromMinute, to = toHour * 60 + toMinute;
-          return minute >= from && minute + 60 <= to && (minute - from) % 60 === 0;
-        });
-        if (!covered) throw new PtBookingError(409, 'Lịch mới không bao phủ các buổi PT đã xác nhận.');
-      }
       await tx.coachSchedule.deleteMany({ where: { coachProfileId: profile.id } });
       if (normalized.length > 0) {
         await tx.coachSchedule.createMany({
@@ -119,10 +101,8 @@ export async function updateCoachAvailability(req: AuthRequest, res: Response) {
         orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
       });
     });
-    emitCoachScheduleChanged(coachId);
     return res.json({ success: true, message: 'Đã lưu lịch rảnh', data: result });
   } catch (error) {
-    if (error instanceof PtBookingError) return res.status(error.status).json({ success: false, message: error.message });
     console.error('Lỗi lưu lịch Coach:', error);
     return res.status(500).json({ success: false, message: 'Không thể lưu lịch rảnh' });
   }
@@ -148,11 +128,12 @@ export async function getCoachPlans(req: AuthRequest, res: Response) {
 export async function createCoachPlan(req: AuthRequest, res: Response) {
   const coachId = req.user?.userId;
   if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
-  const memberId = Number(req.body?.memberId);
+  const rawMemberId = req.body?.memberId;
+  const memberId = rawMemberId === undefined || rawMemberId === null || rawMemberId === '' ? null : Number(rawMemberId);
   const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
   const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
-  if (!Number.isSafeInteger(memberId) || memberId <= 0 || !title || title.length > 200 || description.length > 5000) {
-    return res.status(400).json({ success: false, message: 'Cần học viên, tiêu đề và nội dung giáo án hợp lệ' });
+  if ((memberId !== null && (!Number.isSafeInteger(memberId) || memberId <= 0)) || !title || title.length > 200 || description.length > 5000) {
+    return res.status(400).json({ success: false, message: 'Tiêu đề và nội dung giáo án không hợp lệ' });
   }
   let content: ReturnType<typeof normalizeWorkoutPlanContent>;
   try {
@@ -161,11 +142,13 @@ export async function createCoachPlan(req: AuthRequest, res: Response) {
     return res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Nội dung giáo án không hợp lệ' });
   }
   try {
-    const assigned = await prisma.membership.findFirst({
-      where: { userId: memberId, coachId, package: { type: 'PT' } },
-      select: { id: true },
-    });
-    if (!assigned) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này' });
+    if (memberId !== null) {
+      const assigned = await prisma.membership.findFirst({
+        where: { userId: memberId, coachId, package: { type: 'PT' } },
+        select: { id: true },
+      });
+      if (!assigned) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này' });
+    }
     const plan = await prisma.workoutPlan.create({
       data: { coachId, memberId, title, description, ...content },
       include: { member: { select: { id: true, fullName: true } } },
@@ -174,5 +157,32 @@ export async function createCoachPlan(req: AuthRequest, res: Response) {
   } catch (error) {
     console.error('Lỗi lưu giáo án Coach:', error);
     return res.status(500).json({ success: false, message: 'Không thể lưu giáo án' });
+  }
+}
+
+export async function generateCoachPlan(req: AuthRequest, res: Response) {
+  const coachId = req.user?.userId;
+  if (!coachId) return res.status(401).json({ success: false, message: 'Chưa đăng nhập' });
+  const rawMemberId = req.body?.memberId;
+  const memberId = rawMemberId === undefined || rawMemberId === null || rawMemberId === '' ? null : Number(rawMemberId);
+  if (memberId !== null && (!Number.isSafeInteger(memberId) || memberId <= 0)) {
+    return res.status(400).json({ success: false, message: 'Học viên không hợp lệ.' });
+  }
+  try {
+    let member = null;
+    if (memberId !== null) {
+      const membership = await prisma.membership.findFirst({
+        where: { userId: memberId, coachId, package: { type: 'PT' } },
+        select: { user: { select: { fullName: true, gender: true, dateOfBirth: true, height: true, weight: true } } },
+      });
+      if (!membership) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này.' });
+      member = membership.user;
+    }
+    const plan = await generateCoachPlanWithGemini(member, req.body?.request ?? '');
+    return res.json({ success: true, data: plan });
+  } catch (error) {
+    console.error('Lỗi tạo giáo án AI:', error);
+    const message = error instanceof Error ? error.message : 'Không thể tạo giáo án bằng AI.';
+    return res.status(message.includes('GEMINI_API_KEY') ? 503 : 400).json({ success: false, message });
   }
 }

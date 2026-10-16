@@ -1,12 +1,12 @@
 import { Request, Response } from 'express';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import jwt from 'jsonwebtoken';
 import QRCode from 'qrcode';
 import { reconcileGymMembershipStates } from '../services/membership.service.js';
 import { lockGymMember } from '../services/gymMembershipLock.service.js';
 
-const prisma = new PrismaClient();
 
 export class CheckInController {
   /**
