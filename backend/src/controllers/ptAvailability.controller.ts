@@ -1,12 +1,11 @@
 import type { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { emitCoachScheduleChanged } from '../sockets/ptChat.socket.js';
 import { createUserNotification } from '../services/notification.service.js';
 import { lockPtCalendar, lockPtCoach, lockPtMembership, PT_BOOKING_HOLD_STATUSES } from '../services/ptBooking.service.js';
 import { assertBookingsCovered, availableSlots, getCalendar, localInstant, masterSlots, minute, validDate, validateShifts, vietnamDate, type Shift } from '../services/ptCalendar.service.js';
 
-const prisma = new PrismaClient();
 const fail = (res: Response, error: unknown) => res.status(error instanceof Error ? 409 : 500)
   .json({ success: false, message: error instanceof Error ? error.message : 'Không thể cập nhật lịch' });
 const log = (tx: any, userId: number, action: string, before: unknown, after: unknown) =>

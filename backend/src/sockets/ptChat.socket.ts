@@ -1,13 +1,13 @@
 import type { Server as HttpServer } from 'http';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import { getPtChatAccess, PtChatError } from '../services/ptChat.service.js';
 
-const prisma = new PrismaClient();
+
 let chatIo: Server | null = null;
 
-export const ptChatRoom = (memberId: number, coachId: number) => `pt-pair:${memberId}:${coachId}`;
+export const ptChatRoom = (bookingId: number) => `pt-booking:${bookingId}`;
 
 export function configurePtChatSocket(httpServer: HttpServer) {
   const io = new Server(httpServer, { cors: { origin: '*' } });
@@ -32,20 +32,11 @@ export function configurePtChatSocket(httpServer: HttpServer) {
   });
 
   io.on('connection', (socket) => {
-    void socket.join(`user:${socket.data.userId}`);
-    socket.on('coach:watch', (coachId: unknown) => {
-      const id = Number(coachId);
-      if (Number.isSafeInteger(id) && id > 0) socket.join(`coach-schedule:${id}`);
-    });
-    socket.on('coach:unwatch', (coachId: unknown) => {
-      const id = Number(coachId);
-      if (Number.isSafeInteger(id) && id > 0) socket.leave(`coach-schedule:${id}`);
-    });
     socket.on('booking:join', async (bookingId: unknown, acknowledge?: (result: { ok: boolean; error?: string }) => void) => {
       try {
         const id = Number(bookingId);
-        const access = await getPtChatAccess(id, socket.data.userId);
-        await socket.join(ptChatRoom(access.pair.memberId, access.pair.coachId));
+        await getPtChatAccess(id, socket.data.userId);
+        await socket.join(ptChatRoom(id));
         acknowledge?.({ ok: true });
       } catch (error) {
         acknowledge?.({
@@ -55,31 +46,29 @@ export function configurePtChatSocket(httpServer: HttpServer) {
       }
     });
 
-    socket.on('booking:leave', async (bookingId: unknown) => {
+    socket.on('booking:leave', (bookingId: unknown) => {
       const id = Number(bookingId);
-      if (!Number.isSafeInteger(id) || id <= 0) return;
-      try {
-        const access = await getPtChatAccess(id, socket.data.userId);
-        socket.leave(ptChatRoom(access.pair.memberId, access.pair.coachId));
-      } catch { /* The socket disconnects when the screen closes. */ }
+      if (Number.isSafeInteger(id) && id > 0) socket.leave(ptChatRoom(id));
     });
   });
 
   return io;
 }
 
-export function emitPtChatMessage(memberId: number, coachId: number, message: unknown) {
-  chatIo?.to(ptChatRoom(memberId, coachId)).emit('message:new', message);
+export function emitPtChatMessage(bookingId: number, message: unknown) {
+  chatIo?.to(ptChatRoom(bookingId)).emit('message:new', message);
 }
 
 export function emitPtChatRead(memberId: number, coachId: number, ids: number[], readAt: Date) {
-  chatIo?.to(ptChatRoom(memberId, coachId)).emit('message:read', { ids, readAt });
-}
-
-export function emitUserNotification(userId: number, notification: unknown) {
-  chatIo?.to(`user:${userId}`).emit('notification:new', notification);
+  chatIo?.to(ptChatRoom(memberId)).emit('message:read', { ids, readAt, coachId });
 }
 
 export function emitCoachScheduleChanged(coachId: number) {
-  chatIo?.to(`coach-schedule:${coachId}`).emit('coach:schedule-changed', { coachId });
+  chatIo?.emit('coach:schedule-changed', { coachId });
+}
+
+export function closePtChatRoom(bookingId: number) {
+  const room = ptChatRoom(bookingId);
+  chatIo?.to(room).emit('booking:chat-closed', { bookingId });
+  chatIo?.in(room).socketsLeave(room);
 }

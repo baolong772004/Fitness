@@ -1,7 +1,7 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { lockGymMember } from './gymMembershipLock.service.js';
 
-const prisma = new PrismaClient();
 
 export async function assertGymMembershipSafetyReady() {
   const indexes = await prisma.$queryRaw<Array<{ name: string }>>`

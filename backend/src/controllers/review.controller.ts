@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 
-const prisma = new PrismaClient();
 
 /**
  * API: Tạo đánh giá (Review) cho PT

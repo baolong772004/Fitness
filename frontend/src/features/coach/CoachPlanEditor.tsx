@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, Save, Trash2 } from 'lucide-react';
+import { LoaderCircle, Plus, Save, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import type { CoachMealDay, CoachPlanDraft, CoachPlanExercise, CoachPlanMeal, CoachPlanSession, CoachWorkoutPlan } from '../../services/api/pt.api';
+import type { CoachMealDay, CoachPlanDraft, CoachPlanExercise, CoachPlanMeal, CoachPlanSession, CoachWorkoutPlan, GeneratedCoachPlan } from '../../services/api/pt.api';
 
 const weekdays = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'];
 const mealLabels: Record<CoachPlanMeal['mealType'], string> = {
@@ -16,20 +16,21 @@ const newMeal = (): CoachPlanMeal => ({ mealType: 'BREAKFAST', time: '07:00', fo
 const newMealDay = (): CoachMealDay => ({ dayOfWeek: 1, notes: '', meals: [newMeal()] });
 
 type Props = {
-  trainees: Array<{ id: number; name: string }>;
   busy: boolean;
   onSave: (draft: CoachPlanDraft) => Promise<boolean>;
+  onGenerate: (memberId: number | null, request: string) => Promise<GeneratedCoachPlan>;
 };
 
 const fieldLabel = 'block text-xs font-semibold text-muted-foreground mb-1';
 
-export function CoachPlanEditor({ trainees, busy, onSave }: Props) {
-  const [memberId, setMemberId] = useState('');
+export function CoachPlanEditor({ busy, onSave, onGenerate }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [sessions, setSessions] = useState<CoachPlanSession[]>([newSession()]);
   const [mealDays, setMealDays] = useState<CoachMealDay[]>([newMealDay()]);
   const [error, setError] = useState('');
+  const [aiRequest, setAiRequest] = useState('');
+  const [generating, setGenerating] = useState(false);
 
   const updateSession = (index: number, patch: Partial<CoachPlanSession>) =>
     setSessions(rows => rows.map((row, i) => i === index ? { ...row, ...patch } : row));
@@ -45,9 +46,8 @@ export function CoachPlanEditor({ trainees, busy, onSave }: Props) {
       : row));
 
   const submit = async () => {
-    const id = Number(memberId);
-    if (!Number.isSafeInteger(id) || id <= 0 || !title.trim()) {
-      setError('Chọn học viên và nhập tên giáo án.');
+    if (!title.trim()) {
+      setError('Nhập tên giáo án.');
       return;
     }
     if (sessions.length === 0 || mealDays.length === 0) {
@@ -64,7 +64,7 @@ export function CoachPlanEditor({ trainees, busy, onSave }: Props) {
       return;
     }
     setError('');
-    const saved = await onSave({ memberId: id, title: title.trim(), description: description.trim(), sessions, mealDays });
+    const saved = await onSave({ title: title.trim(), description: description.trim(), sessions, mealDays });
     if (saved) {
       setTitle('');
       setDescription('');
@@ -73,12 +73,32 @@ export function CoachPlanEditor({ trainees, busy, onSave }: Props) {
     }
   };
 
+  const generate = async () => {
+    setGenerating(true);
+    setError('');
+    try {
+      const plan = await onGenerate(null, aiRequest.trim());
+      setTitle(plan.title);
+      setDescription(plan.description);
+      setSessions(plan.sessions);
+      setMealDays(plan.mealDays);
+    } catch (generationError) {
+      setError(generationError instanceof Error ? generationError.message : 'Không thể tạo giáo án bằng AI.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return <div className="space-y-5">
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div><label className={fieldLabel}>Học viên</label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={memberId} onChange={event => setMemberId(event.target.value)}><option value="">Chọn học viên được phân công</option>{trainees.map(trainee => <option key={trainee.id} value={trainee.id}>{trainee.name}</option>)}</select></div>
-      <div><label className={fieldLabel}>Tên giáo án</label><Input placeholder="Ví dụ: Tăng sức bền 4 tuần" value={title} onChange={event => setTitle(event.target.value)} /></div>
-    </div>
+    <div><label className={fieldLabel}>Tên giáo án</label><Input placeholder="Ví dụ: Tăng sức bền 4 tuần" value={title} onChange={event => setTitle(event.target.value)} /></div>
     <div><label className={fieldLabel}>Mục tiêu và lưu ý chung</label><Textarea rows={3} placeholder="Mục tiêu, lịch dự kiến, điều chỉnh theo thể trạng..." value={description} onChange={event => setDescription(event.target.value)} /></div>
+
+    <section className="space-y-3 rounded-xl border border-primary/25 bg-primary/5 p-3">
+      <div><h3 className="flex items-center gap-2 font-semibold"><Sparkles className="size-4 text-primary" /> Trợ lý AI cho PT</h3><p className="mt-1 text-xs text-muted-foreground">AI dùng chỉ số học viên và yêu cầu của bạn để tạo bản nháp. Luôn kiểm tra, điều chỉnh trước khi lưu/gửi.</p></div>
+      <Textarea rows={2} maxLength={2000} placeholder="Ví dụ: Mục tiêu giảm mỡ trong 8 tuần, mới tập, 3 buổi/tuần, tránh bài gây đau gối..." value={aiRequest} onChange={event => setAiRequest(event.target.value)} />
+      <p className="text-xs text-muted-foreground">Giáo án được lưu như một mẫu dùng chung; gán cho học viên sau khi chốt lịch.</p>
+      <Button type="button" size="sm" disabled={busy || generating} onClick={() => void generate()}>{generating ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{generating ? 'AI đang soạn giáo án...' : 'Tạo bản nháp bằng AI'}</Button>
+    </section>
 
     <section className="space-y-3 rounded-xl border bg-muted/20 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Giáo án theo buổi</h3><p className="text-xs text-muted-foreground">Chọn thứ trong tuần, bài tập, số hiệp và số lần.</p></div><Button type="button" size="sm" variant="outline" disabled={sessions.length >= 21} onClick={() => setSessions(rows => [...rows, newSession()])}><Plus className="size-4" /> Thêm buổi</Button></div>
@@ -113,12 +133,12 @@ export function CoachPlanEditor({ trainees, busy, onSave }: Props) {
       </div>)}
     </section>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    <Button type="button" disabled={busy} onClick={() => void submit()}><Save className="size-4" /> Lưu và gửi cho học viên</Button>
+    <Button type="button" disabled={busy} onClick={() => void submit()}><Save className="size-4" /> Lưu giáo án mẫu</Button>
   </div>;
 }
 
 export function CoachSavedPlan({ plan }: { plan: CoachWorkoutPlan }) {
-  return <details className="rounded-lg border p-3 text-sm"><summary className="cursor-pointer font-semibold">{plan.title} <span className="font-normal text-muted-foreground">· {plan.member.fullName} · {new Date(plan.createdAt).toLocaleDateString('vi-VN')}</span></summary>
+  return <details className="rounded-lg border p-3 text-sm"><summary className="cursor-pointer font-semibold">{plan.title} <span className="font-normal text-muted-foreground">· {plan.member ? plan.member.fullName : 'Giáo án mẫu · chưa gán học viên'} · {new Date(plan.createdAt).toLocaleDateString('vi-VN')}</span></summary>
     {plan.description && <p className="mt-2 whitespace-pre-wrap text-muted-foreground">{plan.description}</p>}
     {plan.sessions.length > 0 && <div className="mt-3 space-y-2"><strong>Buổi tập</strong>{plan.sessions.map((session, i) => <div key={i} className="rounded-md bg-muted/50 p-2"><strong>{weekdays[session.dayOfWeek - 1]} · {session.title}</strong>{session.notes && <p>{session.notes}</p>}{session.exercises.map((exercise, j) => <p key={j}>• {exercise.exerciseName}: {exercise.sets} hiệp × {exercise.reps} lần{exercise.weightKg != null ? ` · ${exercise.weightKg} kg` : ''}{exercise.notes ? ` · ${exercise.notes}` : ''}</p>)}</div>)}</div>}
     {plan.mealDays.length > 0 && <div className="mt-3 space-y-2"><strong>Thực đơn</strong>{plan.mealDays.map((day, i) => <div key={i} className="rounded-md bg-muted/50 p-2"><strong>{weekdays[day.dayOfWeek - 1]}</strong>{day.notes && <p>{day.notes}</p>}{day.meals.map((meal, j) => <p key={j}>• {mealLabels[meal.mealType]}{meal.time ? ` ${meal.time}` : ''}: {meal.food} · {meal.portion}{meal.calories != null ? ` · ${meal.calories} kcal` : ''}{meal.notes ? ` · ${meal.notes}` : ''}</p>)}</div>)}</div>}

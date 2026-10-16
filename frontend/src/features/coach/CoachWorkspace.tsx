@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, Check, MessageSquare, QrCode, RefreshCw, Save, UserRound, X } from 'lucide-react';
+import { CalendarDays, Check, Clock3, MessageSquare, Plus, QrCode, RefreshCw, Save, UserRound, X } from 'lucide-react';
 import { api, type ApiBooking, type ApiCoachProfile, type ApiCoachSchedule, type ApiGroupClassSchedule, type ApiProgressLog } from '../../services/api';
 import type { CoachPlanDraft, CoachTraineeMembership, CoachWorkoutPlan } from '../../services/api/pt.api';
 import { CoachPlanEditor, CoachSavedPlan } from './CoachPlanEditor';
-import { CoachAvailabilityGrid } from './CoachAvailabilityGrid';
 import { StaffPage } from '@/components/staff/StaffKit';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,12 +12,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type CoachProfile = ApiCoachProfile & { schedules: ApiCoachSchedule[] };
+type ScheduleRow = { dayOfWeek: number; startTime: string; endTime: string; isAvailable: boolean };
 type Message = { id: number; senderId: number; content: string; createdAt: string; sender: { fullName: string } };
 
 const gymDay = (value: string | Date) => new Date(new Date(value).getTime() + 7 * 3600000).toISOString().slice(0, 10);
 const today = () => gymDay(new Date());
 const gymTime = (value: string) => new Date(value).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' });
 const errorText = (error: unknown) => error instanceof Error ? error.message : 'Không thể tải dữ liệu. Vui lòng thử lại.';
+const dayName = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'];
 
 const statusText: Record<string, string> = {
   PENDING: 'Chờ xác nhận', UPCOMING: 'Chờ xác nhận', CONFIRMED: 'Đã xác nhận',
@@ -42,6 +43,9 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   const [classQr, setClassQr] = useState<{ schedule: ApiGroupClassSchedule; image: string } | null>(null);
   const [classAttendees, setClassAttendees] = useState<Array<{ id: number; status: 'BOOKED' | 'CHECKED_IN'; user: { id: number; fullName: string } }>>([]);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [slots, setSlots] = useState<Array<{ startTime: string; endTime: string; status: string }>>([]);
+  const [slotVersion, setSlotVersion] = useState(0);
+  const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
   const [date, setDate] = useState(today);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -75,6 +79,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
     ]);
     if (results[0].status === 'fulfilled') {
       setProfile(results[0].value);
+      setSchedules(results[0].value.schedules.map(({ dayOfWeek, startTime, endTime, isAvailable }) => ({ dayOfWeek, startTime, endTime, isAvailable: isAvailable !== false })));
       setProfileError('');
     } else {
       setProfileError(errorText(results[0].reason));
@@ -127,6 +132,13 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
     void api.workouts.getMemberProgress(selectedMemberId)
       .then(setProgress).catch(error => setNotice(errorText(error)));
   }, [selectedMemberId]);
+  useEffect(() => {
+    if (activeTab !== 'availability' || !currentUser || !profile || profile.status !== 'ACTIVE') return;
+    void api.pt.getTrainerSlots(currentUser.id, date)
+      .then(result => setSlots(result.slots))
+      .catch(error => setNotice(errorText(error)));
+  }, [activeTab, date, currentUser?.id, profile?.id, profile?.status, slotVersion]);
+
   const run = async (action: () => Promise<unknown>, success: string, refresh = true) => {
     setBusy(true);
     setNotice('');
@@ -222,8 +234,15 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
     }
   };
 
+  const saveAvailability = async () => {
+    const saved = await run(() => api.pt.updateCoachAvailability(schedules), 'Đã lưu lịch rảnh cho Coach.');
+    if (saved) setSlotVersion(value => value + 1);
+  };
+
   const savePlan = (draft: CoachPlanDraft) =>
-    run(() => api.pt.createCoachPlan(draft), 'Đã lưu giáo án và thực đơn cho học viên.');
+    run(() => api.pt.createCoachPlan(draft), 'Đã lưu giáo án mẫu.');
+
+  const generatePlan = (memberId: number | null, request: string) => api.pt.generateCoachPlan(memberId, request);
 
   const saveInBody = async () => {
     if (!selectedMemberId || !Number.isFinite(Number(weight)) || Number(weight) <= 0) {
@@ -349,8 +368,8 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
         </div>}
 
         {activeTab === 'ai-workout' && <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-          <Card><CardHeader><CardTitle>Giáo án & Dinh dưỡng</CardTitle><CardDescription>Lên bài tập theo buổi và bữa ăn theo ngày cho học viên được phân công.</CardDescription></CardHeader><CardContent>
-            <CoachPlanEditor trainees={[...new Map(trainees.map(row => [row.userId, row])).values()].map(row => ({ id: row.userId, name: row.user.fullName }))} busy={busy} onSave={savePlan} />
+          <Card><CardHeader><CardTitle>Giáo án & Dinh dưỡng</CardTitle><CardDescription>Soạn giáo án mẫu trước; gán và gửi cho học viên sau khi chốt lịch.</CardDescription></CardHeader><CardContent>
+            <CoachPlanEditor busy={busy} onSave={savePlan} onGenerate={generatePlan} />
           </CardContent></Card>
           <Card><CardHeader><CardTitle>Giáo án đã lưu</CardTitle></CardHeader><CardContent className="max-h-[48rem] space-y-2 overflow-y-auto">
             {plans.length === 0 && <p className="text-sm text-muted-foreground">Chưa có giáo án nào.</p>}
@@ -358,7 +377,21 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
           </CardContent></Card>
         </div>}
 
-        {activeTab === 'availability' && <CoachAvailabilityGrid onSaved={() => void load()} />}
+        {activeTab === 'availability' && <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
+          <Card><CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="size-5" /> Lịch rảnh hàng tuần</CardTitle><CardDescription>Các ca dưới đây quyết định khung giờ hội viên có thể đặt PT.</CardDescription></CardHeader><CardContent className="space-y-3">
+            {schedules.length === 0 && <p className="text-sm text-muted-foreground">Chưa có ca rảnh nào.</p>}
+            {schedules.map((row, index) => <div key={index} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+              <select className="h-9 rounded-md border bg-background px-2 text-sm" value={row.dayOfWeek} onChange={e => setSchedules(rows => rows.map((item, i) => i === index ? { ...item, dayOfWeek: Number(e.target.value) } : item))}>{dayName.map((name, i) => <option key={i} value={i + 1}>{name}</option>)}</select>
+              <Input type="time" className="w-32" value={row.startTime} onChange={e => setSchedules(rows => rows.map((item, i) => i === index ? { ...item, startTime: e.target.value } : item))} />
+              <span>–</span><Input type="time" className="w-32" value={row.endTime} onChange={e => setSchedules(rows => rows.map((item, i) => i === index ? { ...item, endTime: e.target.value } : item))} />
+              <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={row.isAvailable} onChange={e => setSchedules(rows => rows.map((item, i) => i === index ? { ...item, isAvailable: e.target.checked } : item))} /> Mở đặt lịch</label>
+              <Button size="icon" variant="outline" aria-label="Xóa ca" onClick={() => setSchedules(rows => rows.filter((_, i) => i !== index))}><X className="size-4" /></Button>
+            </div>)}
+            <div className="flex gap-2"><Button variant="outline" disabled={schedules.length >= 28} onClick={() => setSchedules(rows => [...rows, { dayOfWeek: 1, startTime: '08:00', endTime: '09:00', isAvailable: true }])}><Plus className="size-4" /> Thêm ca</Button><Button disabled={busy || !profile} onClick={() => void saveAvailability()}><Save className="size-4" /> Lưu lịch rảnh</Button></div>
+          </CardContent></Card>
+          <div className="space-y-5"><Card><CardHeader><CardTitle>Hồ sơ PT</CardTitle></CardHeader><CardContent className="space-y-2 text-sm"><p>Chuyên môn: {profile?.specialization || 'Chưa cập nhật'}</p><p>Kinh nghiệm: {profile?.experience ?? '—'} năm</p><p>Giá mỗi buổi: {profile ? `${Number(profile.hourlyRate).toLocaleString('vi-VN')} đ` : 'Chưa cập nhật'}</p><p className="text-muted-foreground">Giá và thông tin chuyên môn do Admin cấu hình.</p></CardContent></Card>
+          <Card><CardHeader><CardTitle>Ca có thể đặt</CardTitle><CardDescription>Kiểm tra các khung giờ thực tế theo ngày.</CardDescription></CardHeader><CardContent className="space-y-2"><Input type="date" value={date} onChange={event => setDate(event.target.value)} />{slots.length === 0 && <p className="text-sm text-muted-foreground">Ngày này chưa có ca đặt được.</p>}{slots.map((slot, index) => <div key={`${slot.startTime}-${index}`} className="flex justify-between rounded-lg border p-2 text-sm"><span>{slot.startTime}–{slot.endTime}</span><Badge variant="outline">{slot.status === 'AVAILABLE' ? 'Còn trống' : slot.status === 'BOOKED' ? 'Đã đặt' : 'Đã qua'}</Badge></div>)}</CardContent></Card></div>
+        </div>}
       </div>
 
       <Dialog open={!!classQr} onOpenChange={open => { if (!open) setClassQr(null); }}>
@@ -382,7 +415,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
       <Dialog open={!!qr} onOpenChange={open => { if (!open) setQr(null); }}><DialogContent><DialogHeader><DialogTitle>Mã QR buổi PT</DialogTitle></DialogHeader><div className="grid justify-items-center gap-3 py-4">{qr && <><p className="text-sm">{qr.booking.member?.fullName} · {gymTime(qr.booking.startTime)}</p><img src={qr.image} alt="Mã QR điểm danh PT" className="size-56" /><p className="text-xs text-muted-foreground">Mã có hiệu lực 90 giây. Hội viên quét bằng ứng dụng mobile.</p></>}</div></DialogContent></Dialog>
       <Dialog open={!!chatBooking} onOpenChange={open => { if (!open) setChatBooking(null); }}><DialogContent><DialogHeader><DialogTitle>Nhắn tin với {chatBooking?.member?.fullName}</DialogTitle></DialogHeader><div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border p-3">{messages.length === 0 && <p className="text-sm text-muted-foreground">Chưa có tin nhắn.</p>}{messages.map(message => <div key={message.id} className="text-sm"><strong>{message.sender.fullName}: </strong>{message.content}</div>)}</div>{canSend ? <div className="flex gap-2"><Input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void sendMessage(); }} placeholder="Nhập tin nhắn" maxLength={1000} /><Button disabled={busy || !draft.trim()} onClick={() => void sendMessage()}>Gửi</Button></div> : <p className="text-sm text-muted-foreground">Đã hết thời gian nhắn tin của buổi PT.</p>}</DialogContent></Dialog>
       <Dialog open={!!finishBooking} onOpenChange={open => { if (!open) setFinishBooking(null); }}><DialogContent><DialogHeader><DialogTitle>{finishBooking?.status === 'COMPLETED' ? 'Ghi nhật ký buổi PT' : 'Kết thúc buổi PT'}</DialogTitle></DialogHeader><div className="space-y-3"><Textarea rows={4} placeholder="Nhận xét buổi tập" value={sessionNotes} onChange={e => setSessionNotes(e.target.value)} /><div className="grid grid-cols-3 gap-2"><Input placeholder="Bài tập" value={exerciseName} onChange={e => setExerciseName(e.target.value)} /><Input type="number" placeholder="Số hiệp" value={sets} onChange={e => setSets(e.target.value)} /><Input type="number" placeholder="Số lần" value={reps} onChange={e => setReps(e.target.value)} /></div><p className="text-xs text-muted-foreground">Kết thúc buổi sẽ trừ 1 lượt PT. Nhật ký có thể ghi sau nếu chưa có nội dung.</p></div><DialogFooter><Button disabled={busy} onClick={() => void saveSession()}>{finishBooking?.status === 'COMPLETED' ? 'Lưu nhật ký' : 'Kết thúc và lưu'}</Button></DialogFooter></DialogContent></Dialog>
-      <Dialog open={!!absenceBooking} onOpenChange={open => { if (!open) setAbsenceBooking(null); }}><DialogContent><DialogHeader><DialogTitle>Coach báo vắng buổi PT</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">Yêu cầu sẽ chuyển đến Admin. Sau khi duyệt, hội viên được đặt học bù trong 7 ngày và không bị trừ buổi.</p><Textarea rows={3} placeholder="Lý do báo vắng" value={absenceReason} onChange={e => setAbsenceReason(e.target.value)} /><DialogFooter><Button disabled={busy} onClick={() => { if (!absenceBooking) return; void run(() => api.pt.markAbsent(absenceBooking.id, absenceReason), 'Đã gửi yêu cầu cho Admin.').then(saved => { if (saved) setAbsenceBooking(null); }); }}>Gửi yêu cầu</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={!!absenceBooking} onOpenChange={open => { if (!open) setAbsenceBooking(null); }}><DialogContent><DialogHeader><DialogTitle>Coach báo vắng buổi PT</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">Hội viên được đặt học bù trong 7 ngày và không bị trừ buổi.</p><Textarea rows={3} placeholder="Lý do báo vắng" value={absenceReason} onChange={e => setAbsenceReason(e.target.value)} /><DialogFooter><Button disabled={busy} onClick={() => { if (!absenceBooking) return; void run(() => api.pt.markAbsent(absenceBooking.id, absenceReason), 'Đã báo vắng và cấp quyền học bù.').then(saved => { if (saved) setAbsenceBooking(null); }); }}>Xác nhận báo vắng</Button></DialogFooter></DialogContent></Dialog>
     </StaffPage>
   );
 };
