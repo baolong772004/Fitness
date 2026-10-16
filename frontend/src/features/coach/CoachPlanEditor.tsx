@@ -137,8 +137,22 @@ export function CoachPlanEditor({ busy, onSave, onGenerate }: Props) {
   </div>;
 }
 
-export function CoachSavedPlan({ plan }: { plan: CoachWorkoutPlan }) {
+export function CoachSavedPlan({ plan, trainees, busy, onAssign }: {
+  plan: CoachWorkoutPlan;
+  trainees: Array<{ id: number; fullName: string }>;
+  busy: boolean;
+  onAssign: (plan: CoachWorkoutPlan, memberId: number) => Promise<boolean>;
+}) {
+  const [memberId, setMemberId] = useState('');
   return <details className="rounded-lg border p-3 text-sm"><summary className="cursor-pointer font-semibold">{plan.title} <span className="font-normal text-muted-foreground">· {plan.member ? plan.member.fullName : 'Giáo án mẫu · chưa gán học viên'} · {new Date(plan.createdAt).toLocaleDateString('vi-VN')}</span></summary>
+    {!plan.member && <div className="mt-3 flex flex-wrap gap-2" onClick={event => event.stopPropagation()}>
+      <select className="h-9 min-w-48 rounded-md border bg-background px-2 text-sm" aria-label={`Chọn học viên nhận giáo án ${plan.title}`} value={memberId} onChange={event => setMemberId(event.target.value)}>
+        <option value="">Chọn học viên PT</option>
+        {trainees.map(trainee => <option key={trainee.id} value={trainee.id}>{trainee.fullName}</option>)}
+      </select>
+      <Button type="button" size="sm" variant="outline" disabled={busy || !memberId} onClick={() => void onAssign(plan, Number(memberId))}>Gán cho học viên</Button>
+      {trainees.length === 0 && <span className="self-center text-xs text-muted-foreground">Chưa có học viên PT được gán cho bạn.</span>}
+    </div>}
     {plan.description && <p className="mt-2 whitespace-pre-wrap text-muted-foreground">{plan.description}</p>}
     {plan.sessions.length > 0 && <div className="mt-3 space-y-2"><strong>Buổi tập</strong>{plan.sessions.map((session, i) => <div key={i} className="rounded-md bg-muted/50 p-2"><strong>{weekdays[session.dayOfWeek - 1]} · {session.title}</strong>{session.notes && <p>{session.notes}</p>}{session.exercises.map((exercise, j) => <p key={j}>• {exercise.exerciseName}: {exercise.sets} hiệp × {exercise.reps} lần{exercise.weightKg != null ? ` · ${exercise.weightKg} kg` : ''}{exercise.notes ? ` · ${exercise.notes}` : ''}</p>)}</div>)}</div>}
     {plan.mealDays.length > 0 && <div className="mt-3 space-y-2"><strong>Thực đơn</strong>{plan.mealDays.map((day, i) => <div key={i} className="rounded-md bg-muted/50 p-2"><strong>{weekdays[day.dayOfWeek - 1]}</strong>{day.notes && <p>{day.notes}</p>}{day.meals.map((meal, j) => <p key={j}>• {mealLabels[meal.mealType]}{meal.time ? ` ${meal.time}` : ''}: {meal.food} · {meal.portion}{meal.calories != null ? ` · ${meal.calories} kcal` : ''}{meal.notes ? ` · ${meal.notes}` : ''}</p>)}</div>)}</div>}

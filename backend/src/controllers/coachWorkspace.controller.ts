@@ -3,6 +3,7 @@ import prisma from '../config/prisma.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { normalizeWorkoutPlanContent, presentWorkoutPlan } from '../services/workoutPlan.service.js';
 import { generateCoachPlanWithGemini } from '../services/geminiPlan.service.js';
+import { createUserNotification } from '../services/notification.service.js';
 
 
 const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -153,9 +154,22 @@ export async function createCoachPlan(req: AuthRequest, res: Response) {
       data: { coachId, memberId, title, description, ...content },
       include: { member: { select: { id: true, fullName: true } } },
     });
+    if (memberId !== null) {
+      await createUserNotification({
+        userId: memberId,
+        title: 'Bạn có giáo án PT mới',
+        message: `HLV đã giao giáo án "${title}" cho bạn. Mở mục PT & Tiến độ cá nhân để xem.`,
+      });
+    }
     return res.status(201).json({ success: true, message: 'Đã lưu giáo án', data: presentWorkoutPlan(plan) });
   } catch (error) {
     console.error('Lỗi lưu giáo án Coach:', error);
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2011') {
+      return res.status(409).json({
+        success: false,
+        message: 'Cơ sở dữ liệu chưa cập nhật để lưu giáo án mẫu. Hãy chạy `npx prisma migrate deploy` trong thư mục backend rồi thử lại.',
+      });
+    }
     return res.status(500).json({ success: false, message: 'Không thể lưu giáo án' });
   }
 }
