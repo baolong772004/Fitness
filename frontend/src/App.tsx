@@ -7,6 +7,7 @@ import { CoachDashboard } from './features/coach/CoachDashboard';
 import { AdminDashboard } from './features/admin/AdminDashboard';
 import { GuestLandingPage } from './features/guest/GuestLandingPage';
 import { SettingsPage } from './features/settings/SettingsPage';
+import { PaymentReturnPage } from './features/payment/PaymentReturnPage';
 import { AuthModal } from './features/auth/AuthModal';
 import { FloatingAIChatbot } from './features/ai-assistant/FloatingAIChatbot';
 import { ToastContainer, toast, installGlobalAlertOverride } from './components/common/ToastNotification';
@@ -133,6 +134,10 @@ export default function App() {
     soundEffects.playSuccessBeep();
     toast.success('Bạn đã đăng xuất tài khoản thành công! Hẹn gặp lại bạn tại AURA Fitness.', 'Đăng Xuất');
   };
+
+  if (['/payment-success', '/payment-cancel'].includes(window.location.pathname.replace(/\/+$/, ''))) {
+    return <PaymentReturnPage />;
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'row', backgroundColor: 'var(--bg-app)' }}>

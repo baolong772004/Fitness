@@ -31,12 +31,14 @@ export const subscriptionApi = {
     limit?: number;
     status?: string;
     search?: string;
+    userId?: number;
   } = {}) {
     const q = new URLSearchParams();
     if (params.page) q.set('page', String(params.page));
     if (params.limit) q.set('limit', String(params.limit));
     if (params.status) q.set('status', params.status);
     if (params.search) q.set('search', params.search);
+    if (params.userId) q.set('userId', String(params.userId));
 
     return request<{
       success: boolean;
@@ -63,6 +65,7 @@ export const subscriptionApi = {
   async renewSubscription(payload: {
     subscriptionId: number;
     packageId: number;
+    memberId?: number;
   }) {
     return request<{
       success: boolean;

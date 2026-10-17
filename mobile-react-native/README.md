@@ -4,7 +4,7 @@
 
 ## Chạy Android
 
-1. Tạo `.env` từ `.env.example` và đặt `EXPO_PUBLIC_API_BASE_URL`:
+1. Tạo `.env.local` và đặt `EXPO_PUBLIC_API_BASE_URL`:
    - Emulator Android: `http://10.0.2.2:5000/api`
    - Điện thoại thật: `http://<IPv4-LAN-của-máy-tính>:5000/api`. Điện thoại và máy tính cần cùng mạng, backend phải nghe trên mạng LAN.
 2. Chạy backend như dự án hiện tại.
@@ -21,13 +21,13 @@
 ./scripts/build-android-short-path.ps1 -Architecture x86_64
 ```
 
-APK được lưu ở `builds/aura-fitness-react-native-<kiến-trúc>-debug.apk`. Khi chạy trên điện thoại thật, đặt IP LAN của máy chạy backend trong `.env` trước khi khởi động Metro. APK này là development build; để mở giao diện, chạy `npx.cmd expo start --dev-client` trong `mobile-react-native/` và kết nối điện thoại với Metro. Thư mục `builds/` không được đưa vào Git.
+APK được lưu ở `builds/aura-fitness-react-native-<kiến-trúc>-debug.apk`. Khi chạy trên điện thoại thật, đặt IP LAN của máy chạy backend trong `.env.local` rồi tải lại ứng dụng trên điện thoại để nhận URL mới. APK này là development build; để mở giao diện, chạy `npx.cmd expo start --dev-client` trong `mobile-react-native/` và kết nối điện thoại với Metro. Thư mục `builds/` không được đưa vào Git.
 
 Đăng nhập Google dùng native Google Sign-In, nên cần **development build**; Expo Go không chứa native module này. Android OAuth Client phải đăng ký package `com.aurafitness.mobile.reactnative` với SHA-1 của bản APK thực tế. Giá trị Android Client ID dùng để đăng ký ở Google Cloud, không phải đưa vào `.env`; ID token được phát cho Web Client ID đang cấu hình trong backend. Khi dùng khóa ký khác, đăng ký thêm SHA-1 tương ứng.
 
 ## iOS
 
-Đặt `EXPO_PUBLIC_API_BASE_URL` thành IP LAN hoặc URL HTTPS của backend. Để bật Google Sign-In trên iPhone, tạo iOS OAuth Client cho bundle ID `com.aurafitness.mobile.reactnative`, thêm `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` vào `.env`, rồi build lại native app. Đăng nhập email/mật khẩu không cần iOS Client ID.
+Đặt `EXPO_PUBLIC_API_BASE_URL` trong `.env.local` thành IP LAN hoặc URL HTTPS của backend. Để bật Google Sign-In trên iPhone, tạo iOS OAuth Client cho bundle ID `com.aurafitness.mobile.reactnative`, thêm `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` vào `.env.local`, rồi build lại native app. Đăng nhập email/mật khẩu không cần iOS Client ID.
 
 ## Các luồng đã chuyển
 
@@ -46,6 +46,6 @@ Tab QR chứa trực tiếp ba mục “Lịch tập”, “Check in”, “PT�
 
 ## Cấu hình cần biết
 
-- Thay IP trong `.env` khi chuyển từ emulator sang điện thoại thật; `localhost` trên điện thoại không phải máy tính chạy backend.
+- Thay IP trong `.env.local` khi chuyển từ emulator sang điện thoại thật hoặc khi IP Wi-Fi của máy tính đổi; `localhost` trên điện thoại không phải máy tính chạy backend.
 - Phần Google Android chỉ hoạt động sau khi OAuth Client được gắn đúng package và SHA-1. Để lấy SHA-1 của APK, xem hướng dẫn [Google Sign-In cho Expo](https://docs.expo.dev/guides/google-authentication/).
 - iOS Google Client ID hiện chưa có trong cấu hình dự án; nút Google sẽ báo yêu cầu cấu hình trên iPhone cho đến khi ID được cung cấp.

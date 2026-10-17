@@ -3,6 +3,7 @@ import { Image, ImageBackground, Pressable, ScrollView, Text, View } from 'react
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Page, Section } from '../../components/ui';
 import { ArticleRail } from '../../components/editorial';
 import { useAuth } from '../../lib/auth';
@@ -10,10 +11,11 @@ import { aura, money } from '../../lib/theme';
 
 export default function Home() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [promoWidth, setPromoWidth] = useState(0);
   const [promoPage, setPromoPage] = useState(0);
   return <Page>
-    <View style={{ backgroundColor: aura.darkCoffee, marginHorizontal: -16, marginTop: -16, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, padding: 16, paddingTop: 25, paddingBottom: 28 }}>
+    <View style={{ backgroundColor: aura.darkCoffee, marginHorizontal: -16, marginTop: -16, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, padding: 16, paddingTop: insets.top + 16, paddingBottom: 28 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><Text numberOfLines={1} style={{ color: '#fff', fontSize: 18, fontWeight: '900', flex: 1 }}>{user ? `Xin chào ${user.fullName}!` : 'Xin chào quý khách!'}</Text>{user?.balance != null && <Text style={{ color: '#fff', borderColor: '#fff', borderWidth: 1, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 4, fontWeight: '800', fontSize: 12 }}>{money(user.balance)} ▾</Text>}<Pressable onPress={() => router.push('/(tabs)/notifications')}><Ionicons name="notifications-outline" size={23} color="#fff" /></Pressable></View>
       {!user && <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}><View style={{ flex: 1 }}><Button secondary compact title="Đăng ký ngay" onPress={() => router.push('/auth?register=1')} /></View><View style={{ flex: 1 }}><Button compact title="Đăng nhập" onPress={() => router.push('/auth')} /></View></View>}
     </View>

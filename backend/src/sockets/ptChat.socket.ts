@@ -8,6 +8,7 @@ import { getPtChatAccess, PtChatError } from '../services/ptChat.service.js';
 let chatIo: Server | null = null;
 
 export const ptChatRoom = (bookingId: number) => `pt-booking:${bookingId}`;
+const ptChatPairRoom = (memberId: number, coachId: number) => `pt-pair:${memberId}:${coachId}`;
 
 export function configurePtChatSocket(httpServer: HttpServer) {
   const io = new Server(httpServer, { cors: { origin: '*' } });
@@ -32,11 +33,13 @@ export function configurePtChatSocket(httpServer: HttpServer) {
   });
 
   io.on('connection', (socket) => {
+    void socket.join(`user:${socket.data.userId}`);
     socket.on('booking:join', async (bookingId: unknown, acknowledge?: (result: { ok: boolean; error?: string }) => void) => {
       try {
         const id = Number(bookingId);
-        await getPtChatAccess(id, socket.data.userId);
+        const access = await getPtChatAccess(id, socket.data.userId);
         await socket.join(ptChatRoom(id));
+        await socket.join(ptChatPairRoom(access.pair.memberId, access.pair.coachId));
         acknowledge?.({ ok: true });
       } catch (error) {
         acknowledge?.({
@@ -46,25 +49,34 @@ export function configurePtChatSocket(httpServer: HttpServer) {
       }
     });
 
-    socket.on('booking:leave', (bookingId: unknown) => {
+    socket.on('booking:leave', async (bookingId: unknown) => {
       const id = Number(bookingId);
-      if (Number.isSafeInteger(id) && id > 0) socket.leave(ptChatRoom(id));
+      if (!Number.isSafeInteger(id) || id <= 0) return;
+      socket.leave(ptChatRoom(id));
+      try {
+        const access = await getPtChatAccess(id, socket.data.userId);
+        socket.leave(ptChatPairRoom(access.pair.memberId, access.pair.coachId));
+      } catch { /* Disconnect also clears joined rooms. */ }
     });
   });
 
   return io;
 }
 
-export function emitPtChatMessage(bookingId: number, message: unknown) {
-  chatIo?.to(ptChatRoom(bookingId)).emit('message:new', message);
+export function emitPtChatMessage(memberId: number, coachId: number, message: unknown) {
+  chatIo?.to(ptChatPairRoom(memberId, coachId)).emit('message:new', message);
 }
 
 export function emitPtChatRead(memberId: number, coachId: number, ids: number[], readAt: Date) {
-  chatIo?.to(ptChatRoom(memberId)).emit('message:read', { ids, readAt, coachId });
+  chatIo?.to(ptChatPairRoom(memberId, coachId)).emit('message:read', { ids, readAt });
 }
 
 export function emitCoachScheduleChanged(coachId: number) {
   chatIo?.emit('coach:schedule-changed', { coachId });
+}
+
+export function emitUserNotification(userId: number, notification: unknown) {
+  chatIo?.to(`user:${userId}`).emit('notification:new', notification);
 }
 
 export function closePtChatRoom(bookingId: number) {

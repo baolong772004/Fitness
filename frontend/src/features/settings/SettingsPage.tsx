@@ -600,7 +600,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                             </div>
                           )}
                         </div>
-                        {sub.status === 'EXPIRED' || sub.status === 'CANCELLED' ? (
+                        {sub.package?.type === 'MEMBERSHIP' && (sub.status === 'ACTIVE' || sub.status === 'EXPIRED') ? (
                           <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
                             <button type="button" className="btn-primary" onClick={() => renewSubscription(sub.id, sub.packageId)} style={{ padding: '8px 12px', fontSize: 12 }}>Gia hạn gói tập</button>
                           </div>

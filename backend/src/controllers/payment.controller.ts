@@ -18,6 +18,7 @@ export class PaymentController {
     req.body = {
       packageId: req.body?.ptPackageId,
       trainerId: req.body?.trainerId,
+      memberId: req.body?.memberId,
     };
     return PaymentController.createCheckoutSession(req, res);
   }
@@ -26,11 +27,24 @@ export class PaymentController {
     let orderCode: bigint | null = null;
     let paymentCreated = false;
     try {
-      const userId = req.user?.userId;
-      const { packageId, trainerId } = req.body;
+      const actorId = req.user?.userId;
+      const { packageId, trainerId, memberId } = req.body;
 
-      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
-      if (!packageId) return res.status(400).json({ message: 'packageId is required' });
+      if (!actorId) return res.status(401).json({ message: 'Unauthorized' });
+      const actingForMember = memberId !== undefined && memberId !== null;
+      const userId = actingForMember ? Number(memberId) : actorId;
+      if (actingForMember && !['ADMIN', 'STAFF'].includes(req.user?.role ?? '')) {
+        return res.status(403).json({ message: 'Chỉ Admin/Staff được tạo đơn cho hội viên khác.' });
+      }
+      if (!Number.isSafeInteger(userId) || userId <= 0) return res.status(400).json({ message: 'memberId không hợp lệ' });
+      if (actingForMember) {
+        const member = await prisma.user.findFirst({ where: { id: userId, role: 'MEMBER' }, select: { id: true } });
+        if (!member) return res.status(404).json({ message: 'Không tìm thấy hội viên.' });
+      }
+      const parsedPackageId = Number(packageId);
+      if (!Number.isSafeInteger(parsedPackageId) || parsedPackageId <= 0) {
+        return res.status(400).json({ message: 'packageId không hợp lệ' });
+      }
 
       const payos = getPayOS();
       if (!payos) {
@@ -39,7 +53,7 @@ export class PaymentController {
 
       // Lấy thông tin Package
       const gymPackage = await prisma.package.findUnique({
-        where: { id: Number(packageId) },
+        where: { id: parsedPackageId },
       });
 
       if (!gymPackage || !gymPackage.isActive) {
@@ -227,7 +241,7 @@ export class PaymentController {
       if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
       const payment = await prisma.payment.findFirst({
-        where: { orderCode: orderCodeBigInt, userId },
+        where: { orderCode: orderCodeBigInt, ...(['ADMIN', 'STAFF'].includes(req.user?.role ?? '') ? {} : { userId }) },
       });
 
       if (!payment) {
@@ -240,7 +254,7 @@ export class PaymentController {
         const result = await markPaymentPaid(orderCodeBigInt, paymentLinkInfo.amountPaid);
         if (result.result === 'AMOUNT_MISMATCH') {
           console.error(`PayOS amount mismatch for order ${orderCode}`);
-          return res.status(409).json({ message: 'Số tiền thanh toán không khớp với đơn hàng' });
+          return res.status(200).json({ success: false, status: 'PAID_REVIEW', message: 'Số tiền PayOS xác nhận không khớp đơn hàng. Đơn cần hỗ trợ xử lý; chưa cấp quyền gói.' });
         }
         if (result.result === 'NOT_FOUND') return res.status(404).json({ message: 'Không tìm thấy đơn thanh toán' });
 
@@ -248,7 +262,7 @@ export class PaymentController {
           return res.status(200).json({
             success: false,
             status: 'PAID_REVIEW',
-            message: 'Đã nhận tiền nhưng đơn gia hạn không còn hợp lệ. Gói tập chưa được gia hạn; vui lòng liên hệ hỗ trợ để xử lý hoàn tiền.',
+            message: 'Đã nhận tiền nhưng đơn cần được kiểm tra. Gói tập chưa được cấp hoặc gia hạn; vui lòng liên hệ hỗ trợ để xử lý.',
           });
         }
 
@@ -259,7 +273,7 @@ export class PaymentController {
         });
       }
 
-      if (paymentLinkInfo.status === 'CANCELLED') {
+      if (paymentLinkInfo.status === 'CANCELLED' || paymentLinkInfo.status === 'EXPIRED') {
         await markPaymentFailed(orderCodeBigInt);
       }
 
@@ -284,20 +298,19 @@ export class PaymentController {
          return res.status(500).json({ message: 'Cổng thanh toán chưa được cấu hình' });
       }
 
+      if (!req.body?.data || !req.body?.signature) {
+        return res.status(400).json({ success: false, message: 'Webhook PayOS thiếu dữ liệu hoặc chữ ký.' });
+      }
       if (req.body) {
-        // Trường hợp payOS gửi request ping/test xác thực URL từ Dashboard
-        if (req.body.code === '00' && req.body.desc === 'success') {
-          return res.status(200).json({ success: true, message: 'Webhook URL verified' });
-        }
-        
-        if (req.body.data && req.body.data.description === 'Ma test Webhook') {
-          return res.status(200).json({ success: true, message: 'Webhook URL verified' });
-        }
-
         // Xác thực dữ liệu thanh toán thực tế từ payOS
         const webhookData = payos.verifyPaymentWebhookData(req.body);
 
-        if (webhookData && req.body.code === '00') {
+        // Dashboard PayOS gửi một giao dịch mẫu có chữ ký để kiểm tra URL.
+        if (webhookData.description === 'Ma test Webhook') {
+          return res.status(200).json({ success: true, message: 'Webhook URL verified' });
+        }
+
+        if (webhookData && req.body.code === '00' && req.body.success === true) {
           if (!Number.isSafeInteger(webhookData.orderCode) || !Number.isFinite(webhookData.amount)) {
             return res.status(400).json({ success: false, message: 'Dữ liệu webhook không hợp lệ' });
           }
@@ -305,7 +318,7 @@ export class PaymentController {
           const result = await markPaymentPaid(BigInt(webhookData.orderCode), webhookData.amount);
           if (result.result === 'AMOUNT_MISMATCH') {
             console.error(`PayOS webhook amount mismatch for order ${webhookData.orderCode}`);
-            return res.status(400).json({ success: false, message: 'Số tiền webhook không khớp đơn hàng' });
+            return res.status(200).json({ success: true, message: 'Đơn đã chuyển PAID_REVIEW do số tiền không khớp; chưa cấp quyền gói.' });
           }
           if (result.result === 'NOT_FOUND') {
             return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });

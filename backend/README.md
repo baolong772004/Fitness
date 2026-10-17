@@ -5,13 +5,13 @@
 3. From this directory, run `npm install`, `npx prisma migrate deploy`, and `npx prisma generate`. On a new empty database, the `0_init` migration creates the existing application schema before the Gym safety migration.
 4. Start the API with `npm run dev`.
 
-For an existing database created before Prisma Migrate, review any duplicate Active Gym memberships first, then run `npx prisma migrate resolve --applied 0_init` once to baseline the existing schema. Run `npx prisma migrate deploy` to apply `20261016_gym_membership_safety`, then `npx prisma generate` before restarting the backend. The Gym migration stops if a member still has multiple Active Gym memberships. Do not run `db push` against a deployed database.
+For an existing database created before Prisma Migrate, review any duplicate Active Gym memberships first, then run `npx prisma migrate resolve --applied 0_init` once to baseline the existing schema. Run `npx prisma migrate deploy` to apply `20261016_gym_membership_safety` and `20261017_membership_default_pending`, then `npx prisma generate` before restarting the backend. The Gym migration stops if a member still has multiple Active Gym memberships. Stop the running backend before `prisma generate` on Windows if it locks the Prisma query engine DLL. Do not run `db push` against a deployed database.
 
 ## Database usage
 
 SQL Server remains the source of truth for accounts, PT bookings, memberships, payments, and other relational records. PT chat messages are stored in MongoDB in the `pt_chat_messages` collection. Booking ownership and chat permissions are still checked against SQL Server.
 
-On the first backend start after MongoDB is configured, existing PT chat messages are copied from the legacy SQL Server table into MongoDB. The import is idempotent and runs only once. New messages are written to MongoDB. The SQL table is retained as the migration source and is no longer used for new chat writes.
+When the backend starts with MongoDB configured, PT chat messages missing from MongoDB are copied from the legacy SQL Server table. The import can run again to catch messages written to SQL Server while the MongoDB chat code was absent. New messages are written to MongoDB. The SQL table is retained as the migration source and is no longer used for new chat writes.
 
 Set `MONGODB_URI` in `backend/.env` to a local MongoDB connection string or an Atlas connection string. If it is empty or MongoDB is unreachable, the rest of the backend can start, but PT chat APIs return `503` until MongoDB is available.
 
@@ -20,9 +20,11 @@ PayOS checkout requires valid credentials. Set `FRONTEND_URL` to the browser-acc
 Payment endpoints:
 
 - `POST /api/payments/checkout` — authenticated; creates a pending membership and PayOS checkout link.
-- `GET /api/payments/check-status/:orderCode` — authenticated; only the payment owner can check its status.
+- `GET /api/payments/check-status/:orderCode` — authenticated; the payment owner or Admin/Staff can check its status.
 - `POST /api/payments/webhook` — verifies PayOS signature and amount, then activates the membership once.
 - `POST /api/subscriptions/renew` — authenticated; creates a PayOS checkout link and applies the extension only after confirmed payment.
+
+Admin/Staff can pass `memberId` to checkout or renewal to create an order for a member. `POST /api/subscriptions` and `PATCH /api/subscriptions/:id/status` return 409; membership creation and activation must go through PayOS and the queue worker.
 
 ## Gym membership payment order
 
@@ -32,7 +34,6 @@ Checkout blocks a second order for the same Gym package while its first order is
 
 An Active Gym membership is unique per member through a filtered SQL Server index. The `isGymMembership` column distinguishes Gym from PT in the shared `Membership` table. The Gym worker runs on startup and every minute; it uses the same member lock, expires elapsed periods, and activates the next due membership without changing its scheduled start or end dates. `activatedAt` records the actual promotion time.
 
-Run `npm run test:gym` only with `GYM_TEST_DATABASE_URL` pointing to a separate SQL Server database whose name includes `test`. Create the schema and apply the Gym migration to that database first. The integration suite writes and removes its own test records and covers concurrent payments, duplicate callbacks, ordering, renewals, concurrent refresh, restart recovery, duplicate pending checkout, and failed payments.
 
 ## PT no-show policy
 
