@@ -180,17 +180,19 @@ export const Navbar: React.FC<NavbarProps> = ({
     admin: 'Quản Trị Viên (Admin)',
     receptionist: 'Lễ Tân (Receptionist)',
     coach: 'Huấn Luyện Viên (Coach)',
-    guest: 'Khách / Hội Viên (Member)'
+    member: 'Hội Viên (Member)',
+    guest: 'Khách Vãng Lai'
   };
 
   const getTabsForRole = (role: UserRole): NavTabItem[] => {
     switch (role) {
       case 'receptionist':
         return [
-          { id: 'checkin', label: 'Check-in QR', icon: QrCode },
-          { id: 'pos', label: 'Gói Tập (POS)', icon: CreditCard },
-          { id: 'members', label: 'Hội Viên', icon: Users },
-          { id: 'tickets', label: 'Hỗ Trợ', icon: LifeBuoy }
+          { id: 'checkin', label: 'Soát Vé Check-in', icon: QrCode },
+          { id: 'pos', label: 'Quầy POS & Thu Ngân', icon: CreditCard },
+          { id: 'operations', label: 'Vận Hành & Sự Cố', icon: Wrench },
+          { id: 'shift', label: 'Ca Trực & Chốt Ca', icon: Clock },
+          { id: 'members', label: 'Hội Viên', icon: Users }
         ];
       case 'coach':
         return [
@@ -212,6 +214,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           { id: 'group-classes', label: 'Lớp Nhóm & Lịch', icon: Layers },
           { id: 'audit-rbac', label: 'Nhật Ký Hệ Thống', icon: FileText }
         ];
+      case 'member':
       case 'guest':
         return [
           { id: 'home', label: 'Trang Chủ', icon: Home },

@@ -47,6 +47,10 @@ model User {
   actionLogs        ActionLog[]
   processedSupports SupportRequest[]   @relation("StaffSupport")
   handledCheckIns   CheckIn[]          @relation("StaffCheckIns")
+  staffShifts       StaffShift[]       @relation("StaffShifts")
+  staffOperationalNotes OperationalNote[] @relation("StaffOperationalNotes")
+  consultantPayments Payment[]         @relation("ConsultantPayments")
+  staffPayments     Payment[]          @relation("StaffProcessedPayments")
 }
 
 model CoachProfile {
@@ -351,6 +355,8 @@ model CheckIn {
   room           Room?         @relation(fields: [roomId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   staffId        Int?          
   staff          User?         @relation("StaffCheckIns", fields: [staffId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shiftId        Int?
+  shift          StaffShift?   @relation("ShiftCheckIns", fields: [shiftId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   
   checkInTime    DateTime      @default(now())
   method         String        @default("QR_CODE") // QR_CODE / MANUAL
@@ -363,19 +369,31 @@ model CheckIn {
 // ==========================================
 
 model Payment {
-  id            Int           @id @default(autoincrement())
-  userId        Int
-  user          User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  membershipId  Int?
-  membership    Membership?   @relation(fields: [membershipId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  amount        Decimal       @db.Decimal(18, 2)
-  method        String
-  status        String        @default("PENDING")
-  orderCode     BigInt?       @unique
-  transactionNo String?       @unique
+  id                  Int           @id @default(autoincrement())
+  userId              Int
+  user                User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  membershipId        Int?
+  membership          Membership?   @relation(fields: [membershipId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  amount              Decimal       @db.Decimal(18, 2)
+  method              String
+  status              String        @default("PENDING")
+  orderCode           BigInt?       @unique
+  transactionNo       String?       @unique
   renewalDurationDays Int?
-  createdAt     DateTime      @default(now())
-  paidAt        DateTime?
+  
+  staffId             Int?
+  staff               User?         @relation("StaffProcessedPayments", fields: [staffId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  consultantId        Int?
+  consultant          User?         @relation("ConsultantPayments", fields: [consultantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shiftId             Int?
+  shift               StaffShift?   @relation("ShiftPayments", fields: [shiftId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  traceRefNo          String?       @db.NVarChar(100)
+  cashReceived        Decimal?      @db.Decimal(18, 2)
+  cashChange          Decimal?      @db.Decimal(18, 2)
+  note                String?       @db.NVarChar(500)
+  
+  createdAt           DateTime      @default(now())
+  paidAt              DateTime?
 }
 
 // ==========================================
@@ -453,3 +471,68 @@ model ActionLog {
   details   String?  @db.NVarChar(Max)
   createdAt DateTime @default(now())
 }
+
+// ==========================================
+// 10. QUẢN LÝ LỄ TÂN & CA TRỰC (STAFF & SHIFTS)
+// ==========================================
+
+model DeskDevice {
+  id          Int          @id @default(autoincrement())
+  deviceToken String       @unique @db.NVarChar(255)
+  deviceName  String       @db.NVarChar(100)
+  location    String?      @db.NVarChar(255)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  shifts      StaffShift[]
+}
+
+model StaffShift {
+  id                Int               @id @default(autoincrement())
+  shiftCode         String            @unique @db.NVarChar(50)
+  staffId           Int
+  staff             User              @relation("StaffShifts", fields: [staffId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  deskDeviceId      Int?
+  deskDevice        DeskDevice?       @relation(fields: [deskDeviceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  deviceToken       String?           @db.NVarChar(255)
+
+  clockIn           DateTime          @default(now())
+  clockOut          DateTime?
+
+  systemCashAmount  Decimal           @default(0) @db.Decimal(18, 2)
+  actualCashAmount  Decimal?          @db.Decimal(18, 2)
+  differenceAmount  Decimal?          @db.Decimal(18, 2)
+  differenceReason  String?           @db.NVarChar(500)
+
+  status            String            @default("OPEN") // OPEN | CLOSED
+  notes             String?           @db.NVarChar(500)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  payments          Payment[]         @relation("ShiftPayments")
+  checkIns          CheckIn[]         @relation("ShiftCheckIns")
+  operationalNotes  OperationalNote[]
+}
+
+model OperationalNote {
+  id              Int         @id @default(autoincrement())
+  staffId         Int
+  staff           User        @relation("StaffOperationalNotes", fields: [staffId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shiftId         Int?
+  shift           StaffShift? @relation(fields: [shiftId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  memberId        Int?
+  memberName      String?     @db.NVarChar(100)
+  memberPhone     String?     @db.NVarChar(20)
+
+  category        String      @db.NVarChar(50) // "HYGIENE", "EQUIPMENT", "SERVICE", "FACILITY", "OTHER"
+  content         String      @db.NVarChar(1000)
+  priority        String      @default("MEDIUM") // "LOW", "MEDIUM", "HIGH", "URGENT"
+  status          String      @default("PENDING_REVIEW") // "PENDING_REVIEW", "RESOLVED", "DISMISSED"
+  managerFeedback String?     @db.NVarChar(1000)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+

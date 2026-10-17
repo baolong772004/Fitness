@@ -15,6 +15,7 @@ import { reviewApi } from './review.api';
 import { supportApi } from './support.api';
 import { facilityApi } from './facility.api';
 import { notificationApi } from './notification.api';
+import { staffApi } from './staff.api';
 
 // Health check
 export async function checkHealth(): Promise<boolean> {
@@ -30,6 +31,7 @@ export async function checkHealth(): Promise<boolean> {
 export const api = {
   checkHealth,
   auth: authApi,
+  staff: staffApi,
   users: userApi,
   packages: packageApi,
   subscriptions: subscriptionApi,
@@ -52,6 +54,7 @@ export default api;
 // Export individual modules
 export {
   authApi,
+  staffApi,
   userApi,
   packageApi,
   subscriptionApi,
@@ -69,6 +72,8 @@ export {
   notificationApi,
 };
 export type { ApiNotification } from './notification.api';
+export * from './staff.api';
+
 
 // Re-export client utilities & types
 export * from './client';
