@@ -15,6 +15,15 @@ export interface ApiUser {
   weight?: number | null;
   role: 'ADMIN' | 'STAFF' | 'RECEPTIONIST' | 'COACH' | 'MEMBER' | string;
   status: string;
+  memberships?: Array<{
+    id: number;
+    packageId: number;
+    status: string;
+    startDate: string;
+    endDate: string;
+    remainingSessions?: number | null;
+    package: { name: string; type: string; trialPtSessions: number };
+  }>;
   createdAt?: string;
   updatedAt?: string;
 }

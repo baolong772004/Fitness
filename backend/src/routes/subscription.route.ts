@@ -8,7 +8,7 @@ const router = Router();
  * @swagger
  * /subscriptions:
  *   post:
- *     summary: Đăng ký mua gói tập
+ *     summary: Đã ngừng hỗ trợ tạo gói trực tiếp; sử dụng POST /payments/checkout
  *     tags: [Subscriptions]
  *     security:
  *       - bearerAuth: []
@@ -31,8 +31,8 @@ const router = Router();
  *                 type: string
  *                 description: Trạng thái (Chỉ Admin/Staff)
  *     responses:
- *       201:
- *         description: Đăng ký thành công
+ *       409:
+ *         description: Gói tập phải được thanh toán qua PayOS
  */
 router.post('/', authenticateToken, SubscriptionController.createSubscription);
 
@@ -76,6 +76,10 @@ router.get('/my-subscriptions', authenticateToken, SubscriptionController.getMyS
  *         schema:
  *           type: string
  *           description: Tìm theo tên hoặc email
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: integer
  *     responses:
  *       200:
  *         description: Thành công
@@ -86,7 +90,7 @@ router.get('/', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), Subscriptio
  * @swagger
  * /subscriptions/{id}/status:
  *   patch:
- *     summary: Đổi trạng thái gói đăng ký (Admin/Staff)
+ *     summary: Đã ngừng hỗ trợ đổi trạng thái gói thủ công
  *     tags: [Subscriptions]
  *     security:
  *       - bearerAuth: []
@@ -107,8 +111,8 @@ router.get('/', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), Subscriptio
  *                 type: string
  *                 enum: [PENDING, ACTIVE, EXPIRED, CANCELLED]
  *     responses:
- *       200:
- *         description: Thành công
+ *       409:
+ *         description: Trạng thái gói do PayOS và hệ thống xếp hàng quản lý
  */
 router.patch('/:id/status', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), SubscriptionController.updateSubscriptionStatus);
 

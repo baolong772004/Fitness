@@ -29,7 +29,7 @@ export function masterSlots(calendar: Calendar): Array<{ startTime: string; endT
   const open = minute(calendar.openTime), close = minute(calendar.closeTime);
   if (open < 0 || close <= open || calendar.slotMinutes <= 0 || calendar.breakMinutes < 0) return [];
   const format = (value: number) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
-  const result = [];
+  const result: Array<{ startTime: string; endTime: string; startMinute: number; endMinute: number }> = [];
   for (let startMinute = open; startMinute + calendar.slotMinutes <= close; startMinute += calendar.slotMinutes + calendar.breakMinutes) {
     const endMinute = startMinute + calendar.slotMinutes;
     result.push({ startTime: format(startMinute), endTime: format(endMinute), startMinute, endMinute });

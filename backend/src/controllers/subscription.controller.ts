@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
+import { lockGymMember } from '../services/gymMembershipLock.service.js';
+import { reconcileGymMembershipStates } from '../services/membership.service.js';
+import { reservedPtSessions } from '../services/ptBooking.service.js';
 import {
   generateOrderCode,
   getPayOS,
@@ -11,101 +15,8 @@ import {
 
 
 export class SubscriptionController {
-  static async createSubscription(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-      const { packageId, startDate: inputStartDate, status: inputStatus } = req.body;
-      const currentUserId = req.user?.userId;
-      const currentUserRole = req.user?.role;
-
-      if (!packageId) {
-        return res.status(400).json({ success: false, message: 'packageId is required' });
-      }
-
-      // Determine the target user ID and status based on who is making the request
-      let targetUserId = currentUserId;
-      let targetStatus = 'PENDING';
-
-      if (currentUserRole === 'ADMIN' || currentUserRole === 'STAFF') {
-        const { userId } = req.body;
-        if (userId) {
-          targetUserId = parseInt(userId);
-        }
-        if (inputStatus) {
-          targetStatus = inputStatus;
-        } else {
-          targetStatus = 'ACTIVE'; // Staff/Admin creating it usually implies immediate activation
-        }
-      }
-
-      if (!targetUserId) {
-         return res.status(400).json({ success: false, message: 'userId is required' });
-      }
-
-      // Fetch the package details
-      const pkg = await prisma.package.findUnique({
-        where: { id: parseInt(packageId) }
-      });
-
-      if (!pkg) {
-        return res.status(404).json({ success: false, message: 'Package not found' });
-      }
-
-      if (!pkg.isActive && currentUserRole !== 'ADMIN' && currentUserRole !== 'STAFF') {
-        return res.status(400).json({ success: false, message: 'This package is no longer available' });
-      }
-
-      if (pkg.type === 'PT') {
-        const now = new Date();
-        const activeGymMembership = await prisma.membership.findFirst({
-          where: {
-            userId: targetUserId,
-            status: 'ACTIVE',
-            startDate: { lte: now },
-            endDate: { gte: now },
-            package: { type: 'MEMBERSHIP' },
-          },
-          select: { id: true },
-        });
-        if (!activeGymMembership) {
-          return res.status(403).json({
-            success: false,
-            message: 'Cần có gói hội viên gym còn hạn để đăng ký gói PT.',
-          });
-        }
-      }
-
-      // Calculate Dates
-      const startDate = inputStartDate ? new Date(inputStartDate) : new Date();
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + pkg.durationDays);
-
-      // Determine Remaining Sessions
-      let remainingSessions = 0;
-      if (pkg.type === 'MEMBERSHIP') {
-        remainingSessions = pkg.trialPtSessions || 0;
-      } else if (pkg.type === 'PT') {
-        remainingSessions = pkg.totalPtSessions || 0;
-      }
-
-      // Create the Subscription (Mapped to the Membership table in DB)
-      const subscription = await prisma.membership.create({
-        data: {
-          userId: targetUserId,
-          packageId: pkg.id,
-          startDate,
-          endDate,
-          remainingSessions,
-          status: targetStatus
-        },
-        include: {
-          package: true
-        }
-      });
-
-      res.status(201).json({ success: true, message: 'Subscription created successfully', data: subscription });
-    } catch (error) {
-      next(error);
-    }
+  static async createSubscription(_req: AuthRequest, res: Response) {
+    return res.status(409).json({ success: false, message: 'Gói tập chỉ được tạo qua PayOS. Dùng /api/payments/checkout để tạo đơn thanh toán.' });
   }
 
   static async getMySubscriptions(req: AuthRequest, res: Response, next: NextFunction) {
@@ -122,7 +33,18 @@ export class SubscriptionController {
         orderBy: { createdAt: 'desc' }
       });
 
-      res.status(200).json({ success: true, data: subscriptions });
+      const now = new Date();
+      const data = await Promise.all(subscriptions.map(async subscription => {
+        const isPtEntitlement = subscription.package.type === 'PT' ||
+          (subscription.package.type === 'MEMBERSHIP' && subscription.package.trialPtSessions > 0);
+        const canBook = isPtEntitlement && subscription.status === 'ACTIVE' &&
+          subscription.startDate <= now && subscription.endDate > now;
+        const reserved = canBook
+          ? await reservedPtSessions(prisma, subscription.id) : 0;
+        return { ...subscription, availableSessions: canBook
+          ? Math.max(0, (subscription.remainingSessions ?? 0) - reserved) : 0 };
+      }));
+      res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);
     }
@@ -134,11 +56,16 @@ export class SubscriptionController {
       const limit = Math.max(1, parseInt(req.query.limit as string) || 10);
       const status = req.query.status as string;
       const search = req.query.search as string;
+      const userId = req.query.userId ? Number(req.query.userId) : undefined;
+      if (userId !== undefined && (!Number.isSafeInteger(userId) || userId <= 0)) {
+        return res.status(400).json({ success: false, message: 'userId không hợp lệ' });
+      }
 
       const skip = (page - 1) * limit;
       const where: any = {};
 
       if (status) where.status = status;
+      if (userId) where.userId = userId;
 
       if (search) {
         where.user = {
@@ -180,34 +107,8 @@ export class SubscriptionController {
     }
   }
 
-  static async updateSubscriptionStatus(req: Request, res: Response, next: NextFunction) {
-    try {
-      const rawId = req.params.id;
-      const id = Number.parseInt(typeof rawId === 'string' ? rawId : rawId[0] ?? '', 10);
-      if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
-
-      const { status } = req.body;
-      if (!status) {
-        return res.status(400).json({ success: false, message: 'Status is required' });
-      }
-
-      const validStatuses = ['PENDING', 'ACTIVE', 'EXPIRED', 'CANCELLED'];
-      if (!validStatuses.includes(status)) {
-        return res.status(400).json({ success: false, message: 'Invalid status' });
-      }
-
-      const subscriptionExists = await prisma.membership.findUnique({ where: { id } });
-      if (!subscriptionExists) return res.status(404).json({ success: false, message: 'Subscription not found' });
-
-      const updatedSubscription = await prisma.membership.update({
-        where: { id },
-        data: { status }
-      });
-
-      res.status(200).json({ success: true, message: 'Status updated successfully', data: updatedSubscription });
-    } catch (error) {
-      next(error);
-    }
+  static async updateSubscriptionStatus(_req: Request, res: Response) {
+    return res.status(409).json({ success: false, message: 'Trạng thái gói Gym do PayOS và hệ thống xếp hàng quản lý; không thể đổi thủ công.' });
   }
 
   static async renewSubscription(req: AuthRequest, res: Response, next: NextFunction) {
@@ -215,9 +116,17 @@ export class SubscriptionController {
     let paymentCreated = false;
     try {
       const userId = req.user?.userId;
-      const { subscriptionId, packageId } = req.body;
+      const { subscriptionId, packageId, memberId } = req.body;
 
       if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+      const actingForMember = memberId !== undefined && memberId !== null;
+      if (actingForMember && !['ADMIN', 'STAFF'].includes(req.user?.role ?? '')) {
+        return res.status(403).json({ success: false, message: 'Chỉ Admin/Staff được gia hạn cho hội viên khác.' });
+      }
+      const targetUserId = actingForMember ? Number(memberId) : userId;
+      if (!Number.isSafeInteger(targetUserId) || targetUserId <= 0) {
+        return res.status(400).json({ success: false, message: 'memberId không hợp lệ' });
+      }
       const parsedSubscriptionId = Number(subscriptionId);
       const parsedPackageId = Number(packageId);
       if (!Number.isSafeInteger(parsedSubscriptionId) || parsedSubscriptionId <= 0 ||
@@ -232,7 +141,7 @@ export class SubscriptionController {
 
       // Make sure the current membership belongs to the caller.
       const currentSub = await prisma.membership.findFirst({
-        where: { id: parsedSubscriptionId, userId },
+        where: { id: parsedSubscriptionId, userId: targetUserId },
       });
 
       if (!currentSub) {
@@ -253,24 +162,8 @@ export class SubscriptionController {
       if (!gymPackage || !gymPackage.isActive) {
         return res.status(404).json({ success: false, message: 'Gói cước không hợp lệ' });
       }
-      if (gymPackage.type === 'PT') {
-        const now = new Date();
-        const activeGymMembership = await prisma.membership.findFirst({
-          where: {
-            userId,
-            status: 'ACTIVE',
-            startDate: { lte: now },
-            endDate: { gte: now },
-            package: { type: 'MEMBERSHIP' },
-          },
-          select: { id: true },
-        });
-        if (!activeGymMembership) {
-          return res.status(403).json({
-            success: false,
-            message: 'Cần có gói hội viên gym còn hạn để gia hạn gói PT.',
-          });
-        }
+      if (gymPackage.type !== 'MEMBERSHIP') {
+        return res.status(400).json({ success: false, message: 'Gói PT không hỗ trợ gia hạn thời gian; hãy mua gói PT mới.' });
       }
 
       const amount = Number(gymPackage.price);
@@ -280,18 +173,30 @@ export class SubscriptionController {
 
       const orderCodeNumber = generateOrderCode();
       orderCode = BigInt(orderCodeNumber);
-      await prisma.payment.create({
-        data: {
-          userId,
-          membershipId: currentSub.id,
+      const renewalBlock = await prisma.$transaction(async tx => {
+        await lockGymMember(tx, targetUserId);
+        await reconcileGymMembershipStates(tx, targetUserId, new Date());
+        const latest = await tx.membership.findFirst({ where: { id: currentSub.id, userId: targetUserId } });
+        if (!latest || !['ACTIVE', 'EXPIRED'].includes(latest.status)) {
+          return 'Chỉ có thể gia hạn gói Gym đang hoạt động hoặc đã hết hạn; gói chờ kích hoạt không được gia hạn.';
+        }
+        const pending = await tx.payment.findFirst({ where: {
+          membershipId: latest.id, renewalDurationDays: { not: null }, status: 'PENDING',
+        }, select: { id: true } });
+        if (pending) return 'Gói này đã có đơn gia hạn chờ thanh toán.';
+        await tx.payment.create({ data: {
+          userId: targetUserId,
+          membershipId: latest.id,
           amount,
           method: 'PAYOS',
           status: 'PENDING',
           orderCode,
           transactionNo: `TXN-${orderCodeNumber}`,
           renewalDurationDays: gymPackage.durationDays,
-        },
-      });
+        } });
+        return null;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 30000 });
+      if (renewalBlock) return res.status(409).json({ success: false, message: renewalBlock });
       paymentCreated = true;
 
       const description = `Renew ${gymPackage.name}`

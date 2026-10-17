@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { io } from 'socket.io-client';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, sessionStore, SOCKET_URL } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { aura, list, timeLabel } from '../lib/theme';
@@ -16,6 +17,7 @@ type PtChatBooking = {
 
 export function PtConversation({ booking, onBack }: { booking: PtChatBooking; onBack: () => void }) {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<any[]>([]);
   const [draft, setDraft] = useState('');
   const [canSend, setCanSend] = useState(false);
@@ -136,6 +138,6 @@ export function PtConversation({ booking, onBack }: { booking: PtChatBooking; on
       {!loading && !error && messages.length === 0 && <Empty title="Chưa có tin nhắn" message="Bắt đầu trò chuyện với Coach của bạn." />}
       {messages.map(row => { const mine = Number(row.senderId) === Number(user?.id); return <View key={String(row.id)} style={{ maxWidth: '82%', alignSelf: mine ? 'flex-end' : 'flex-start', padding: 11, backgroundColor: mine ? aura.darkCoffee : aura.white, borderRadius: 15, borderWidth: mine ? 0 : 1, borderColor: aura.border }}><Text style={{ color: mine ? '#fff' : aura.ink, lineHeight: 19 }}>{row.content}</Text><Text style={{ color: mine ? aura.latte : aura.muted, fontSize: 9, marginTop: 5 }}>{timeLabel(row.createdAt)}{mine && row.readAt ? ' · Đã đọc' : ''}</Text></View>; })}
     </ScrollView>
-    {loading && messages.length === 0 ? <Text style={{ color: aura.muted, textAlign: 'center', padding: 13, fontSize: 12 }}>Đang tải cuộc trò chuyện...</Text> : open ? <View style={{ flexDirection: 'row', padding: 12, gap: 7, backgroundColor: aura.white, borderTopColor: aura.border, borderTopWidth: 1 }}><TextInput value={draft} onChangeText={setDraft} maxLength={1000} placeholder="Nhập tin nhắn..." placeholderTextColor={aura.muted} style={{ flex: 1, borderColor: aura.border, borderWidth: 1, borderRadius: 13, paddingHorizontal: 13, color: aura.ink }} /><Pressable disabled={busy || !draft.trim()} onPress={() => void send()} style={{ backgroundColor: aura.darkCoffee, borderRadius: 13, justifyContent: 'center', paddingHorizontal: 16, opacity: busy ? .5 : 1 }}><Text style={{ color: '#fff', fontWeight: '800' }}>Gửi</Text></Pressable></View> : <Text style={{ color: aura.muted, textAlign: 'center', padding: 13, fontSize: 12 }}>{error ? 'Không thể tải quyền nhắn tin. Hãy thử lại.' : 'Cuộc trò chuyện đã đóng. Bạn vẫn có thể xem tin nhắn cũ.'}</Text>}
+    {loading && messages.length === 0 ? <Text style={{ color: aura.muted, textAlign: 'center', padding: 13, paddingBottom: 13 + insets.bottom, fontSize: 12 }}>Đang tải cuộc trò chuyện...</Text> : open ? <View style={{ flexDirection: 'row', padding: 12, paddingBottom: 12 + insets.bottom, gap: 7, backgroundColor: aura.white, borderTopColor: aura.border, borderTopWidth: 1 }}><TextInput value={draft} onChangeText={setDraft} maxLength={1000} placeholder="Nhập tin nhắn..." placeholderTextColor={aura.muted} style={{ flex: 1, minHeight: 44, borderColor: aura.border, borderWidth: 1, borderRadius: 13, paddingHorizontal: 13, color: aura.ink }} /><Pressable disabled={busy || !draft.trim()} onPress={() => void send()} style={{ backgroundColor: aura.darkCoffee, borderRadius: 13, justifyContent: 'center', paddingHorizontal: 16, opacity: busy ? .5 : 1 }}><Text style={{ color: '#fff', fontWeight: '800' }}>Gửi</Text></Pressable></View> : <Text style={{ color: aura.muted, textAlign: 'center', padding: 13, paddingBottom: 13 + insets.bottom, fontSize: 12 }}>{error ? 'Không thể tải quyền nhắn tin. Hãy thử lại.' : 'Cuộc trò chuyện đã đóng. Bạn vẫn có thể xem tin nhắn cũ.'}</Text>}
   </KeyboardAvoidingView>;
 }

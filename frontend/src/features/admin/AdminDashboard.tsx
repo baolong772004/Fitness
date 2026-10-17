@@ -62,6 +62,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [packages, setPackages] = useState<PackagePlan[]>([]);
   const [packageStatusFilter, setPackageStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [packageLoadError, setPackageLoadError] = useState<string | null>(null);
+  const [isLoadingPackages, setIsLoadingPackages] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -143,13 +145,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isLoadingMember360, setIsLoadingMember360] = useState(false);
   const [correctingNoShowId, setCorrectingNoShowId] = useState<number | null>(null);
 
-  const reloadData = async () => {
-    setIsLoadingGroupClasses(true);
-    setGroupClassError(null);
-    // 1. Fetch live Packages from backend
+  const loadPackages = async () => {
+    setIsLoadingPackages(true);
+    setPackageLoadError(null);
     try {
       const livePkgs = await api.packages.getPackages({ includeInactive: true });
-      if (livePkgs) {
+      if (Array.isArray(livePkgs)) {
         const mappedPkgs: PackagePlan[] = livePkgs.map(p => ({
           id: String(p.id),
           name: p.name,
@@ -167,10 +168,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             : ['Ra vào phòng tập 24/7', `${p.durationDays} ngày hiệu lực`, `${p.trialPtSessions || 0} buổi PT tặng kèm`]
         }));
         setPackages(mappedPkgs);
+      } else {
+        throw new Error('API trả về danh sách gói không hợp lệ.');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Lỗi tải gói tập admin:', e);
+      setPackageLoadError(e?.message || 'Không thể tải gói tập từ máy chủ.');
+    } finally {
+      setIsLoadingPackages(false);
     }
+  };
+
+  const reloadData = async () => {
+    setIsLoadingGroupClasses(true);
+    setGroupClassError(null);
+    // 1. Fetch live Packages from backend
+    await loadPackages();
 
     // 2. Fetch live Members from backend
     try {
@@ -312,6 +325,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     reloadData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'packages-engine') void loadPackages();
+  }, [activeTab]);
 
   // Total Revenue Calculation
   const totalRevenue = invoices.reduce((sum, inv) => sum + inv.totalVND, 0);
@@ -1691,12 +1708,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </CardAction>
           </CardHeader>
           <CardContent>
+            {packageLoadError && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                <span>Không tải được gói tập: {packageLoadError}</span>
+                <Button size="sm" variant="outline" onClick={() => void loadPackages()}>Thử lại</Button>
+              </div>
+            )}
             <div className="mb-5 flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold">Trạng thái kinh doanh</p>
                 <p className="text-xs text-muted-foreground">Ngừng bán chỉ ẩn gói khỏi danh sách mua; dữ liệu và lịch sử vẫn được giữ.</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" disabled={isLoadingPackages} onClick={() => void loadPackages()}>
+                  {isLoadingPackages ? 'Đang tải...' : 'Tải lại'}
+                </Button>
                 <Button size="sm" variant={packageStatusFilter === 'all' ? 'default' : 'outline'} onClick={() => setPackageStatusFilter('all')}>
                   Tất cả ({packages.length})
                 </Button>
@@ -1767,9 +1793,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
               ))}
-              {packages.filter(pkg => packageStatusFilter === 'all' || (packageStatusFilter === 'active' ? pkg.isActive !== false : pkg.isActive === false)).length === 0 && (
+              {!packageLoadError && packages.filter(pkg => packageStatusFilter === 'all' || (packageStatusFilter === 'active' ? pkg.isActive !== false : pkg.isActive === false)).length === 0 && (
                 <div className="col-span-full rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                  Không có gói nào trong trạng thái này.
+                  {isLoadingPackages ? 'Đang tải gói tập...' : packages.length === 0 ? 'Chưa có gói nào trong cơ sở dữ liệu.' : 'Không có gói nào trong trạng thái này.'}
                 </div>
               )}
             </div>

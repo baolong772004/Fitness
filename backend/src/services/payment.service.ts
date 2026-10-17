@@ -48,12 +48,16 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
     const payment = await tx.payment.findUnique({ where: { orderCode } });
     if (!payment) return { result: 'NOT_FOUND' as const };
 
-    if (Number(payment.amount) !== paidAmount) {
-      return { result: 'AMOUNT_MISMATCH' as const };
-    }
-
     if (payment.status === 'PAID') return { result: 'ALREADY_PAID' as const };
     if (payment.status === 'PAID_REVIEW') return { result: 'ALREADY_PAID_REVIEW' as const };
+
+    if (Number(payment.amount) !== paidAmount) {
+      await tx.payment.updateMany({
+        where: { id: payment.id, status: { in: ['PENDING', 'FAILED', 'CANCELLED'] } },
+        data: { status: 'PAID_REVIEW', paidAt: new Date() },
+      });
+      return { result: 'AMOUNT_MISMATCH' as const };
+    }
 
     await reconcileGymMembershipStates(tx, paymentOwner.userId, new Date());
 
@@ -84,8 +88,10 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
       ]);
       ptPurchaseUnavailable = !gym || !coach;
     }
-    const requiresReview = renewalTarget?.package.type === 'PT' ||
+    const requiresReview = (payment.membershipId !== null && !renewalTarget && !purchaseTarget) ||
+      renewalTarget?.package.type === 'PT' ||
       (renewalTarget?.package.type === 'MEMBERSHIP' && !['ACTIVE', 'EXPIRED'].includes(renewalTarget.status)) ||
+      (purchaseTarget !== null && purchaseTarget.status !== 'PENDING') ||
       ptPurchaseUnavailable;
 
     const paidAt = new Date();

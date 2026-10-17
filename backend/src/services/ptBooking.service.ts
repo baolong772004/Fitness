@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Booking, Prisma, PrismaClient } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { lockGymMember } from './gymMembershipLock.service.js';
 import { availableSlots, vietnamDate } from './ptCalendar.service.js';
@@ -38,7 +38,7 @@ export async function lockPtMembership(tx: Prisma.TransactionClient, membershipI
   await lock(tx, `pt-membership:${membershipId}`);
 }
 
-export async function reservedPtSessions(tx: Prisma.TransactionClient, membershipId: number, now = new Date()) {
+export async function reservedPtSessions(tx: Prisma.TransactionClient | PrismaClient, membershipId: number, now = new Date()) {
   const [bookings, makeups] = await Promise.all([
     tx.booking.count({ where: { type: 'PT', membershipId, status: { in: PT_BOOKING_HOLD_STATUSES } } }),
     tx.makeUpRequest.count({ where: {
@@ -46,6 +46,22 @@ export async function reservedPtSessions(tx: Prisma.TransactionClient, membershi
     } }),
   ]);
   return bookings + makeups;
+}
+
+/** Claiming the booking and debiting its entitlement must share one transaction. */
+export async function debitPtSession(tx: Prisma.TransactionClient, membershipId: number) {
+  const debited = await tx.membership.updateMany({
+    where: { id: membershipId, remainingSessions: { gt: 0 } },
+    data: { remainingSessions: { decrement: 1 } },
+  });
+  if (debited.count !== 1) throw new PtBookingError(409, 'Gói PT không còn buổi để trừ.');
+  const membership = await tx.membership.findUniqueOrThrow({
+    where: { id: membershipId }, include: { package: { select: { type: true } } },
+  });
+  if (membership.remainingSessions === 0 && membership.package.type === 'PT') {
+    await tx.membership.update({ where: { id: membershipId }, data: { status: 'COMPLETED' } });
+  }
+  return membership;
 }
 
 export async function requirePtSlot(
@@ -101,8 +117,8 @@ export async function createConfirmedPtBooking(input: {
     await lockPtCalendar(tx);
     await lockPtCoach(tx, coachId);
     await lockPtMember(tx, input.memberId);
-    await lockPtMembership(tx, initialMembership.id);
     await lockGymMember(tx, input.memberId);
+    await lockPtMembership(tx, initialMembership.id);
     const membership = await tx.membership.findUniqueOrThrow({ where: { id: initialMembership.id }, include: { package: true } });
     if (membership.package.type === 'PT' && membership.coachId !== coachId) throw new PtBookingError(409, 'Coach của gói PT đã thay đổi.');
     const end = await requirePtSlot(tx, coachId, input.memberId, input.start);
@@ -116,6 +132,11 @@ export async function createConfirmedPtBooking(input: {
       } });
       if (!request || request.expiresAt <= new Date() || end > request.expiresAt) {
         throw new PtBookingError(409, 'Quyền học bù đã hết hạn hoặc ca học nằm ngoài hạn 7 ngày.');
+      }
+      if (!['ABSENT_ELIGIBLE', 'MAKEUP_BOOKED'].includes((await tx.booking.findUniqueOrThrow({
+        where: { id: input.makeupOriginalId }, select: { status: true },
+      })).status)) {
+        throw new PtBookingError(409, 'Buổi gốc không còn quyền học bù.');
       }
       const booking = await tx.booking.create({ data: {
         type: 'PT', memberId: input.memberId, coachId, membershipId: membership.id,
@@ -165,8 +186,8 @@ export async function createConfirmedPtBookings(input: {
     await lockPtCalendar(tx);
     await lockPtCoach(tx, coachId);
     await lockPtMember(tx, input.memberId);
-    await lockPtMembership(tx, initialMembership.id);
     await lockGymMember(tx, input.memberId);
+    await lockPtMembership(tx, initialMembership.id);
     const membership = await tx.membership.findUniqueOrThrow({ where: { id: initialMembership.id }, include: { package: true } });
     if (membership.package.type === 'PT' && membership.coachId !== coachId) throw new PtBookingError(409, 'Coach của gói PT đã thay đổi.');
     if (membership.status !== 'ACTIVE') throw new PtBookingError(409, 'Gói PT không còn hiệu lực.');
@@ -174,7 +195,7 @@ export async function createConfirmedPtBookings(input: {
     if ((membership.remainingSessions ?? 0) - reserved < starts.length) {
       throw new PtBookingError(409, 'Số buổi PT có thể đặt không đủ cho các ca đã chọn.');
     }
-    const bookings = [];
+    const bookings: Booking[] = [];
     for (const start of starts) {
       try {
         const end = await requirePtSlot(tx, coachId, input.memberId, start);

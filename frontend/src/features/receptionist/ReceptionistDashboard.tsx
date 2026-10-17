@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Member, CheckInRecord, PackagePlan, Coach, SupportTicket, Invoice } from '../../types';
+import { Member, CheckInRecord, PackagePlan, Coach, SupportTicket } from '../../types';
 import { api, ApiPackage, ApiUser, ApiSupportTicket } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
-import { PaymentModal } from '../payment/PaymentModal';
 import { WebcamQrScanner } from '@/components/common/WebcamQrScanner';
 import {
   QrCode,
@@ -37,6 +36,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatCard, StaffPage, Field } from '@/components/staff/StaffKit';
 
 interface ReceptionistDashboardProps {
@@ -70,20 +70,18 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
     name: '',
     phone: '',
     email: '',
+    password: '',
     gender: 'male' as 'male' | 'female',
     birthYear: 1998,
-    selectedPackageId: 'pkg-hybrid-gold',
-    selectedCoachId: 'coach-1'
+    selectedPackageId: ''
   });
 
-  // Payment Modal Trigger
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
-  const [pendingPaymentData, setPendingPaymentData] = useState<{
-    memberId: string;
-    memberName: string;
-    memberPhone: string;
-    items: { name: string; quantity: number; unitPriceVND: number; amountVND: number }[];
-  } | null>(null);
+  const [checkout, setCheckout] = useState<{ orderCode: number; checkoutUrl: string; memberName: string; packageName: string } | null>(null);
+  const [checkoutStatus, setCheckoutStatus] = useState('PENDING');
+  const [checkoutError, setCheckoutError] = useState('');
+  const [posBusy, setPosBusy] = useState(false);
+  const [posError, setPosError] = useState('');
+  const [registeredWalkin, setRegisteredWalkin] = useState<{ email: string; id: number; name: string } | null>(null);
 
   // Tickets
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -146,7 +144,14 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
     try {
       const liveUsers = await api.users.getUsers({ role: 'MEMBER', limit: 50 });
       if (liveUsers.data) {
-        const mappedMembers: Member[] = liveUsers.data.map(u => ({
+        const mappedMembers: Member[] = liveUsers.data.map(u => {
+          const now = new Date();
+          const gym = u.memberships?.find(sub => sub.status === 'ACTIVE' && new Date(sub.startDate) <= now && new Date(sub.endDate) >= now)
+            ?? u.memberships?.find(sub => sub.status === 'EXPIRED' || new Date(sub.endDate) < now);
+          const daysRemaining = gym?.status === 'ACTIVE'
+            ? Math.max(0, Math.ceil((new Date(gym.endDate).getTime() - now.getTime()) / 86400000))
+            : 0;
+          return ({
           id: String(u.id),
           code: 'MEM-' + u.id,
           name: u.fullName || u.email,
@@ -157,18 +162,20 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
           gender: (u.gender === 'female' ? 'female' : 'male') as any,
           birthYear: 1996,
           emergencyContact: { name: 'Người thân', phone: u.phone || '', relationship: 'Gia đình' },
-          status: u.status === 'ACTIVE' ? 'active' : 'expired',
-          activePackageId: 'pkg-standard',
-          packageName: 'Gói Tiêu Chuẩn',
+          status: u.status !== 'ACTIVE' ? 'frozen' : gym?.status === 'ACTIVE' && daysRemaining > 0
+            ? (daysRemaining <= 5 ? 'expiring_soon' : 'active') : 'expired',
+          activePackageId: gym ? String(gym.packageId) : '',
+          packageName: gym?.package.name ?? 'Chưa có gói Gym',
           packageType: 'standard_gym',
-          packageStartDate: new Date().toISOString().slice(0, 10),
-          packageEndDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-          daysRemaining: 30,
-          ptSessionsTotal: 2,
-          ptSessionsRemaining: 2,
+          packageStartDate: gym?.startDate.slice(0, 10) ?? '',
+          packageEndDate: gym?.endDate.slice(0, 10) ?? '',
+          daysRemaining,
+          ptSessionsTotal: gym?.package.trialPtSessions ?? 0,
+          ptSessionsRemaining: gym?.remainingSessions ?? 0,
           totalCheckIns: 1,
           inBodyHistory: []
-        }));
+        });
+        });
         setMembers(mappedMembers);
       }
     } catch (e) {
@@ -317,110 +324,82 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
     }
   };
 
-  // Quick Renew / Buy Package for a member directly without switching tabs
-  const handleQuickRenew = (m: Member) => {
-    const pkg = packages.find(p => p.id === m.activePackageId) || packages[0];
-    setPendingPaymentData({
-      memberId: m.id,
-      memberName: m.name,
-      memberPhone: m.phone,
-      items: [
-        {
-          name: `Gia Hạn Gói: ${pkg?.name || m.packageName}`,
-          quantity: 1,
-          unitPriceVND: pkg?.priceVND || 1500000,
-          amountVND: pkg?.priceVND || 1500000
-        }
-      ]
-    });
-    setIsPaymentOpen(true);
-    soundEffects.playSuccessBeep();
-  };
-
-  // Handle Walk-in Registration POS
-  const handleStartWalkinPayment = (e: React.FormEvent) => {
-    e.preventDefault();
-    const selectedPkg = packages.find(p => p.id === newMemberForm.selectedPackageId);
-    if (!selectedPkg) return;
-
-    const newMemberId = 'mem-' + Date.now();
-    setPendingPaymentData({
-      memberId: newMemberId,
-      memberName: newMemberForm.name,
-      memberPhone: newMemberForm.phone,
-      items: [
-        {
-          name: selectedPkg.name,
-          quantity: 1,
-          unitPriceVND: selectedPkg.priceVND,
-          amountVND: selectedPkg.priceVND
-        }
-      ]
-    });
-    setIsPaymentOpen(true);
-  };
-
-  const handlePaymentSuccess = async (invoice: Invoice) => {
-    // 1. If it's a renewal for an existing member
-    const existing = members.find(m => m.id === invoice.memberId);
-    if (existing) {
-      try {
-        await api.subscriptions.createSubscription({
-          packageId: Number(existing.activePackageId) || 1,
-          userId: Number(existing.id),
-          status: 'ACTIVE'
-        });
-        soundEffects.playSuccessBeep();
-        alert(`Đã gia hạn thành công cho hội viên ${existing.name}! Gói cước đã được kích hoạt trực tiếp trên hệ thống.`);
-        reloadData();
-      } catch (err: any) {
-        console.warn('Gia hạn backend:', err);
-        alert(`Đã xử lý thanh toán gia hạn cho hội viên ${existing.name}!`);
-        reloadData();
-      }
-      return;
-    }
-
-    // 2. Otherwise it's a new walk-in member registration
-    const selectedPkg = packages.find(p => p.id === newMemberForm.selectedPackageId);
-
+  const handleQuickRenew = async (m: Member) => {
+    if (posBusy) return;
+    setPosBusy(true);
+    setPosError('');
     try {
-      // Create user on backend
-      const userRes = await api.auth.register({
-        email: newMemberForm.email || `member${Date.now()}@aura.vn`,
-        password: 'Password123!',
-        fullName: newMemberForm.name,
-        phone: newMemberForm.phone
+      const memberId = Number(m.id);
+      const result = await api.subscriptions.getAllSubscriptions({ userId: memberId, limit: 100 });
+      const gym = result.data.filter(sub => sub.userId === memberId && sub.package?.type === 'MEMBERSHIP');
+      const current = gym.find(sub => sub.status === 'ACTIVE') ?? gym.find(sub => sub.status === 'EXPIRED');
+      if (!current) throw new Error('Hội viên không có gói Gym đang hoạt động hoặc đã hết hạn để gia hạn.');
+      const payment = await api.subscriptions.renewSubscription({
+        subscriptionId: current.id,
+        packageId: current.packageId,
+        memberId
       });
-
-      if (userRes && selectedPkg) {
-        await api.subscriptions.createSubscription({
-          packageId: Number(selectedPkg.id) || 1,
-          userId: userRes.id,
-          status: 'ACTIVE'
-        });
-      }
-
-      soundEffects.playSuccessBeep();
-      alert(`Đã kích hoạt hồ sơ và gói tập cho hội viên mới ${newMemberForm.name} thành công trên cơ sở dữ liệu!`);
-      reloadData();
+      setCheckout({ orderCode: payment.data.orderCode, checkoutUrl: payment.data.checkoutUrl, memberName: m.name, packageName: current.package?.name ?? 'Gói Gym' });
+      setCheckoutStatus('PENDING');
+      setCheckoutError('');
     } catch (err: any) {
-      console.warn('Đăng ký hội viên backend:', err);
-      alert(`Đã hoàn tất thủ tục đăng ký cho hội viên ${newMemberForm.name}!`);
-      reloadData();
+      setPosError(err?.message || 'Không thể tạo đơn gia hạn.');
+    } finally {
+      setPosBusy(false);
     }
-
-    // Reset Form
-    setNewMemberForm({
-      name: '',
-      phone: '',
-      email: '',
-      gender: 'male',
-      birthYear: 1998,
-      selectedPackageId: 'pkg-hybrid-gold',
-      selectedCoachId: 'coach-1'
-    });
   };
+
+  const handleStartWalkinPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (posBusy) return;
+    setPosBusy(true);
+    setPosError('');
+    try {
+      const selectedPkg = packages.find(p => p.id === newMemberForm.selectedPackageId);
+      if (!selectedPkg || selectedPkg.type !== 'standard_gym') {
+        throw new Error('Vui lòng chọn gói Gym để đăng ký hội viên mới. Gói PT yêu cầu hội viên đã có Gym ACTIVE.');
+      }
+      const email = newMemberForm.email.trim().toLowerCase();
+      const user = registeredWalkin?.email === email ? { id: registeredWalkin.id, fullName: registeredWalkin.name } : await api.auth.register({
+        email,
+        password: newMemberForm.password,
+        fullName: newMemberForm.name.trim(),
+        phone: newMemberForm.phone.trim()
+      });
+      setRegisteredWalkin({ email, id: user.id, name: user.fullName });
+      const payment = await api.payments.createCheckoutSession(Number(selectedPkg.id), user.id);
+      setCheckout({ orderCode: payment.orderCode, checkoutUrl: payment.checkoutUrl, memberName: user.fullName, packageName: selectedPkg.name });
+      setCheckoutStatus('PENDING');
+      setCheckoutError('');
+      setRegisteredWalkin(null);
+      setNewMemberForm({ name: '', phone: '', email: '', password: '', gender: 'male', birthYear: 1998, selectedPackageId: '' });
+      await reloadData();
+    } catch (err: any) {
+      setPosError(err?.message || 'Không thể tạo hồ sơ hoặc đơn thanh toán.');
+    } finally {
+      setPosBusy(false);
+    }
+  };
+
+  const refreshCheckout = async (orderCode: number) => {
+    try {
+      const result = await api.payments.checkPaymentStatus(orderCode);
+      setCheckoutStatus(result.status);
+      setCheckoutError(result.status === 'PAID_REVIEW' ? result.message : '');
+      if (result.status === 'PAID') {
+        soundEffects.playSuccessBeep();
+        await reloadData();
+      }
+    } catch (err: any) {
+      setCheckoutError(err?.message || 'Không kiểm tra được trạng thái PayOS.');
+    }
+  };
+
+  useEffect(() => {
+    if (!checkout || checkoutStatus !== 'PENDING') return;
+    const timer = window.setInterval(() => { void refreshCheckout(checkout.orderCode); }, 5000);
+    return () => window.clearInterval(timer);
+  }, [checkout, checkoutStatus]);
 
   // Quick Support Ticket Submission (Calls Backend API)
   const handleAddTicket = async (e: React.FormEvent) => {
@@ -464,6 +443,7 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
   };
 
   const memberStatusBadge = (m: Member) => {
+    if (!m.activePackageId) return <Badge variant="outline">Chưa có gói Gym</Badge>;
     if (m.status === 'active') return <Badge variant="success">Hoạt động</Badge>;
     if (m.status === 'expiring_soon') return <Badge variant="warning">Sắp hết hạn</Badge>;
     if (m.status === 'frozen') return <Badge variant="info">Bảo lưu</Badge>;
@@ -484,6 +464,7 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
 
   return (
     <StaffPage>
+      {posError && <Alert variant="destructive"><AlertDescription>{posError}</AlertDescription></Alert>}
       {/* Top stats */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <button
@@ -658,7 +639,7 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                           {m.status !== 'active' && m.status !== 'expiring_soon' && (
                             <>
                               <Badge variant="destructive">{m.status === 'frozen' ? 'Bảo lưu' : 'Đã hết hạn'}</Badge>
-                              {m.status !== 'frozen' && (
+                              {m.status !== 'frozen' && Boolean(m.activePackageId) && (
                                 <Button
                                   size="sm"
                                   variant="destructive"
@@ -774,7 +755,7 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
 
                       {/* Quick Action buttons */}
                       <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                        {(verifiedMember.status === 'expired' || verifiedMember.status === 'expiring_soon') && (
+                        {Boolean(verifiedMember.activePackageId) && (verifiedMember.status === 'expired' || verifiedMember.status === 'expiring_soon') && (
                           <Button
                             type="button"
                             className="flex-1 font-bold bg-primary text-primary-foreground shadow-sm"
@@ -934,12 +915,23 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-[1.4fr_1fr_1fr]">
-                  <Field label="Email Nhận Hóa Đơn">
+                  <Field label="Email hội viên *">
                     <Input
                       type="email"
+                      required
                       placeholder="email@example.com"
                       value={newMemberForm.email}
                       onChange={(e) => setNewMemberForm({ ...newMemberForm, email: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Mật khẩu hội viên *">
+                    <Input
+                      type="password"
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      value={newMemberForm.password}
+                      onChange={(e) => setNewMemberForm({ ...newMemberForm, password: e.target.value })}
                     />
                   </Field>
                   <Field label="Giới tính">
@@ -966,7 +958,7 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                 <div className="grid gap-2">
                   <label className="text-sm font-medium text-foreground">Chọn Gói Tập / Khóa Học Đăng Ký</label>
                   <div className="grid gap-2">
-                    {packages.map(pkg => {
+                    {packages.filter(pkg => pkg.type === 'standard_gym').map(pkg => {
                       const isSelected = newMemberForm.selectedPackageId === pkg.id;
                       return (
                         <button
@@ -991,24 +983,8 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
                   </div>
                 </div>
 
-                <Field label="Chỉ định Huấn Luyện Viên Cá Nhân (Tùy chọn)">
-                  <Select
-                    value={newMemberForm.selectedCoachId}
-                    onValueChange={(v) => setNewMemberForm({ ...newMemberForm, selectedCoachId: v })}
-                  >
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {coaches.map(c => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name} ({c.rank.toUpperCase()}) - Chuyên: {c.specialties[0]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-
-                <Button type="submit" size="lg" className="w-full">
-                  <CreditCard /> Tiến Hành Thu Tiền & Kích Hoạt Gói
+                <Button type="submit" size="lg" className="w-full" disabled={posBusy}>
+                  <CreditCard /> {posBusy ? 'Đang tạo đơn PayOS...' : 'Tạo đơn thanh toán PayOS'}
                 </Button>
               </form>
             </CardContent>
@@ -1283,18 +1259,35 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
         </div>
       )}
 
-      {/* Payment Modal if initiated */}
-      {pendingPaymentData && (
-        <PaymentModal
-          isOpen={isPaymentOpen}
-          onClose={() => setIsPaymentOpen(false)}
-          memberId={pendingPaymentData.memberId}
-          memberName={pendingPaymentData.memberName}
-          memberPhone={pendingPaymentData.memberPhone}
-          items={pendingPaymentData.items}
-          onPaymentSuccess={handlePaymentSuccess}
-        />
-      )}
+      <Dialog open={Boolean(checkout)} onOpenChange={(open) => { if (!open) setCheckout(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Thanh toán gói Gym qua PayOS</DialogTitle>
+            <DialogDescription>{checkout?.memberName} · {checkout?.packageName}</DialogDescription>
+          </DialogHeader>
+          {checkout && (
+            <div className="grid gap-4">
+              <p className="text-sm">Mã đơn: <strong>{checkout.orderCode}</strong></p>
+              <div className="rounded-lg border p-3 text-sm">
+                {checkoutStatus === 'PAID'
+                  ? 'PayOS đã xác nhận thanh toán. Gói được kích hoạt hoặc xếp hàng theo thứ tự thanh toán.'
+                  : checkoutStatus === 'PAID_REVIEW'
+                    ? 'Đơn đã nhận tiền nhưng cần hỗ trợ xử lý; chưa cấp quyền gói.'
+                    : checkoutStatus === 'CANCELLED' || checkoutStatus === 'EXPIRED'
+                      ? 'Đơn thanh toán đã bị hủy hoặc hết hạn. Gói chưa được kích hoạt.'
+                      : 'Đang chờ PayOS xác nhận thanh toán. Chưa kích hoạt gói.'}
+              </div>
+              {checkoutError && <Alert variant="destructive"><AlertDescription>{checkoutError}</AlertDescription></Alert>}
+              {checkoutStatus === 'PENDING' && (
+                <>
+                  <Button asChild><a href={checkout.checkoutUrl} target="_blank" rel="noopener noreferrer">Mở trang thanh toán PayOS</a></Button>
+                  <Button variant="outline" onClick={() => void refreshCheckout(checkout.orderCode)}>Kiểm tra trạng thái</Button>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </StaffPage>
   );
 };

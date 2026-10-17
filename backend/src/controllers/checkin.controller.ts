@@ -48,7 +48,7 @@ export class CheckInController {
         await lockGymMember(tx, userId);
         await reconcileGymMembershipStates(tx, userId, new Date());
 
-        let membership = await tx.membership.findFirst({
+        const membership = await tx.membership.findFirst({
           where: {
             userId,
             status: 'ACTIVE',
@@ -59,48 +59,6 @@ export class CheckInController {
           orderBy: { endDate: 'asc' },
           include: { package: true },
         });
-
-        if (!membership) {
-          const legacy = await tx.membership.findFirst({
-            where: {
-              userId,
-              status: 'COMPLETED',
-              startDate: { lte: currentDate },
-              endDate: { gte: currentDate },
-              package: { type: 'MEMBERSHIP' },
-            },
-            orderBy: { endDate: 'asc' },
-            include: { package: true },
-          });
-          if (legacy) {
-            const overlappingPending = await tx.membership.findFirst({
-              where: {
-                userId,
-                status: 'PENDING_ACTIVATION',
-                package: { type: 'MEMBERSHIP' },
-                startDate: { lte: legacy.endDate },
-                endDate: { gte: currentDate },
-              },
-              select: { id: true },
-            });
-            if (!overlappingPending) {
-              const lastOrder = await tx.membership.aggregate({
-                where: { userId, isGymMembership: true },
-                _max: { activationOrder: true },
-              });
-              membership = await tx.membership.update({
-                where: { id: legacy.id },
-                data: {
-                  status: 'ACTIVE',
-                  isGymMembership: true,
-                  activationOrder: legacy.activationOrder ?? (lastOrder._max.activationOrder ?? 0) + 1,
-                  activatedAt: new Date(),
-                },
-                include: { package: true },
-              });
-            }
-          }
-        }
 
         if (!membership) return null;
         const checkIn = await tx.checkIn.create({

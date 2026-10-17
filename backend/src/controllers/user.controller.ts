@@ -45,6 +45,15 @@ export class UserController {
             weight: true,
             role: true,
             status: true,
+            memberships: {
+              where: { status: { in: ['ACTIVE', 'EXPIRED'] }, package: { type: 'MEMBERSHIP' } },
+              orderBy: { createdAt: 'desc' },
+              select: {
+                id: true, packageId: true, status: true, startDate: true, endDate: true,
+                remainingSessions: true,
+                package: { select: { name: true, type: true, trialPtSessions: true } },
+              },
+            },
             createdAt: true,
             updatedAt: true
           },

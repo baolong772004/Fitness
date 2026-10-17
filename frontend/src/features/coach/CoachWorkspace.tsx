@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { CalendarDays, Check, Clock3, MessageSquare, Plus, QrCode, RefreshCw, Save, UserRound, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { CalendarDays, LoaderCircle, MessageSquare, QrCode, RefreshCw, Save, SendHorizontal, UserRound } from 'lucide-react';
 import { api, type ApiBooking, type ApiCoachProfile, type ApiCoachSchedule, type ApiGroupClassSchedule, type ApiProgressLog } from '../../services/api';
 import type { CoachPlanDraft, CoachTraineeMembership, CoachWorkoutPlan } from '../../services/api/pt.api';
 import { CoachPlanEditor, CoachSavedPlan } from './CoachPlanEditor';
+import { CoachAvailabilityGrid } from './CoachAvailabilityGrid';
 import { StaffPage } from '@/components/staff/StaffKit';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,14 +13,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type CoachProfile = ApiCoachProfile & { schedules: ApiCoachSchedule[] };
-type ScheduleRow = { dayOfWeek: number; startTime: string; endTime: string; isAvailable: boolean };
 type Message = { id: number; senderId: number; content: string; createdAt: string; sender: { fullName: string } };
 
 const gymDay = (value: string | Date) => new Date(new Date(value).getTime() + 7 * 3600000).toISOString().slice(0, 10);
 const today = () => gymDay(new Date());
 const gymTime = (value: string) => new Date(value).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' });
 const errorText = (error: unknown) => error instanceof Error ? error.message : 'Không thể tải dữ liệu. Vui lòng thử lại.';
-const dayName = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'];
 
 const statusText: Record<string, string> = {
   PENDING: 'Chờ xác nhận', UPCOMING: 'Chờ xác nhận', CONFIRMED: 'Đã xác nhận',
@@ -43,9 +42,6 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   const [classQr, setClassQr] = useState<{ schedule: ApiGroupClassSchedule; image: string } | null>(null);
   const [classAttendees, setClassAttendees] = useState<Array<{ id: number; status: 'BOOKED' | 'CHECKED_IN'; user: { id: number; fullName: string } }>>([]);
   const [nowMs, setNowMs] = useState(Date.now());
-  const [slots, setSlots] = useState<Array<{ startTime: string; endTime: string; status: string }>>([]);
-  const [slotVersion, setSlotVersion] = useState(0);
-  const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
   const [date, setDate] = useState(today);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -61,6 +57,9 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   const [messages, setMessages] = useState<Message[]>([]);
   const [canSend, setCanSend] = useState(false);
   const [draft, setDraft] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const [finishBooking, setFinishBooking] = useState<ApiBooking | null>(null);
   const [sessionNotes, setSessionNotes] = useState('');
   const [exerciseName, setExerciseName] = useState('');
@@ -79,7 +78,6 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
     ]);
     if (results[0].status === 'fulfilled') {
       setProfile(results[0].value);
-      setSchedules(results[0].value.schedules.map(({ dayOfWeek, startTime, endTime, isAvailable }) => ({ dayOfWeek, startTime, endTime, isAvailable: isAvailable !== false })));
       setProfileError('');
     } else {
       setProfileError(errorText(results[0].reason));
@@ -133,11 +131,10 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
       .then(setProgress).catch(error => setNotice(errorText(error)));
   }, [selectedMemberId]);
   useEffect(() => {
-    if (activeTab !== 'availability' || !currentUser || !profile || profile.status !== 'ACTIVE') return;
-    void api.pt.getTrainerSlots(currentUser.id, date)
-      .then(result => setSlots(result.slots))
-      .catch(error => setNotice(errorText(error)));
-  }, [activeTab, date, currentUser?.id, profile?.id, profile?.status, slotVersion]);
+    if (chatBooking && !chatLoading) {
+      chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight });
+    }
+  }, [chatBooking?.id, chatLoading, messages.length]);
 
   const run = async (action: () => Promise<unknown>, success: string, refresh = true) => {
     setBusy(true);
@@ -173,28 +170,34 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
     setChatBooking(booking);
     setMessages([]);
     setDraft('');
+    setCanSend(false);
+    setChatError('');
+    setChatLoading(true);
     try {
       const result = await api.pt.getBookingMessages(booking.id);
       setMessages(result.data);
       setCanSend(result.canSend);
     } catch (error) {
-      setChatBooking(null);
-      setNotice(errorText(error));
+      setChatError(errorText(error));
+    } finally {
+      setChatLoading(false);
     }
   };
 
   const sendMessage = async () => {
-    if (!chatBooking || !draft.trim()) return;
-    const sent = await run(() => api.pt.sendBookingMessage(chatBooking.id, draft.trim()), 'Đã gửi tin nhắn.', false);
-    if (sent) {
+    if (!chatBooking || !canSend || busy || !draft.trim()) return;
+    setBusy(true);
+    setChatError('');
+    try {
+      await api.pt.sendBookingMessage(chatBooking.id, draft.trim());
       setDraft('');
-      try {
-        const result = await api.pt.getBookingMessages(chatBooking.id);
-        setMessages(result.data);
-        setCanSend(result.canSend);
-      } catch (error) {
-        setNotice(errorText(error));
-      }
+      const result = await api.pt.getBookingMessages(chatBooking.id);
+      setMessages(result.data);
+      setCanSend(result.canSend);
+    } catch (error) {
+      setChatError(errorText(error));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -234,11 +237,6 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
     }
   };
 
-  const saveAvailability = async () => {
-    const saved = await run(() => api.pt.updateCoachAvailability(schedules), 'Đã lưu lịch rảnh cho Coach.');
-    if (saved) setSlotVersion(value => value + 1);
-  };
-
   const savePlan = (draft: CoachPlanDraft) =>
     run(() => api.pt.createCoachPlan(draft), 'Đã lưu giáo án mẫu.');
 
@@ -275,7 +273,6 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   };
 
   const dayBookings = bookings.filter(booking => gymDay(booking.startTime) === date).sort((a, b) => a.startTime.localeCompare(b.startTime));
-  const pending = bookings.filter(booking => ['PENDING', 'UPCOMING'].includes(booking.status) && new Date(booking.startTime) > new Date());
   const selectedTrainee = trainees.find(row => row.userId === selectedMemberId);
   const assignableTrainees = [...new Map(trainees.map(row => [row.user.id, row.user])).values()];
 
@@ -298,15 +295,6 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
         {notice && <div role="status" className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-foreground">{notice}</div>}
 
         {activeTab === 'schedule' && <div className="space-y-5">
-          {pending.length > 0 && <Card><CardHeader><CardTitle>Yêu cầu đặt lịch chờ duyệt ({pending.length})</CardTitle></CardHeader><CardContent className="space-y-3">
-            {pending.map(booking => <div key={booking.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-              <div className="text-sm"><strong>{booking.member?.fullName || `Hội viên #${booking.memberId}`}</strong><p className="text-muted-foreground">{gymDay(booking.startTime)} · {gymTime(booking.startTime)}–{gymTime(booking.endTime)}</p></div>
-              <div className="flex gap-2">
-                <Button size="sm" disabled={busy} onClick={() => void run(() => api.pt.updateBookingStatus(booking.id, 'CONFIRMED'), 'Đã xác nhận lịch PT.')}><Check className="size-4" /> Xác nhận</Button>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => void run(() => api.pt.updateBookingStatus(booking.id, 'REJECTED'), 'Đã từ chối lịch PT.')}><X className="size-4" /> Từ chối</Button>
-              </div>
-            </div>)}
-          </CardContent></Card>}
           <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle className="flex items-center gap-2"><CalendarDays className="size-5" /> Lịch dạy PT</CardTitle><CardDescription>Chọn ngày để xem ca PT và lớp nhóm được phân công.</CardDescription></div><Input type="date" className="w-44" value={date} onChange={event => setDate(event.target.value)} /></div></CardHeader>
             <CardContent className="space-y-3">
               {dayBookings.length === 0 && <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Không có buổi PT trong ngày này.</p>}
@@ -387,20 +375,9 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
           </CardContent></Card>
         </div>}
 
-        {activeTab === 'availability' && <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
-          <Card><CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="size-5" /> Lịch rảnh hàng tuần</CardTitle><CardDescription>Các ca dưới đây quyết định khung giờ hội viên có thể đặt PT.</CardDescription></CardHeader><CardContent className="space-y-3">
-            {schedules.length === 0 && <p className="text-sm text-muted-foreground">Chưa có ca rảnh nào.</p>}
-            {schedules.map((row, index) => <div key={index} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
-              <select className="h-9 rounded-md border bg-background px-2 text-sm" value={row.dayOfWeek} onChange={e => setSchedules(rows => rows.map((item, i) => i === index ? { ...item, dayOfWeek: Number(e.target.value) } : item))}>{dayName.map((name, i) => <option key={i} value={i + 1}>{name}</option>)}</select>
-              <Input type="time" className="w-32" value={row.startTime} onChange={e => setSchedules(rows => rows.map((item, i) => i === index ? { ...item, startTime: e.target.value } : item))} />
-              <span>–</span><Input type="time" className="w-32" value={row.endTime} onChange={e => setSchedules(rows => rows.map((item, i) => i === index ? { ...item, endTime: e.target.value } : item))} />
-              <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={row.isAvailable} onChange={e => setSchedules(rows => rows.map((item, i) => i === index ? { ...item, isAvailable: e.target.checked } : item))} /> Mở đặt lịch</label>
-              <Button size="icon" variant="outline" aria-label="Xóa ca" onClick={() => setSchedules(rows => rows.filter((_, i) => i !== index))}><X className="size-4" /></Button>
-            </div>)}
-            <div className="flex gap-2"><Button variant="outline" disabled={schedules.length >= 28} onClick={() => setSchedules(rows => [...rows, { dayOfWeek: 1, startTime: '08:00', endTime: '09:00', isAvailable: true }])}><Plus className="size-4" /> Thêm ca</Button><Button disabled={busy || !profile} onClick={() => void saveAvailability()}><Save className="size-4" /> Lưu lịch rảnh</Button></div>
-          </CardContent></Card>
-          <div className="space-y-5"><Card><CardHeader><CardTitle>Hồ sơ PT</CardTitle></CardHeader><CardContent className="space-y-2 text-sm"><p>Chuyên môn: {profile?.specialization || 'Chưa cập nhật'}</p><p>Kinh nghiệm: {profile?.experience ?? '—'} năm</p><p>Giá mỗi buổi: {profile ? `${Number(profile.hourlyRate).toLocaleString('vi-VN')} đ` : 'Chưa cập nhật'}</p><p className="text-muted-foreground">Giá và thông tin chuyên môn do Admin cấu hình.</p></CardContent></Card>
-          <Card><CardHeader><CardTitle>Ca có thể đặt</CardTitle><CardDescription>Kiểm tra các khung giờ thực tế theo ngày.</CardDescription></CardHeader><CardContent className="space-y-2"><Input type="date" value={date} onChange={event => setDate(event.target.value)} />{slots.length === 0 && <p className="text-sm text-muted-foreground">Ngày này chưa có ca đặt được.</p>}{slots.map((slot, index) => <div key={`${slot.startTime}-${index}`} className="flex justify-between rounded-lg border p-2 text-sm"><span>{slot.startTime}–{slot.endTime}</span><Badge variant="outline">{slot.status === 'AVAILABLE' ? 'Còn trống' : slot.status === 'BOOKED' ? 'Đã đặt' : 'Đã qua'}</Badge></div>)}</CardContent></Card></div>
+        {activeTab === 'availability' && <div className="space-y-5">
+          <CoachAvailabilityGrid onSaved={() => { void load(); }} />
+          <Card><CardHeader><CardTitle>Hồ sơ PT</CardTitle><CardDescription>Admin cấu hình thông tin Coach; bạn tự chọn ca rảnh trong giờ hoạt động ở lịch phía trên.</CardDescription></CardHeader><CardContent className="flex flex-wrap gap-x-8 gap-y-2 text-sm"><p>Chuyên môn: {profile?.specialization || 'Chưa cập nhật'}</p><p>Kinh nghiệm: {profile?.experience ?? '—'} năm</p><p>Giá mỗi buổi: {profile ? `${Number(profile.hourlyRate).toLocaleString('vi-VN')} đ` : 'Chưa cập nhật'}</p></CardContent></Card>
         </div>}
       </div>
 
@@ -423,7 +400,58 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
         </DialogContent>
       </Dialog>
       <Dialog open={!!qr} onOpenChange={open => { if (!open) setQr(null); }}><DialogContent><DialogHeader><DialogTitle>Mã QR buổi PT</DialogTitle></DialogHeader><div className="grid justify-items-center gap-3 py-4">{qr && <><p className="text-sm">{qr.booking.member?.fullName} · {gymTime(qr.booking.startTime)}</p><img src={qr.image} alt="Mã QR điểm danh PT" className="size-56" /><p className="text-xs text-muted-foreground">Mã có hiệu lực 90 giây. Hội viên quét bằng ứng dụng mobile.</p></>}</div></DialogContent></Dialog>
-      <Dialog open={!!chatBooking} onOpenChange={open => { if (!open) setChatBooking(null); }}><DialogContent><DialogHeader><DialogTitle>Nhắn tin với {chatBooking?.member?.fullName}</DialogTitle></DialogHeader><div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border p-3">{messages.length === 0 && <p className="text-sm text-muted-foreground">Chưa có tin nhắn.</p>}{messages.map(message => <div key={message.id} className="text-sm"><strong>{message.sender.fullName}: </strong>{message.content}</div>)}</div>{canSend ? <div className="flex gap-2"><Input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void sendMessage(); }} placeholder="Nhập tin nhắn" maxLength={1000} /><Button disabled={busy || !draft.trim()} onClick={() => void sendMessage()}>Gửi</Button></div> : <p className="text-sm text-muted-foreground">Đã hết thời gian nhắn tin của buổi PT.</p>}</DialogContent></Dialog>
+      <Dialog open={!!chatBooking} onOpenChange={open => { if (!open) setChatBooking(null); }}>
+        <DialogContent className="grid h-[min(680px,calc(100dvh-2rem))] w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-2xl border-border/70 bg-card p-0 shadow-2xl sm:max-w-xl">
+          <DialogHeader className="border-b border-border/70 px-5 py-5 pr-12 text-left sm:px-6 sm:pr-12">
+            <div className="flex items-center gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary" aria-hidden="true">
+                {chatBooking?.member?.fullName?.trim().charAt(0).toUpperCase() || 'H'}
+              </div>
+              <div className="min-w-0">
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Hội thoại PT</p>
+                <DialogTitle className="truncate text-lg leading-tight">{chatBooking?.member?.fullName || 'Hội viên'}</DialogTitle>
+                {chatBooking && <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarDays className="size-3.5" aria-hidden="true" /> Buổi tập {new Date(chatBooking.startTime).toLocaleDateString('vi-VN', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric' })} · {gymTime(chatBooking.startTime)}–{gymTime(chatBooking.endTime)}</p>}
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div ref={chatScrollRef} role="log" aria-label="Lịch sử tin nhắn PT" className="min-h-0 space-y-4 overflow-y-auto overscroll-contain bg-muted/40 px-4 py-5 sm:px-6">
+            {chatLoading ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground"><LoaderCircle className="size-6 animate-spin text-primary" aria-hidden="true" />Đang tải tin nhắn...</div>
+            ) : messages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+                <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><MessageSquare className="size-7" aria-hidden="true" /></div>
+                <div><p className="font-semibold">Chưa có tin nhắn</p><p className="mt-1 text-sm text-muted-foreground">Bắt đầu cuộc trò chuyện với hội viên tại đây.</p></div>
+              </div>
+            ) : messages.map((message, index) => {
+              const isMine = Number(message.senderId) === Number(currentUser?.id);
+              const showDay = index === 0 || gymDay(message.createdAt) !== gymDay(messages[index - 1].createdAt);
+              return <React.Fragment key={message.id}>
+                {showDay && <div className="flex items-center gap-3 py-1"><span className="h-px flex-1 bg-border/70" /><span className="text-[11px] font-medium text-muted-foreground">{new Date(message.createdAt).toLocaleDateString('vi-VN', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric' })}</span><span className="h-px flex-1 bg-border/70" /></div>}
+                <div className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] space-y-1 sm:max-w-[75%] ${isMine ? 'text-right' : 'text-left'}`}>
+                    {!isMine && <p className="px-1 text-xs font-medium text-muted-foreground">{message.sender.fullName}</p>}
+                    <div className={`inline-block max-w-full whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-left text-sm leading-relaxed shadow-sm ${isMine ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md border border-border/70 bg-card text-foreground'}`}>{message.content}</div>
+                    <p className="px-1 text-[11px] text-muted-foreground">{gymTime(message.createdAt)}</p>
+                  </div>
+                </div>
+              </React.Fragment>;
+            })}
+          </div>
+
+          <div className="border-t border-border/70 bg-card px-4 py-4 sm:px-6">
+            {chatError && <p role="alert" className="mb-3 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{chatError}</p>}
+            {canSend ? (
+              <form className="flex items-center gap-2" onSubmit={event => { event.preventDefault(); void sendMessage(); }}>
+                <Input aria-label="Nhập tin nhắn" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Viết tin nhắn cho hội viên..." maxLength={1000} className="h-11 rounded-xl bg-background px-4" />
+                <Button type="submit" disabled={busy || !draft.trim()} className="h-11 shrink-0 rounded-xl px-4"><SendHorizontal className="size-4" aria-hidden="true" /><span className="hidden sm:inline">Gửi</span><span className="sr-only sm:hidden">Gửi tin nhắn</span></Button>
+              </form>
+            ) : !chatLoading && (chatError ? (
+              <Button variant="outline" className="w-full" onClick={() => { if (chatBooking) void openChat(chatBooking); }}>Thử tải lại tin nhắn</Button>
+            ) : <p className="text-center text-sm text-muted-foreground">Đã hết thời gian nhắn tin của buổi PT.</p>)}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!finishBooking} onOpenChange={open => { if (!open) setFinishBooking(null); }}><DialogContent><DialogHeader><DialogTitle>{finishBooking?.status === 'COMPLETED' ? 'Ghi nhật ký buổi PT' : 'Kết thúc buổi PT'}</DialogTitle></DialogHeader><div className="space-y-3"><Textarea rows={4} placeholder="Nhận xét buổi tập" value={sessionNotes} onChange={e => setSessionNotes(e.target.value)} /><div className="grid grid-cols-3 gap-2"><Input placeholder="Bài tập" value={exerciseName} onChange={e => setExerciseName(e.target.value)} /><Input type="number" placeholder="Số hiệp" value={sets} onChange={e => setSets(e.target.value)} /><Input type="number" placeholder="Số lần" value={reps} onChange={e => setReps(e.target.value)} /></div><p className="text-xs text-muted-foreground">Kết thúc buổi sẽ trừ 1 lượt PT. Nhật ký có thể ghi sau nếu chưa có nội dung.</p></div><DialogFooter><Button disabled={busy} onClick={() => void saveSession()}>{finishBooking?.status === 'COMPLETED' ? 'Lưu nhật ký' : 'Kết thúc và lưu'}</Button></DialogFooter></DialogContent></Dialog>
       <Dialog open={!!absenceBooking} onOpenChange={open => { if (!open) setAbsenceBooking(null); }}><DialogContent><DialogHeader><DialogTitle>Coach báo vắng buổi PT</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">Hội viên được đặt học bù trong 7 ngày và không bị trừ buổi.</p><Textarea rows={3} placeholder="Lý do báo vắng" value={absenceReason} onChange={e => setAbsenceReason(e.target.value)} /><DialogFooter><Button disabled={busy} onClick={() => { if (!absenceBooking) return; void run(() => api.pt.markAbsent(absenceBooking.id, absenceReason), 'Đã báo vắng và cấp quyền học bù.').then(saved => { if (saved) setAbsenceBooking(null); }); }}>Xác nhận báo vắng</Button></DialogFooter></DialogContent></Dialog>
     </StaffPage>

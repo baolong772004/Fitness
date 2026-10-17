@@ -1,5 +1,5 @@
 import prisma from '../config/prisma.js';
-import { lockPtMembership } from './ptBooking.service.js';
+import { debitPtSession, lockPtMembership } from './ptBooking.service.js';
 
 const NO_SHOW_GRACE_MS = 15 * 60 * 1000;
 const SCAN_INTERVAL_MS = 60 * 1000;
@@ -47,20 +47,7 @@ async function markPtNoShow(bookingId: number, cutoff: Date) {
     if (claimed.count === 0) return null;
 
     const booking = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
-    const updated = await tx.membership.updateMany({
-      where: { id: current.membershipId, remainingSessions: { gt: 0 } },
-      data: { remainingSessions: { decrement: 1 } },
-    });
-    if (updated.count !== 1) throw new Error(`PT booking ${bookingId} has no remaining session to debit`);
-    const membership = await tx.membership.findUniqueOrThrow({
-          where: { id: current.membershipId },
-          select: { remainingSessions: true, package: { select: { type: true } } },
-    });
-    if (membership.remainingSessions === 0 && membership.package.type === 'PT') {
-      await tx.membership.update({
-        where: { id: current.membershipId }, data: { status: 'COMPLETED' },
-      });
-    }
+    await debitPtSession(tx, current.membershipId);
 
     await tx.notification.create({
       data: {
