@@ -66,8 +66,10 @@ export default function App() {
             mappedRole = 'receptionist';
           } else if (r === 'COACH' || r === 'TRAINER' || r === 'PT' || r === 'HLV') {
             mappedRole = 'coach';
+          } else if (r === 'MEMBER' || r === 'HOI_VIEN' || r === 'CUSTOMER' || r === 'USER') {
+            mappedRole = 'member';
           } else {
-            mappedRole = 'guest';
+            mappedRole = 'member';
           }
 
           const formatted: User = {
@@ -105,6 +107,7 @@ export default function App() {
       case 'admin':
         setActiveTab('analytics');
         break;
+      case 'member':
       case 'guest':
         setActiveTab('home');
         break;
@@ -167,7 +170,7 @@ export default function App() {
 
       {/* Main Content Column */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <main style={{ flex: 1 }}>
+        <main style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }}>
         {viewMode === 'settings' ? (
           <SettingsPage
             currentUser={currentUser}
@@ -181,6 +184,7 @@ export default function App() {
               <ReceptionistDashboard
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
+                onLogout={handleLogout}
               />
             )}
 
@@ -196,6 +200,7 @@ export default function App() {
                 activeTab="checkin"
                 onTabChange={setActiveTab}
                 autoOpenScanner
+                onLogout={handleLogout}
               />
             ) : currentRole === 'admin' && (
               <AdminDashboard
@@ -204,7 +209,7 @@ export default function App() {
               />
             )}
 
-            {currentRole === 'guest' && (
+            {(currentRole === 'guest' || currentRole === 'member') && (
               <GuestLandingPage
                 activeTab={activeTab}
                 onTabChange={setActiveTab}

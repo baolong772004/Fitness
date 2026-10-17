@@ -67,8 +67,8 @@ export function PageHeader({ icon: Icon, title, description, actions }: PageHead
 
 export function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn('grid gap-1.5', className)}>
-      <label className="text-sm font-medium leading-none text-foreground">{label}</label>
+    <div className={cn('flex flex-col gap-1.5 min-w-0', className)}>
+      <label className="text-sm font-medium leading-snug text-foreground">{label}</label>
       {children}
     </div>
   )
@@ -76,5 +76,5 @@ export function Field({ label, children, className }: { label: string; children:
 
 /** Wrapper that gives every staff dashboard the same page padding / width. */
 export function StaffPage({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 p-6">{children}</div>
+  return <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 p-6 min-w-0">{children}</div>
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api, ApiPackage, ApiGroupClassSchedule, ApiCoachProfile } from '../../services/api';
+import { api, ApiPackage, ApiGroupClassSchedule, ApiCoachProfile, tokenStorage } from '../../services/api';
 import type { MemberScheduleEvent } from '../../services/api/member.api';
 import { soundEffects } from '../../services/audioService';
 import { WebcamQrScanner } from '../../components/common/WebcamQrScanner';
@@ -100,15 +100,19 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
       setIsLoadingPackages(false);
     }
 
-    try {
-      const trainersRes = await api.adminTrainers.getTrainers();
-      if (trainersRes && trainersRes.data) {
-        setLiveTrainers(trainersRes.data);
-      } else {
+    const token = tokenStorage.getAccessToken();
+    if (token) {
+      try {
+        const trainersRes = await api.adminTrainers.getTrainers();
+        if (trainersRes && trainersRes.data) {
+          setLiveTrainers(trainersRes.data);
+        } else {
+          setLiveTrainers([]);
+        }
+      } catch (e) {
         setLiveTrainers([]);
       }
-    } catch (e) {
-      console.warn('API trainers fetch warning:', e);
+    } else {
       setLiveTrainers([]);
     }
   };

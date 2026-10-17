@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../../types';
-import { api, ApiUser } from '../../services/api';
+import { api, ApiUser, tokenStorage, STORAGE_KEYS } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import { 
   X, 
@@ -35,8 +35,10 @@ export function mapBackendUserToFrontend(apiUser: ApiUser): User {
     mappedRole = 'receptionist';
   } else if (role === 'COACH' || role === 'TRAINER' || role === 'PT' || role === 'HLV') {
     mappedRole = 'coach';
+  } else if (role === 'MEMBER' || role === 'HOI_VIEN' || role === 'CUSTOMER' || role === 'USER') {
+    mappedRole = 'member';
   } else {
-    mappedRole = 'guest';
+    mappedRole = 'member';
   }
 
   return {
@@ -90,9 +92,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [authError, setAuthError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Front desk device mode state
+  const [isStaffDeskMode, setIsStaffDeskMode] = useState<boolean>(() => {
+    return localStorage.getItem('aura_is_staff_desk') === 'true';
+  });
+  const [deviceToken, setDeviceToken] = useState<string>(() => {
+    return localStorage.getItem('aura_desk_device_token') || 'DESK-POS-DEFAULT-001';
+  });
+
   if (!isOpen) return null;
 
-  // Handle standard login via Backend REST API
+  // Handle login via Backend REST API (Supports both Member & Staff Front Desk)
   const handleSubmitLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -100,21 +110,63 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsLoading(true);
 
     try {
-      const data = await api.auth.login({
-        email: loginIdentifier.trim(),
-        password: loginPassword
-      });
+      if (isStaffDeskMode) {
+        // GIAI ĐOẠN 1: ĐĂNG NHẬP & TỰ ĐỘNG CHẤM CÔNG (Clock-in)
+        const staffRes = await api.staff.login({
+          email: loginIdentifier.trim(),
+          password: loginPassword,
+          deviceToken: deviceToken.trim()
+        });
 
-      soundEffects.playSuccessBeep();
-      setSuccessMsg('Đăng nhập thành công!');
-      const frontendUser = mapBackendUserToFrontend(data.user);
-      setTimeout(() => {
-        onLoginSuccess(frontendUser);
-        onClose();
-      }, 500);
+        // Save tokens & shift
+        tokenStorage.setTokens(staffRes.data.accessToken);
+        localStorage.setItem('aura_current_shift', JSON.stringify(staffRes.data.shift));
+        localStorage.setItem('aura_current_device', JSON.stringify(staffRes.data.device));
+        localStorage.setItem('aura_desk_device_token', deviceToken.trim());
+        localStorage.setItem('aura_is_staff_desk', 'true');
+        localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(staffRes.data.user));
+
+        soundEffects.playSuccessBeep();
+        setSuccessMsg(`Đăng nhập máy quầy thành công! Ca trực [${staffRes.data.shift.shiftCode}] đã được kích hoạt (Clock-in).`);
+
+        const frontendUser = mapBackendUserToFrontend(staffRes.data.user);
+        setTimeout(() => {
+          onLoginSuccess(frontendUser);
+          onClose();
+        }, 500);
+      } else {
+        // Standard user login
+        const data = await api.auth.login({
+          email: loginIdentifier.trim(),
+          password: loginPassword
+        });
+
+        // Nếu là role lễ tân / staff / admin đăng nhập thông thường, tự động cấu hình máy quầy và kích hoạt ca trực
+        const roleUpper = (data.user?.role || '').toUpperCase();
+        if (['STAFF', 'RECEPTIONIST', 'ADMIN'].includes(roleUpper)) {
+          localStorage.setItem('aura_is_staff_desk', 'true');
+          localStorage.setItem('aura_desk_device_token', deviceToken.trim() || 'DESK-POS-DEFAULT-001');
+          try {
+            const shiftRes = await api.staff.getCurrentShift();
+            if (shiftRes?.data) {
+              localStorage.setItem('aura_current_shift', JSON.stringify(shiftRes.data));
+            }
+          } catch (e) {
+            console.warn('Lỗi kích hoạt ca trực tự động:', e);
+          }
+        }
+
+        soundEffects.playSuccessBeep();
+        setSuccessMsg('Đăng nhập thành công!');
+        const frontendUser = mapBackendUserToFrontend(data.user);
+        setTimeout(() => {
+          onLoginSuccess(frontendUser);
+          onClose();
+        }, 500);
+      }
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      setAuthError(err.message || 'Đăng nhập không thành công. Vui lòng kiểm tra lại tài khoản.');
+      setAuthError(err.message || 'Đăng nhập không thành công. Vui lòng kiểm tra lại tài khoản hoặc thiết bị quầy.');
     } finally {
       setIsLoading(false);
     }
@@ -374,6 +426,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     placeholder="••••••••"
                   />
                 </div>
+              </div>
+
+              {/* Front Desk Workstation Mode Toggle */}
+              <div style={{
+                background: isStaffDeskMode ? 'rgba(var(--color-primary-rgb), 0.08)' : 'var(--bg-card)',
+                border: isStaffDeskMode ? '1.5px solid var(--color-primary)' : '1px solid var(--aura-border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '10px 14px',
+                transition: 'all 0.2s ease'
+              }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <input
+                    type="checkbox"
+                    checked={isStaffDeskMode}
+                    onChange={(e) => {
+                      setIsStaffDeskMode(e.target.checked);
+                      localStorage.setItem('aura_is_staff_desk', String(e.target.checked));
+                    }}
+                    style={{ accentColor: 'var(--color-primary)', width: 16, height: 16 }}
+                  />
+                  <span>🖥️ Máy quầy Lễ tân (Front Desk Workstation)</span>
+                </label>
+
+                {isStaffDeskMode && (
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed var(--aura-border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Mã thiết bị quầy (Device Token):</span>
+                      <span style={{ fontSize: 10, color: 'var(--color-primary)', fontWeight: 600 }}>Tự động Clock-in</span>
+                    </div>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ fontSize: 12, padding: '6px 10px', height: 32 }}
+                      value={deviceToken}
+                      onChange={(e) => setDeviceToken(e.target.value)}
+                      placeholder="DESK-POS-DEFAULT-001"
+                    />
+                    <p style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4, margin: '4px 0 0' }}>
+                      * Chỉ máy tính quầy lễ tân đã được phê duyệt mới được cấp quyền đăng nhập & mở ca.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <button

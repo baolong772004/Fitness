@@ -56,31 +56,63 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (activeTab === 'subscriptions') {
-      setIsLoadingSubs(true);
-      api.subscriptions.getMySubscriptions()
-        .then(subs => {
-          setMySubscriptions(subs || []);
-        })
-        .catch(err => {
-          console.warn('Lỗi tải gói tập cá nhân:', err);
-          setMySubscriptions([]);
-        })
-        .finally(() => {
-          setIsLoadingSubs(false);
-        });
+  // 3 mục "Gói tập & thẻ hội viên", "Lịch tập của tôi", "PT & Tiến độ" CHỈ hiển thị với role member
+  const isMember = (() => {
+    if (!currentUser) return false;
+    const roleLower = (currentUser.role || '').toLowerCase();
+    // Các vai trò nhân viên/quản lý (admin, receptionist, coach, staff) không phải member
+    if (['admin', 'receptionist', 'coach', 'staff'].includes(roleLower)) {
+      return false;
     }
-  }, [activeTab]);
+    // Kiểm tra thêm thông tin role từ backend trong localStorage nếu có
+    try {
+      const raw = localStorage.getItem('aura_current_user');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const rawRole = (parsed.role || '').toUpperCase();
+        if (['ADMIN', 'RECEPTIONIST', 'STAFF', 'COACH'].includes(rawRole)) {
+          return false;
+        }
+        if (rawRole === 'MEMBER') {
+          return true;
+        }
+      }
+    } catch {}
+
+    return roleLower === 'member';
+  })();
+
+  // Nếu người dùng không phải role member nhưng đang ở tab chỉ dành cho member, tự động quay về tab profile
+  useEffect(() => {
+    if (!isMember && (activeTab === 'subscriptions' || activeTab === 'schedule' || activeTab === 'fitness')) {
+      setActiveTab('profile');
+    }
+  }, [isMember, activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'schedule') return;
+    if (!isMember || activeTab !== 'subscriptions') return;
+    setIsLoadingSubs(true);
+    api.subscriptions.getMySubscriptions()
+      .then(subs => {
+        setMySubscriptions(subs || []);
+      })
+      .catch(err => {
+        console.warn('Lỗi tải gói tập cá nhân:', err);
+        setMySubscriptions([]);
+      })
+      .finally(() => {
+        setIsLoadingSubs(false);
+      });
+  }, [activeTab, isMember]);
+
+  useEffect(() => {
+    if (!isMember || activeTab !== 'schedule') return;
     setIsLoadingSchedule(true);
     api.member.getMySchedule()
       .then(items => setMySchedule(items || []))
       .catch(err => { console.warn('Lỗi tải lịch tập cá nhân:', err); setMySchedule([]); })
       .finally(() => setIsLoadingSchedule(false));
-  }, [activeTab]);
+  }, [activeTab, isMember]);
 
   const showBookingDetail = async (item: typeof mySchedule[number]) => {
     try {
@@ -242,54 +274,58 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <span>Hồ Sơ Của Tôi</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('subscriptions')}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '12px 14px',
-              background: activeTab === 'subscriptions' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'subscriptions' ? '#FFFFFF' : 'var(--text-muted)',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              marginBottom: 6,
-              textAlign: 'left'
-            }}
-          >
-            <CreditCard size={16} />
-            <span>Gói Tập & Thẻ Hội Viên</span>
-          </button>
+          {isMember && (
+            <>
+              <button
+                onClick={() => setActiveTab('subscriptions')}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '12px 14px',
+                  background: activeTab === 'subscriptions' ? 'var(--color-primary)' : 'transparent',
+                  color: activeTab === 'subscriptions' ? '#FFFFFF' : 'var(--text-muted)',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  marginBottom: 6,
+                  textAlign: 'left'
+                }}
+              >
+                <CreditCard size={16} />
+                <span>Gói Tập & Thẻ Hội Viên</span>
+              </button>
 
-          <button
-            onClick={() => setActiveTab('schedule')}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
-              background: activeTab === 'schedule' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'schedule' ? '#FFFFFF' : 'var(--text-muted)', border: 'none',
-              borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 6, textAlign: 'left'
-            }}
-          >
-            <Calendar size={16} />
-            <span>Lịch Tập Của Tôi</span>
-          </button>
+              <button
+                onClick={() => setActiveTab('schedule')}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+                  background: activeTab === 'schedule' ? 'var(--color-primary)' : 'transparent',
+                  color: activeTab === 'schedule' ? '#FFFFFF' : 'var(--text-muted)', border: 'none',
+                  borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 6, textAlign: 'left'
+                }}
+              >
+                <Calendar size={16} />
+                <span>Lịch Tập Của Tôi</span>
+              </button>
 
-          <button
-            onClick={() => setActiveTab('fitness')}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
-              background: activeTab === 'fitness' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'fitness' ? '#FFFFFF' : 'var(--text-muted)', border: 'none',
-              borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 6, textAlign: 'left'
-            }}
-          >
-            <Sparkles size={16} />
-            <span>PT & Tiến Độ</span>
-          </button>
+              <button
+                onClick={() => setActiveTab('fitness')}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+                  background: activeTab === 'fitness' ? 'var(--color-primary)' : 'transparent',
+                  color: activeTab === 'fitness' ? '#FFFFFF' : 'var(--text-muted)', border: 'none',
+                  borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 6, textAlign: 'left'
+                }}
+              >
+                <Sparkles size={16} />
+                <span>PT & Tiến Độ</span>
+              </button>
+            </>
+          )}
 
           <button
             onClick={() => setActiveTab('preferences')}
@@ -445,7 +481,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           )}
 
           {/* TAB: MY SUBSCRIPTIONS (HỘI VIÊN & GÓI TẬP) */}
-          {activeTab === 'subscriptions' && (
+          {isMember && activeTab === 'subscriptions' && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div>
@@ -613,7 +649,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             </div>
           )}
 
-          {activeTab === 'schedule' && (
+          {isMember && activeTab === 'schedule' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 20 }}>
                 <div><h3 style={{ fontSize: 18, color: 'var(--text-primary)', fontWeight: 800, margin: 0 }}>Lịch Tập Sắp Tới</h3><p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 0 }}>Bao gồm lịch PT và lớp nhóm trong 30 ngày tới.</p></div>
@@ -624,7 +660,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             </div>
           )}
 
-          {activeTab === 'fitness' && currentUser && <MemberFitnessPanel userId={currentUser.id} />}
+          {isMember && activeTab === 'fitness' && currentUser && <MemberFitnessPanel userId={currentUser.id} />}
 
           {/* TAB 3: PREFERENCES & AUDIO */}
           {activeTab === 'preferences' && (
