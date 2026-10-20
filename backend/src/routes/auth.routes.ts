@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { AuthController } from '../controllers/auth.controller.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 
@@ -151,5 +152,52 @@ router.post('/change-password', authenticateToken, AuthController.changePassword
  *         description: Invalid Token or Account suspended
  */
 router.post('/google', AuthController.googleLogin);
+
+/**
+ * @swagger
+ * /auth/verify-session:
+ *   get:
+ *     summary: Kiểm tra tính hợp lệ và thời hạn phiên đăng nhập hiện tại
+ *     tags: [Auth]
+ */
+router.get('/verify-session', (req: Request, res: Response) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'Không tìm thấy phiên đăng nhập.',
+      code: 'NO_TOKEN',
+      redirectTo: '/'
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret') as { userId: number; role: string; exp?: number };
+    const role = decoded.role === 'RECEPTIONIST' ? 'STAFF' : decoded.role;
+    return res.status(200).json({
+      success: true,
+      data: {
+        userId: decoded.userId,
+        role: role,
+        expiresIn: decoded.exp ? decoded.exp - Math.floor(Date.now() / 1000) : null
+      }
+    });
+  } catch (error: any) {
+    const decoded = jwt.decode(token) as { userId: number; role: string } | null;
+    const role = decoded?.role === 'RECEPTIONIST' ? 'STAFF' : decoded?.role;
+    const isStaff = role === 'STAFF';
+
+    return res.status(401).json({
+      success: false,
+      message: 'Phiên đăng nhập đã hết hạn.',
+      code: 'TOKEN_EXPIRED',
+      role: role || null,
+      requiresStaffCashout: isStaff,
+      redirectTo: '/'
+    });
+  }
+});
 
 export default router;

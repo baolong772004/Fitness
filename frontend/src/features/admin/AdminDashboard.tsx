@@ -84,7 +84,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [ticketCategoryFilter, setTicketCategoryFilter] = useState<string>('all');
   const [respondingTicket, setRespondingTicket] = useState<SupportTicket | null>(null);
   const [adminResponseText, setAdminResponseText] = useState('');
-  const [targetAssignee, setTargetAssignee] = useState<'receptionist' | 'coach' | 'admin' | 'technician'>('receptionist');
+  const [targetAssignee, setTargetAssignee] = useState<'staff' | 'coach' | 'admin' | 'technician'>('staff');
   const [targetStatus, setTargetStatus] = useState<'in_progress' | 'resolved'>('in_progress');
 
   // New Package Modal
@@ -500,7 +500,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // Handle Update User Role via Live Backend REST API
-  const handleChangeUserRole = async (userId: string | number, newRole: 'ADMIN' | 'STAFF' | 'RECEPTIONIST' | 'COACH' | 'MEMBER' | string) => {
+  const handleChangeUserRole = async (userId: string | number, newRole: 'ADMIN' | 'STAFF' | 'COACH' | 'MEMBER' | string) => {
     try {
       await api.users.updateUserRole(userId, newRole);
       soundEffects.playSuccessBeep();
@@ -733,7 +733,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleOpenResponseModal = (t: SupportTicket) => {
     setRespondingTicket(t);
     setAdminResponseText(t.adminResponse || '');
-    setTargetAssignee(t.actionRequiredBy || 'receptionist');
+    setTargetAssignee((t.actionRequiredBy as any) === 'receptionist' ? 'staff' : (t.actionRequiredBy || 'staff'));
     setTargetStatus(t.status === 'open' ? 'in_progress' : t.status as 'in_progress' | 'resolved');
     soundEffects.playSuccessBeep();
   };
@@ -1538,7 +1538,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Select value={targetAssignee} onValueChange={(v) => setTargetAssignee(v as any)}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="receptionist">Lễ Tân / Quầy Thu Ngân</SelectItem>
+                      <SelectItem value="staff">Nhân Viên Quầy (Staff)</SelectItem>
                       <SelectItem value="technician">Bộ Phận Kỹ Thuật & Bảo Trì</SelectItem>
                       <SelectItem value="coach">Huấn Luyện Viên</SelectItem>
                       <SelectItem value="admin">Ban Quản Lý trực tiếp</SelectItem>
@@ -2465,7 +2465,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
               <div className="p-3.5 rounded-lg border bg-muted/40">
-                <strong className="text-success text-sm">2. Receptionist (Lễ tân)</strong>
+                <strong className="text-success text-sm">2. Staff (Nhân viên lễ tân quầy)</strong>
                 <p className="text-muted-foreground mt-1">
                   Quét check-in QR, đăng ký thành viên mới tại quầy, thu tiền mặt/chuyển khoản, in hóa đơn K80, tiếp nhận yêu cầu hỗ trợ.
                 </p>

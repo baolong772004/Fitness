@@ -368,6 +368,14 @@ router.post(
   StaffController.freezeMembership
 );
 
+router.post(
+  '/pos/unfreeze',
+  authenticateToken,
+  authorizeRoles('STAFF', 'ADMIN'),
+  requireStaffShift,
+  StaffController.unfreezeMembership
+);
+
 // =========================================================================
 // GIAI ĐOẠN 4: VẬN HÀNH THIẾT BỊ & TIẾP NHẬN YÊU CẦU
 // =========================================================================

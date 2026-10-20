@@ -60,8 +60,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const isMember = (() => {
     if (!currentUser) return false;
     const roleLower = (currentUser.role || '').toLowerCase();
-    // Các vai trò nhân viên/quản lý (admin, receptionist, coach, staff) không phải member
-    if (['admin', 'receptionist', 'coach', 'staff'].includes(roleLower)) {
+    // Các vai trò nhân viên/quản lý (admin, staff, coach) không phải member
+    if (['admin', 'staff', 'coach'].includes(roleLower)) {
       return false;
     }
     // Kiểm tra thêm thông tin role từ backend trong localStorage nếu có
@@ -70,7 +70,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       if (raw) {
         const parsed = JSON.parse(raw);
         const rawRole = (parsed.role || '').toUpperCase();
-        if (['ADMIN', 'RECEPTIONIST', 'STAFF', 'COACH'].includes(rawRole)) {
+        if (['ADMIN', 'STAFF', 'COACH'].includes(rawRole)) {
           return false;
         }
         if (rawRole === 'MEMBER') {

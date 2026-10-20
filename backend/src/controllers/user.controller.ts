@@ -46,7 +46,7 @@ export class UserController {
             role: true,
             status: true,
             memberships: {
-              where: { status: { in: ['ACTIVE', 'EXPIRED'] }, package: { type: 'MEMBERSHIP' } },
+              where: { status: { in: ['ACTIVE', 'EXPIRED', 'FROZEN'] }, package: { type: 'MEMBERSHIP' } },
               orderBy: { createdAt: 'desc' },
               select: {
                 id: true, packageId: true, status: true, startDate: true, endDate: true,
@@ -160,9 +160,13 @@ export class UserController {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
-      const { role } = req.body;
+      let { role } = req.body;
       if (!role) {
         return res.status(400).json({ success: false, message: 'Role is required' });
+      }
+
+      if (role === 'RECEPTIONIST') {
+        role = 'STAFF';
       }
 
       const validRoles = ['ADMIN', 'STAFF', 'COACH', 'MEMBER'];

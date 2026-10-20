@@ -341,6 +341,38 @@ export class StaffController {
     }
   }
 
+  /**
+   * Kích hoạt lại / Mở bảo lưu gói tại quầy
+   */
+  static async unfreezeMembership(req: StaffShiftRequest, res: Response) {
+    try {
+      const { membershipId, notes } = req.body;
+      const staffId = req.user!.userId;
+      const shiftId = req.shift?.id;
+
+      if (!membershipId) {
+        return res.status(400).json({
+          success: false,
+          message: 'membershipId là bắt buộc.'
+        });
+      }
+
+      const result = await StaffService.unfreezeMembershipAtDesk({
+        membershipId: Number(membershipId),
+        staffId,
+        shiftId,
+        notes
+      });
+
+      return res.status(200).json(result);
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Mở bảo lưu gói thất bại.'
+      });
+    }
+  }
+
   // =========================================================================
   // GIAI ĐOẠN 4: VẬN HÀNH THIẾT BỊ & TIẾP NHẬN YÊU CẦU
   // =========================================================================
