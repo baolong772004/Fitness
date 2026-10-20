@@ -28,7 +28,7 @@ const getPtCheckInWindowError = (
 
 export class PtController {
   /** @route GET /api/pt/trainers */
-  static async getAvailableTrainers(req: AuthRequest, res: Response) {
+  static async getAvailableTrainers(req: Request, res: Response) {
     try {
       const trainers = await prisma.coachProfile.findMany({
         where: {
@@ -40,6 +40,8 @@ export class PtController {
           userId: true,
           bio: true,
           specialization: true,
+          experience: true,
+          certifications: true,
           rating: true,
           hourlyRate: true,
           user: {
@@ -57,6 +59,7 @@ export class PtController {
           email: user.email,
           phone: user.phone,
           avatar: user.avatar,
+          user,
         })),
       });
     } catch (error: any) {

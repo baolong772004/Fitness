@@ -41,7 +41,7 @@ export const userApi = {
     return res.data;
   },
 
-  async updateUserRole(id: number | string, role: 'ADMIN' | 'STAFF' | 'RECEPTIONIST' | 'COACH' | 'MEMBER' | string) {
+  async updateUserRole(id: number | string, role: 'ADMIN' | 'STAFF' | 'COACH' | 'MEMBER' | string) {
     const res = await request<{
       success: boolean;
       message: string;

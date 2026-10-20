@@ -178,7 +178,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const roleLabels: Record<UserRole, string> = {
     admin: 'Quản Trị Viên (Admin)',
-    receptionist: 'Lễ Tân (Receptionist)',
+    staff: 'Nhân Viên Quầy (Staff)',
     coach: 'Huấn Luyện Viên (Coach)',
     member: 'Hội Viên (Member)',
     guest: 'Khách Vãng Lai'
@@ -186,9 +186,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const getTabsForRole = (role: UserRole): NavTabItem[] => {
     switch (role) {
-      case 'receptionist':
+      case 'staff':
         return [
-          { id: 'checkin', label: 'Soát Vé Check-in', icon: QrCode },
+          { id: 'checkin', label: 'Soát Vé Vào Cổng', icon: QrCode },
           { id: 'pos', label: 'Quầy POS & Thu Ngân', icon: CreditCard },
           { id: 'operations', label: 'Vận Hành & Sự Cố', icon: Wrench },
           { id: 'shift', label: 'Ca Trực & Chốt Ca', icon: Clock },
@@ -218,9 +218,10 @@ export const Navbar: React.FC<NavbarProps> = ({
       case 'guest':
         return [
           { id: 'home', label: 'Trang Chủ', icon: Home },
+          { id: 'facilities', label: 'Khu Vực & Thiết Bị', icon: Dumbbell },
           { id: 'pricing', label: 'Gói Tập & Bảng Giá', icon: Package },
-          { id: 'coaches', label: 'Đội Ngũ HLV', icon: Users },
           { id: 'schedule', label: 'Lịch Lớp Tuần Này', icon: Calendar },
+          { id: 'coaches', label: 'Đội Ngũ HLV', icon: Users },
           { id: 'checkin-portal', label: 'Check-in QR', icon: QrCode }
         ];
       default:
@@ -236,7 +237,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       window.dispatchEvent(new CustomEvent('aura:open-checkin-qr'));
       return;
     }
-    if (currentRole === 'guest') {
+    if (currentRole === 'guest' || currentRole === 'member') {
       const el = document.getElementById(tabId);
       if (el) {
         const yOffset = -24;
@@ -387,13 +388,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
 
-      {/* 2. QUICK CTA (Check-in QR for Staff/Admin) */}
-      {(currentRole === 'admin' || currentRole === 'receptionist') && (
+      {/* 2. QUICK CTA (Check-in QR for Admin only) */}
+      {currentRole === 'admin' && (
         <div style={{ padding: isCollapsed ? '12px 10px 4px' : '14px 16px 6px' }}>
           <button
             className="btn-primary"
             onClick={onOpenQuickCheckIn}
-            title="Quét QR Check-in điểm danh"
+            title="Soát vé vào cổng"
             style={{
               width: '100%',
               padding: isCollapsed ? '10px 0' : '9px 12px',
@@ -406,7 +407,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }}
           >
             <QrCode size={16} />
-            {!isCollapsed && <span style={{ whiteSpace: 'nowrap' }}>Quét QR Điểm Danh</span>}
+            {!isCollapsed && <span style={{ whiteSpace: 'nowrap' }}>Soát Vé Vào Cổng</span>}
           </button>
         </div>
       )}

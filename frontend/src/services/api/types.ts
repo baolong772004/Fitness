@@ -13,7 +13,7 @@ export interface ApiUser {
   dateOfBirth?: string | null;
   height?: number | null;
   weight?: number | null;
-  role: 'ADMIN' | 'STAFF' | 'RECEPTIONIST' | 'COACH' | 'MEMBER' | string;
+  role: 'ADMIN' | 'STAFF' | 'COACH' | 'MEMBER' | string;
   status: string;
   memberships?: Array<{
     id: number;

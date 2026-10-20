@@ -82,11 +82,20 @@ export interface LookupMemberResponse {
       status: string;
     };
     hasActiveGymAccess: boolean;
+    isFrozen?: boolean;
+    frozenMembership?: {
+      id: number;
+      packageName: string;
+      endDate: string;
+      remainingDays: number;
+      status?: string;
+    } | null;
     activeMembership?: {
       id: number;
       packageName: string;
       endDate: string;
       remainingDays: number;
+      status?: string;
     } | null;
   };
 }
@@ -269,6 +278,12 @@ export const staffApi = {
 
   freezeMembership: (data: FreezeMembershipInput) =>
     request<{ success: boolean; message: string; data: any }>('/staff/pos/freeze', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  unfreezeMembership: (data: { membershipId: number; notes?: string }) =>
+    request<{ success: boolean; message: string; data: any }>('/staff/pos/unfreeze', {
       method: 'POST',
       body: JSON.stringify(data)
     }),

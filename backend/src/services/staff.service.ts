@@ -293,6 +293,45 @@ export class StaffService {
     });
 
     if (!activeMembership) {
+      // 4.1 Kiểm tra xem có phải gói đang BẢO LƯU không
+      const frozenMembership = await prisma.membership.findFirst({
+        where: {
+          userId: member.id,
+          status: 'FROZEN',
+          package: { type: 'MEMBERSHIP' }
+        },
+        orderBy: { endDate: 'desc' },
+        include: { package: true }
+      });
+
+      if (frozenMembership) {
+        await prisma.checkIn.create({
+          data: {
+            memberId: member.id,
+            staffId,
+            shiftId,
+            method: 'QR_CODE',
+            status: 'FAILED',
+            rejectReason: `Gói tập ${frozenMembership.package.name} đang trong trạng thái BẢO LƯU`
+          }
+        });
+
+        return {
+          success: false,
+          status: 'FROZEN',
+          color: 'YELLOW',
+          message: `Gói [${frozenMembership.package.name}] đang trong thời gian BẢO LƯU đến ngày ${frozenMembership.endDate.toLocaleDateString('vi-VN')}. Từ chối vào cổng!`,
+          data: {
+            member,
+            frozenMembership: {
+              packageName: frozenMembership.package.name,
+              endDate: frozenMembership.endDate
+            },
+            suggestion: 'Hội viên cần mở lại gói bảo lưu tại quầy lễ tân nếu muốn tập luyện.'
+          }
+        };
+      }
+
       // Tìm gói gần nhất xem đã hết hạn bao lâu
       const expiredMembership = await prisma.membership.findFirst({
         where: {
@@ -425,24 +464,33 @@ export class StaffService {
    * Tra cứu hội viên theo số điện thoại (Check-in thủ công dự phòng khi khách hết pin)
    */
   static async lookupMemberByPhone(phone: string) {
-    const member = await prisma.user.findFirst({
-      where: { phone: phone.trim() },
-      select: {
-        id: true,
-        fullName: true,
-        phone: true,
-        email: true,
-        avatar: true,
-        gender: true,
-        dateOfBirth: true,
-        status: true,
-        memberships: {
-          orderBy: { endDate: 'desc' },
-          take: 3,
-          include: { package: true }
-        }
+    const selectFields = {
+      id: true,
+      fullName: true,
+      phone: true,
+      email: true,
+      avatar: true,
+      gender: true,
+      dateOfBirth: true,
+      status: true,
+      memberships: {
+        orderBy: { endDate: 'desc' as const },
+        take: 3,
+        include: { package: true }
       }
+    };
+
+    let member = await prisma.user.findFirst({
+      where: { phone: phone.trim(), role: 'MEMBER' },
+      select: selectFields
     });
+
+    if (!member) {
+      member = await prisma.user.findFirst({
+        where: { phone: phone.trim() },
+        select: selectFields
+      });
+    }
 
     if (!member) {
       throw new Error(`Không tìm thấy hội viên nào có số điện thoại [${phone}].`);
@@ -457,6 +505,12 @@ export class StaffService {
         m.endDate >= now
     );
 
+    const frozenMembership = member.memberships.find(
+      (m) =>
+        m.package.type === 'MEMBERSHIP' &&
+        m.status === 'FROZEN'
+    );
+
     return {
       member: {
         id: member.id,
@@ -469,6 +523,19 @@ export class StaffService {
         status: member.status
       },
       hasActiveGymAccess: !!activeMembership,
+      isFrozen: !!frozenMembership,
+      frozenMembership: frozenMembership
+        ? {
+            id: frozenMembership.id,
+            packageName: frozenMembership.package.name,
+            endDate: frozenMembership.endDate,
+            remainingDays: Math.max(
+              0,
+              Math.ceil((frozenMembership.endDate.getTime() - now.getTime()) / 86400000)
+            ),
+            status: frozenMembership.status
+          }
+        : null,
       activeMembership: activeMembership
         ? {
             id: activeMembership.id,
@@ -477,7 +544,8 @@ export class StaffService {
             remainingDays: Math.max(
               0,
               Math.ceil((activeMembership.endDate.getTime() - now.getTime()) / 86400000)
-            )
+            ),
+            status: activeMembership.status
           }
         : null
     };
@@ -536,6 +604,29 @@ export class StaffService {
     });
 
     if (!activeMembership) {
+      const frozenMembership = await prisma.membership.findFirst({
+        where: {
+          userId: member.id,
+          status: 'FROZEN',
+          package: { type: 'MEMBERSHIP' }
+        },
+        include: { package: true }
+      });
+
+      if (frozenMembership) {
+        await prisma.checkIn.create({
+          data: {
+            memberId: member.id,
+            staffId,
+            shiftId,
+            method: 'MANUAL',
+            status: 'FAILED',
+            rejectReason: `Gói [${frozenMembership.package.name}] đang trong thời gian BẢO LƯU.`
+          }
+        });
+        throw new Error(`Gói tập [${frozenMembership.package.name}] đang BẢO LƯU đến ngày ${frozenMembership.endDate.toLocaleDateString('vi-VN')}. Vui lòng kích hoạt/mở lại gói bảo lưu trước khi check-in.`);
+      }
+
       await prisma.checkIn.create({
         data: {
           memberId: member.id,
@@ -981,6 +1072,10 @@ export class StaffService {
       throw new Error('Không tìm thấy gói hội viên.');
     }
 
+    if (membership.status === 'FROZEN') {
+      throw new Error('Gói tập này hiện đang ở trạng thái BẢO LƯU (FROZEN), không thể bảo lưu lại!');
+    }
+
     if (membership.status !== 'ACTIVE') {
       throw new Error('Chỉ có thể bảo lưu gói tập đang ở trạng thái ACTIVE.');
     }
@@ -991,6 +1086,7 @@ export class StaffService {
     const updated = await prisma.membership.update({
       where: { id: membership.id },
       data: {
+        status: 'FROZEN',
         endDate: newEndDate
       }
     });
@@ -1000,7 +1096,7 @@ export class StaffService {
       data: {
         userId: staffId,
         action: 'MEMBERSHIP_FREEZE_BY_STAFF',
-        details: `Lễ tân ID ${staffId} đã hỗ trợ bảo lưu gói [${membership.package.name}] cho hội viên ${membership.user.fullName} thêm ${freezeDays} ngày. Hạn mới: ${newEndDate.toLocaleDateString('vi-VN')}. Lý do: ${reason}`
+        details: `Lễ tân ID ${staffId} đã hỗ trợ bảo lưu gói [${membership.package.name}] cho hội viên ${membership.user.fullName} thêm ${freezeDays} ngày. Trạng thái chuyển sang BẢO LƯU (FROZEN). Hạn mới: ${newEndDate.toLocaleDateString('vi-VN')}. Lý do: ${reason}`
       }
     });
 
@@ -1008,19 +1104,80 @@ export class StaffService {
     createUserNotification({
       userId: membership.userId,
       title: 'Gói tập đã được bảo lưu thành công',
-      message: `Quầy lễ tân đã hỗ trợ bảo lưu thêm ${freezeDays} ngày cho gói [${membership.package.name}] của bạn. Hạn sử dụng mới đến ngày ${newEndDate.toLocaleDateString('vi-VN')}.`
+      message: `Quầy lễ tân đã hỗ trợ bảo lưu thêm ${freezeDays} ngày cho gói [${membership.package.name}] của bạn. Trạng thái hiện tại: Đang bảo lưu (FROZEN). Hạn sử dụng mới đến ngày ${newEndDate.toLocaleDateString('vi-VN')}.`
     }).catch((e) => console.error('Lỗi gửi push cho user:', e));
 
     return {
       success: true,
-      message: `Đã bảo lưu thành công thêm ${freezeDays} ngày cho hội viên ${membership.user.fullName}!`,
+      message: `Đã chuyển trạng thái sang BẢO LƯU thành công và cộng thêm ${freezeDays} ngày cho hội viên ${membership.user.fullName}!`,
       data: {
         membershipId: updated.id,
         packageName: membership.package.name,
         previousEndDate: currentEndDate,
         newEndDate: updated.endDate,
         freezeDays,
+        status: 'FROZEN',
         reason
+      }
+    };
+  }
+
+  /**
+   * Kích hoạt lại / Mở bảo lưu gói tập tại quầy
+   */
+  static async unfreezeMembershipAtDesk(params: {
+    membershipId: number;
+    staffId: number;
+    shiftId?: number;
+    notes?: string;
+  }) {
+    const { membershipId, staffId, shiftId, notes } = params;
+
+    const membership = await prisma.membership.findUnique({
+      where: { id: membershipId },
+      include: {
+        package: true,
+        user: true
+      }
+    });
+
+    if (!membership) {
+      throw new Error('Không tìm thấy gói hội viên.');
+    }
+
+    if (membership.status !== 'FROZEN') {
+      throw new Error('Chỉ có thể kích hoạt lại gói đang ở trạng thái BẢO LƯU (FROZEN).');
+    }
+
+    const updated = await prisma.membership.update({
+      where: { id: membership.id },
+      data: {
+        status: 'ACTIVE'
+      }
+    });
+
+    await prisma.actionLog.create({
+      data: {
+        userId: staffId,
+        action: 'MEMBERSHIP_UNFREEZE_BY_STAFF',
+        details: `Lễ tân ID ${staffId} đã mở lại gói bảo lưu [${membership.package.name}] cho hội viên ${membership.user.fullName}.${notes ? ` Ghi chú: ${notes}` : ''}`
+      }
+    });
+
+    createUserNotification({
+      userId: membership.userId,
+      title: 'Gói tập đã được kích hoạt lại',
+      message: `Quầy lễ tân đã mở lại gói tập [${membership.package.name}] của bạn. Trạng thái hiện tại: Đang hoạt động (ACTIVE).`
+    }).catch((e) => console.error('Lỗi gửi push cho user:', e));
+
+    return {
+      success: true,
+      message: `Đã mở lại gói bảo lưu và kích hoạt lại trạng thái hoạt động cho hội viên ${membership.user.fullName}!`,
+      data: {
+        membershipId: updated.id,
+        packageName: membership.package.name,
+        status: 'ACTIVE',
+        endDate: updated.endDate
       }
     };
   }

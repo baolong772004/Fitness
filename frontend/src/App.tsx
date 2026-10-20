@@ -11,6 +11,7 @@ import { PaymentReturnPage } from './features/payment/PaymentReturnPage';
 import { AuthModal } from './features/auth/AuthModal';
 import { FloatingAIChatbot } from './features/ai-assistant/FloatingAIChatbot';
 import { ToastContainer, toast, installGlobalAlertOverride } from './components/common/ToastNotification';
+import { StaffLogoutCashModal } from './components/staff/StaffLogoutCashModal';
 import { soundEffects } from './services/audioService';
 import { Clock, Phone, MapPin, QrCode } from 'lucide-react';
 
@@ -21,6 +22,8 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'main' | 'settings'>('main');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
+  const [isStaffLogoutModalOpen, setIsStaffLogoutModalOpen] = useState(false);
+  const [isSessionExpiredStaffModal, setIsSessionExpiredStaffModal] = useState(false);
 
   // Theme Management (Light mode is DEFAULT as requested by user)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -39,7 +42,7 @@ export default function App() {
     soundEffects.playSuccessBeep();
   };
 
-  // Scope shadcn/ui base styles to staff dashboards (admin / receptionist / coach)
+  // Scope shadcn/ui base styles to staff dashboards (admin / staff / coach)
   useEffect(() => {
     installGlobalAlertOverride();
   }, []);
@@ -62,8 +65,8 @@ export default function App() {
           const r = (saved.role || '').toUpperCase().trim();
           if (r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'MANAGER') {
             mappedRole = 'admin';
-          } else if (r === 'RECEPTIONIST' || r === 'STAFF' || r === 'LE_TAN' || r === 'FRONT_DESK') {
-            mappedRole = 'receptionist';
+          } else if (r === 'STAFF' || r === 'RECEPTIONIST' || r === 'LE_TAN' || r === 'FRONT_DESK') {
+            mappedRole = 'staff';
           } else if (r === 'COACH' || r === 'TRAINER' || r === 'PT' || r === 'HLV') {
             mappedRole = 'coach';
           } else if (r === 'MEMBER' || r === 'HOI_VIEN' || r === 'CUSTOMER' || r === 'USER') {
@@ -98,7 +101,7 @@ export default function App() {
 
   const syncDefaultTab = (role: UserRole) => {
     switch (role) {
-      case 'receptionist':
+      case 'staff':
         setActiveTab('checkin');
         break;
       case 'coach':
@@ -128,7 +131,7 @@ export default function App() {
     soundEffects.playSuccessBeep();
   };
 
-  const handleLogout = () => {
+  const performLogout = () => {
     api.auth.logout();
     setCurrentUser(null);
     setCurrentRole('guest');
@@ -137,6 +140,80 @@ export default function App() {
     soundEffects.playSuccessBeep();
     toast.success('Bạn đã đăng xuất tài khoản thành công! Hẹn gặp lại bạn tại AURA Fitness.', 'Đăng Xuất');
   };
+
+  const handleLogout = () => {
+    // Nếu là nhân viên lễ tân quầy, BẮT BUỘC phải đối soát và nhập số tiền mặt đang có sau ca làm trước khi đăng xuất
+    if (currentUser?.role === 'staff') {
+      setIsSessionExpiredStaffModal(false);
+      setIsStaffLogoutModalOpen(true);
+      return;
+    }
+    performLogout();
+  };
+
+  // Lắng nghe sự kiện hết hạn token từ backend và kiểm tra định kỳ thời hạn phiên đăng nhập
+  useEffect(() => {
+    const handleSessionExpired = (e: any) => {
+      const detail = e.detail || {};
+      const savedUser = tokenStorage.getUser();
+      const roleStr = String(detail.role || savedUser?.role || currentRole || '').toUpperCase();
+      const isStaff =
+        roleStr === 'STAFF' ||
+        roleStr === 'RECEPTIONIST' ||
+        currentRole === 'staff';
+
+      if (isStaff) {
+        soundEffects.playErrorBeep();
+        toast.warning(
+          'Phiên làm việc ca trực đã hết thời gian. Bạn bắt buộc phải nhập số tiền mặt thực tế chốt ca để hoàn tất đăng xuất!',
+          'Hết Giờ Làm / Bắt Buộc Chốt Ca'
+        );
+        setIsSessionExpiredStaffModal(true);
+        setIsStaffLogoutModalOpen(true);
+      } else {
+        soundEffects.playErrorBeep();
+        toast.info(
+          'Thời gian đăng nhập đã hết hạn. Hệ thống đã tự động đưa bạn về Trang Chủ.',
+          'Hết Hạn Phiên Đăng Nhập'
+        );
+        performLogout();
+      }
+    };
+
+    window.addEventListener('aura:session-expired', handleSessionExpired);
+
+    // Kiểm tra định kỳ token exp mỗi 10 giây
+    const checkTokenExpiry = () => {
+      const token = tokenStorage.getAccessToken();
+      if (!token) return;
+      try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return;
+        const payload = JSON.parse(atob(parts[1]));
+        if (payload.exp && Date.now() >= payload.exp * 1000) {
+          window.dispatchEvent(
+            new CustomEvent('aura:session-expired', {
+              detail: {
+                code: 'TOKEN_EXPIRED',
+                role: payload.role,
+                requiresStaffCashout: payload.role === 'STAFF' || payload.role === 'RECEPTIONIST',
+                redirectTo: '/'
+              }
+            })
+          );
+        }
+      } catch (err) {
+        // Ignore parse error
+      }
+    };
+
+    const interval = setInterval(checkTokenExpiry, 10000);
+
+    return () => {
+      window.removeEventListener('aura:session-expired', handleSessionExpired);
+      clearInterval(interval);
+    };
+  }, [currentRole]);
 
   if (['/payment-success', '/payment-cancel'].includes(window.location.pathname.replace(/\/+$/, ''))) {
     return <PaymentReturnPage />;
@@ -180,7 +257,7 @@ export default function App() {
           />
         ) : (
           <>
-            {currentRole === 'receptionist' && (
+            {currentRole === 'staff' && (
               <ReceptionistDashboard
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
@@ -345,6 +422,21 @@ export default function App() {
         </footer>
       )}
       </div>
+
+      {/* Modal Bắt Buộc Nhập Tiền Mặt Trước Khi Đăng Xuất (Dành Cho Lễ Tân) */}
+      <StaffLogoutCashModal
+        isOpen={isStaffLogoutModalOpen}
+        isSessionExpired={isSessionExpiredStaffModal}
+        onClose={() => {
+          setIsStaffLogoutModalOpen(false);
+          setIsSessionExpiredStaffModal(false);
+        }}
+        onConfirmLogout={() => {
+          setIsStaffLogoutModalOpen(false);
+          setIsSessionExpiredStaffModal(false);
+          performLogout();
+        }}
+      />
 
       {/* Auth Modal for Login, Register, and Forgot Password */}
       <AuthModal

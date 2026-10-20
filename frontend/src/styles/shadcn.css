@@ -67,7 +67,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* Scoped base: only active for staff roles (admin / receptionist / coach),
+/* Scoped base: only active for staff roles (admin / staff / coach),
    so the guest landing page and Navbar keep their current look. */
 @layer base {
   body.staff-ui *,
