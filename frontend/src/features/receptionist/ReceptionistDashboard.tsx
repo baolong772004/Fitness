@@ -30,6 +30,7 @@ import {
   LogOut,
   ArrowRight,
   Lock,
+  Unlock,
   Tag,
   Receipt,
   UserCheck,
@@ -271,26 +272,50 @@ interface StaffConsultant {
     try {
       const usersRes = await api.users.getUsers({ role: 'MEMBER', limit: 30 });
       if (usersRes.data) {
+        const now = new Date();
         setMembers(
-          usersRes.data.map((u: any) => ({
-            id: String(u.id),
-            code: `MEM-${u.id}`,
-            name: u.fullName || u.email,
-            phone: u.phone || 'N/A',
-            cccd: 'N/A',
-            gender: u.gender === 'female' ? 'female' : 'male',
-            birthYear: 2000,
-            activePackageId: 'pkg-1',
-            packageName: 'Gói Hội Viên',
-            packageStartDate: '01/01/2026',
-            packageEndDate: '31/12/2026',
-            daysRemaining: 30,
-            ptSessionsTotal: 0,
-            ptSessionsRemaining: 0,
-            avatar: u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde',
-            totalCheckIns: 1,
-            status: 'active'
-          })) as unknown as Member[]
+          usersRes.data.map((u: any) => {
+            const m = u.memberships?.[0];
+            let status: 'active' | 'frozen' | 'expired' = 'expired';
+            let pkgName = 'Chưa đăng ký gói';
+            let startDate = 'N/A';
+            let endDate = 'N/A';
+            let daysRemaining = 0;
+
+            if (m) {
+              pkgName = m.package?.name || 'Gói Hội Viên';
+              startDate = new Date(m.startDate).toLocaleDateString('vi-VN');
+              endDate = new Date(m.endDate).toLocaleDateString('vi-VN');
+              daysRemaining = Math.max(0, Math.ceil((new Date(m.endDate).getTime() - now.getTime()) / 86400000));
+              if (m.status === 'FROZEN') {
+                status = 'frozen';
+              } else if (m.status === 'ACTIVE' && new Date(m.endDate) >= now) {
+                status = 'active';
+              } else {
+                status = 'expired';
+              }
+            }
+
+            return {
+              id: String(u.id),
+              code: `MEM-${u.id}`,
+              name: u.fullName || u.email,
+              phone: u.phone || 'N/A',
+              cccd: 'N/A',
+              gender: u.gender === 'female' ? 'female' : 'male',
+              birthYear: 2000,
+              activePackageId: m ? String(m.packageId) : 'none',
+              packageName: pkgName,
+              packageStartDate: startDate,
+              packageEndDate: endDate,
+              daysRemaining,
+              ptSessionsTotal: m?.package?.trialPtSessions || 0,
+              ptSessionsRemaining: m?.remainingSessions || 0,
+              avatar: u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde',
+              totalCheckIns: 1,
+              status
+            };
+          }) as unknown as Member[]
         );
       }
     } catch (e) {
@@ -509,13 +534,16 @@ interface StaffConsultant {
   };
 
   // 3.3 Tra cứu gói để bảo lưu
-  const handleSearchFreezeMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!freezePhoneSearch.trim()) return;
+  const handleSearchFreezeMember = async (e?: React.FormEvent, phoneOverride?: string) => {
+    if (e) e.preventDefault();
+    const phoneToSearch = (phoneOverride || freezePhoneSearch).trim();
+    if (!phoneToSearch) return;
     try {
-      const res = await api.staff.lookupMember(freezePhoneSearch.trim());
+      const res = await api.staff.lookupMember(phoneToSearch);
       setFreezeMemberData(res.data);
-      if (!res.data.hasActiveGymAccess) {
+      if (res.data?.isFrozen) {
+        toast.info('Gói tập của hội viên hiện đang trong trạng thái BẢO LƯU.', 'Đang Bảo Lưu');
+      } else if (!res.data.hasActiveGymAccess) {
         toast.warning('Hội viên này hiện không có gói tập đang ACTIVE để bảo lưu.');
       }
     } catch (err: any) {
@@ -540,12 +568,49 @@ interface StaffConsultant {
 
       soundEffects.playSuccessBeep();
       toast.success(res.message, 'Bảo Lưu Thành Công');
-      setFreezeMemberData(null);
-      setFreezePhoneSearch('');
+      // Tải lại thông tin hội viên ngay lập tức để cập nhật giao diện sang trạng thái FROZEN
+      if (freezePhoneSearch.trim()) {
+        try {
+          const refreshed = await api.staff.lookupMember(freezePhoneSearch.trim());
+          setFreezeMemberData(refreshed.data);
+        } catch {
+          setFreezeMemberData(null);
+        }
+      }
       setFreezeReason('');
+      loadInitialData();
     } catch (err: any) {
       soundEffects.playErrorBeep();
       toast.error(err.message, 'Lỗi Bảo Lưu');
+    }
+  };
+
+  // Kích hoạt lại / Mở gói bảo lưu
+  const handleConfirmUnfreeze = async () => {
+    const membershipId = freezeMemberData?.frozenMembership?.id;
+    if (!membershipId) return;
+
+    try {
+      const res = await api.staff.unfreezeMembership({
+        membershipId,
+        notes: 'Hội viên yêu cầu mở lại gói tập trước hạn'
+      });
+
+      soundEffects.playSuccessBeep();
+      toast.success(res.message, 'Mở Bảo Lưu Thành Công');
+      // Tải lại thông tin hội viên ngay lập tức để cập nhật giao diện sang trạng thái ACTIVE
+      if (freezePhoneSearch.trim()) {
+        try {
+          const refreshed = await api.staff.lookupMember(freezePhoneSearch.trim());
+          setFreezeMemberData(refreshed.data);
+        } catch {
+          setFreezeMemberData(null);
+        }
+      }
+      loadInitialData();
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      toast.error(err.message, 'Lỗi Mở Bảo Lưu');
     }
   };
 
@@ -687,7 +752,7 @@ interface StaffConsultant {
     switch (role) {
       case 'STAFF':
       case 'RECEPTIONIST':
-        return 'Lễ Tân / Nhân Viên';
+        return 'Nhân Viên Quầy (Staff)';
       case 'COACH':
         return 'HLV (PT)';
       case 'ADMIN':
@@ -785,7 +850,7 @@ interface StaffConsultant {
                 setIsCloseShiftModalOpen(true);
               }}
             >
-              <LogOut className="size-4" /> Chốt Ca & Clock-out
+              <LogOut className="size-4" /> Chốt Quỹ & Đăng Xuất
             </Button>
           ) : (
             <Button
@@ -793,7 +858,7 @@ interface StaffConsultant {
               className="gap-2 font-bold cursor-pointer"
               onClick={handleOpenNewShift}
             >
-              <Plus className="size-4" /> Kích Hoạt Ca Trực (Clock-in)
+              <Plus className="size-4" /> Mở Phiên Ca Mới
             </Button>
           )}
         </div>
@@ -1461,12 +1526,52 @@ interface StaffConsultant {
                         <h4 className="font-bold text-foreground">{freezeMemberData.member.fullName}</h4>
                         <p className="text-xs text-muted-foreground">SĐT: {freezeMemberData.member.phone}</p>
                       </div>
-                      <Badge variant={freezeMemberData.hasActiveGymAccess ? 'success' : 'destructive'}>
-                        {freezeMemberData.hasActiveGymAccess ? 'CÓ GÓI ACTIVE' : 'KHÔNG CÓ GÓI HỢP LỆ'}
+                      <Badge
+                        variant={
+                          freezeMemberData.isFrozen
+                            ? 'warning'
+                            : freezeMemberData.hasActiveGymAccess
+                            ? 'success'
+                            : 'destructive'
+                        }
+                        className={freezeMemberData.isFrozen ? 'bg-amber-500/15 text-amber-600 border border-amber-500/30 font-semibold' : ''}
+                      >
+                        {freezeMemberData.isFrozen
+                          ? 'ĐANG BẢO LƯU (FROZEN)'
+                          : freezeMemberData.hasActiveGymAccess
+                          ? 'CÓ GÓI ACTIVE'
+                          : 'KHÔNG CÓ GÓI HỢP LỆ'}
                       </Badge>
                     </div>
 
-                    {freezeMemberData.activeMembership && (
+                    {/* Trường hợp 1: Gói đang BẢO LƯU (FROZEN) -> Hiển thị cảnh báo, thông tin và nút MỞ BẢO LƯU */}
+                    {freezeMemberData.isFrozen && freezeMemberData.frozenMembership && (
+                      <div className="grid gap-4">
+                        <div className="text-xs bg-amber-500/10 border border-amber-500/30 p-3.5 rounded-lg text-amber-600 dark:text-amber-400">
+                          <div className="font-bold text-sm mb-1.5 flex items-center gap-1.5">
+                            <Lock className="size-4" /> Gói tập đang trong trạng thái BẢO LƯU (FROZEN)
+                          </div>
+                          <div className="space-y-1">
+                            <div>Gói tập: <strong className="text-foreground">{freezeMemberData.frozenMembership.packageName}</strong></div>
+                            <div>Hạn dùng sau khi bảo lưu: <strong className="text-foreground">{new Date(freezeMemberData.frozenMembership.endDate).toLocaleDateString('vi-VN')}</strong> (Còn {freezeMemberData.frozenMembership.remainingDays} ngày)</div>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Gói tập này hiện đã được bảo lưu thành công và đang tạm dừng. Trong thời gian bảo lưu, hội viên không thể check-in và không thể thực hiện bảo lưu chồng chéo. Bạn có thể mở bảo lưu nếu hội viên muốn đi tập lại.
+                          </p>
+                        </div>
+
+                        <Button
+                          type="button"
+                          className="font-bold bg-amber-600 hover:bg-amber-700 text-white cursor-pointer shadow-sm"
+                          onClick={handleConfirmUnfreeze}
+                        >
+                          <Unlock className="size-4" /> Kích Hoạt Lại / Mở Bảo Lưu Cho Hội Viên
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Trường hợp 2: Gói đang ACTIVE -> Cho phép chọn số ngày & lý do bảo lưu */}
+                    {!freezeMemberData.isFrozen && freezeMemberData.activeMembership && (
                       <div className="grid gap-4">
                         <div className="text-xs bg-card p-3 rounded-lg border">
                           <div>Gói tập: <strong className="text-primary">{freezeMemberData.activeMembership.packageName}</strong></div>
@@ -1503,6 +1608,13 @@ interface StaffConsultant {
                         >
                           <Check className="size-4" /> Xác Nhận Bảo Lưu Thêm {freezeDays} Ngày
                         </Button>
+                      </div>
+                    )}
+
+                    {/* Trường hợp 3: Không có gói */}
+                    {!freezeMemberData.isFrozen && !freezeMemberData.activeMembership && (
+                      <div className="text-xs text-muted-foreground p-3 border rounded-lg bg-card">
+                        Hội viên này hiện không có gói tập đang hoạt động hoặc gói đã hết hạn. Vui lòng kiểm tra lại số điện thoại hoặc gia hạn gói tập tại quầy POS.
                       </div>
                     )}
                   </div>
@@ -1917,7 +2029,7 @@ interface StaffConsultant {
                 <Clock className="size-5 text-primary" /> Chi Tiết Phiên Ca Trực & Đối Soát Doanh Thu
               </CardTitle>
               <CardDescription>
-                Đối soát Doanh thu ca (Shift Cash Reconciliation) → Đếm tiền mặt thực tế → Tự động Chấm công ra (Clock-out).
+                Đối soát Doanh thu ca (Shift Cash Reconciliation) → Đếm tiền mặt thực tế → Bàn giao ca trước khi đăng xuất.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-6 pt-6">
@@ -1929,7 +2041,7 @@ interface StaffConsultant {
                   </div>
                 </div>
                 <div className="rounded-xl border p-4 bg-muted/20">
-                  <span className="text-xs text-muted-foreground">Giờ Bắt Đầu (Clock-in)</span>
+                  <span className="text-xs text-muted-foreground">Giờ Bắt Đầu Ca</span>
                   <div className="text-base font-extrabold text-foreground font-mono mt-1">
                     {shiftSummary?.clockIn ? new Date(shiftSummary.clockIn).toLocaleTimeString('vi-VN') : '08:00'}
                   </div>
@@ -2004,7 +2116,7 @@ interface StaffConsultant {
                     setIsCloseShiftModalOpen(true);
                   }}
                 >
-                  <LogOut className="size-5" /> Tiến Hành Chốt Ca & Đóng Ca Làm Việc
+                  <LogOut className="size-5" /> Bàn Giao Tiền Mặt & Đăng Xuất
                 </Button>
               </div>
             </CardContent>
@@ -2050,24 +2162,56 @@ interface StaffConsultant {
                       <TableCell className="text-xs text-muted-foreground font-mono">{m.phone}</TableCell>
                       <TableCell className="text-xs font-medium text-primary">{m.packageName}</TableCell>
                       <TableCell>
-                        <Badge variant={m.status === 'active' ? 'success' : 'destructive'} className="text-[10px]">
-                          {m.status === 'active' ? 'Hoạt động' : 'Hết hạn'}
-                        </Badge>
+                        {m.status === 'active' && (
+                          <Badge variant="success" className="text-[10px]">
+                            Hoạt động
+                          </Badge>
+                        )}
+                        {m.status === 'frozen' && (
+                          <Badge variant="warning" className="text-[10px] bg-amber-500/15 text-amber-600 border border-amber-500/30 font-semibold">
+                            Đang bảo lưu
+                          </Badge>
+                        )}
+                        {m.status === 'expired' && (
+                          <Badge variant="destructive" className="text-[10px]">
+                            Hết hạn
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs font-semibold cursor-pointer"
-                          onClick={() => {
-                            setFreezePhoneSearch(m.phone);
-                            setPosSubTab('freeze');
-                            onTabChange('pos');
-                          }}
-                        >
-                          Bảo lưu gói →
-                        </Button>
+                        {m.status === 'frozen' ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 text-xs font-semibold cursor-pointer text-amber-600 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20"
+                            onClick={() => {
+                              setFreezePhoneSearch(m.phone);
+                              setPosSubTab('freeze');
+                              onTabChange('pos');
+                              handleSearchFreezeMember(undefined, m.phone);
+                            }}
+                          >
+                            <Lock className="size-3 mr-1 inline" /> Xem bảo lưu / Mở lại →
+                          </Button>
+                        ) : m.status === 'active' ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs font-semibold cursor-pointer"
+                            onClick={() => {
+                              setFreezePhoneSearch(m.phone);
+                              setPosSubTab('freeze');
+                              onTabChange('pos');
+                              handleSearchFreezeMember(undefined, m.phone);
+                            }}
+                          >
+                            Bảo lưu gói →
+                          </Button>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground italic">Không có gói active</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -2087,7 +2231,7 @@ interface StaffConsultant {
             <CardHeader className="border-b bg-muted/20 pb-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2 text-foreground font-extrabold">
-                  <LogOut className="size-5 text-destructive" /> Chốt Ca Làm Việc & Chấm Công Ra (Clock-out)
+                  <LogOut className="size-5 text-destructive" /> Chốt Ca & Bàn Giao Tiền Mặt Trước Khi Đăng Xuất
                 </CardTitle>
                 <Button
                   type="button"
@@ -2242,3 +2386,6 @@ interface StaffConsultant {
     </StaffPage>
   );
 };
+
+export const StaffDashboard = ReceptionistDashboard;
+

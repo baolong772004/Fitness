@@ -63,6 +63,19 @@ export async function request<T>(
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (response.status === 401 && token) {
+      window.dispatchEvent(
+        new CustomEvent('aura:session-expired', {
+          detail: {
+            code: data.code || 'TOKEN_EXPIRED',
+            role: data.role,
+            requiresStaffCashout: data.requiresStaffCashout,
+            redirectTo: data.redirectTo || '/'
+          }
+        })
+      );
+    }
+
     const errorMsg = data.message || data.error || `HTTP error ${response.status}`;
     throw new Error(errorMsg);
   }

@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'receptionist' | 'coach' | 'member' | 'guest';
+export type UserRole = 'admin' | 'staff' | 'coach' | 'member' | 'guest';
 
 export interface User {
   id: string;
@@ -207,7 +207,7 @@ export interface SupportTicket {
   createdBy?: string;
   assignedStaff?: string;
   adminResponse?: string;
-  actionRequiredBy?: 'receptionist' | 'coach' | 'admin' | 'technician';
+  actionRequiredBy?: 'staff' | 'coach' | 'admin' | 'technician';
   respondedAt?: string;
   resolvedAt?: string;
   resolvedBy?: string;

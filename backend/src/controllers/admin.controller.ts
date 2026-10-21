@@ -42,9 +42,16 @@ export const getMembersList = async (req: AuthRequest, res: Response) => {
           createdAt: true,
           memberships: {
             where: {
-              status: 'ACTIVE',
-              startDate: { lte: now },
-              endDate: { gte: now },
+              OR: [
+                {
+                  status: 'ACTIVE',
+                  startDate: { lte: now },
+                  endDate: { gte: now },
+                },
+                {
+                  status: 'FROZEN',
+                }
+              ]
             },
             include: {
               package: true,

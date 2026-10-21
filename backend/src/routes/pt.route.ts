@@ -159,13 +159,11 @@ router.post('/coach/plans', authenticateToken, authorizeRoles('COACH', 'TRAINER'
  *   get:
  *     summary: Lấy danh sách huấn luyện viên đang hoạt động
  *     tags: [PersonalTrainer]
- *     security:
- *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Danh sách huấn luyện viên
  */
-router.get('/trainers', authenticateToken, PtController.getAvailableTrainers);
+router.get('/trainers', PtController.getAvailableTrainers);
 
 /**
  * @swagger

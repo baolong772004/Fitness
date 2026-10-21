@@ -3,7 +3,7 @@ import { api, ApiPackage, ApiGroupClassSchedule, ApiCoachProfile, tokenStorage }
 import type { MemberScheduleEvent } from '../../services/api/member.api';
 import { soundEffects } from '../../services/audioService';
 import { WebcamQrScanner } from '../../components/common/WebcamQrScanner';
-import { EditorialRoute, GuestArticlePage, GuestArticlesSection } from './GuestArticles';
+
 import {
   QrCode,
   Calendar,
@@ -37,29 +37,6 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
   onOpenRegister,
   currentUser
 }) => {
-  const [editorialRoute, setEditorialRoute] = useState<EditorialRoute | null>(() => {
-    const route = new URLSearchParams(window.location.search).get('content');
-    return route ? route as EditorialRoute : null;
-  });
-
-  useEffect(() => {
-    const syncRoute = () => {
-      const route = new URLSearchParams(window.location.search).get('content');
-      setEditorialRoute(route ? route as EditorialRoute : null);
-    };
-    window.addEventListener('popstate', syncRoute);
-    return () => window.removeEventListener('popstate', syncRoute);
-  }, []);
-
-  const navigateEditorial = (route: EditorialRoute | null) => {
-    const url = new URL(window.location.href);
-    if (route) url.searchParams.set('content', route);
-    else url.searchParams.delete('content');
-    window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`);
-    setEditorialRoute(route);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   // Live Packages from Backend API
   const [livePackages, setLivePackages] = useState<ApiPackage[]>([]);
   const [isLoadingPackages, setIsLoadingPackages] = useState(false);
@@ -67,7 +44,8 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
 
   // Live Schedules and Trainers from Backend API
   const [liveSchedules, setLiveSchedules] = useState<ApiGroupClassSchedule[]>([]);
-  const [liveTrainers, setLiveTrainers] = useState<ApiCoachProfile[]>([]);
+  const [liveTrainers, setLiveTrainers] = useState<any[]>([]);
+  const [isLoadingCoaches, setIsLoadingCoaches] = useState(false);
 
   // QR Check-in Modal
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -100,20 +78,19 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
       setIsLoadingPackages(false);
     }
 
-    const token = tokenStorage.getAccessToken();
-    if (token) {
-      try {
-        const trainersRes = await api.adminTrainers.getTrainers();
-        if (trainersRes && trainersRes.data) {
-          setLiveTrainers(trainersRes.data);
-        } else {
-          setLiveTrainers([]);
-        }
-      } catch (e) {
+    setIsLoadingCoaches(true);
+    try {
+      const trainersRes = await api.pt.getAvailableTrainers();
+      if (trainersRes && trainersRes.data) {
+        setLiveTrainers(trainersRes.data);
+      } else {
         setLiveTrainers([]);
       }
-    } else {
+    } catch (e) {
+      console.warn('API coaches fetch warning:', e);
       setLiveTrainers([]);
+    } finally {
+      setIsLoadingCoaches(false);
     }
   };
 
@@ -135,10 +112,6 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
   }, []);
 
   const selectedDate = weekDays[selectedDayIndex].fullDate;
-
-  if (editorialRoute) {
-    return <GuestArticlePage route={editorialRoute} onNavigate={navigateEditorial} />;
-  }
 
   useEffect(() => {
     let active = true;
@@ -386,19 +359,33 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
   };
 
   // Master Gym Coaches List strictly from live backend
-  const coaches = liveTrainers.map((t) => ({
-    name: t.user?.fullName || `Coach #${t.userId}`,
-    role: t.specialization || 'Chuyên Gia Huấn Luyện Thể Hình',
-    experience: t.experience ? `${t.experience}+ năm kinh nghiệm` : 'Nhiều năm kinh nghiệm',
-    certs: t.bio || 'Chứng chỉ Quốc Tế CPT & Khoa Học Vận Động',
-    image: t.user?.avatar || 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=600&auto=format&fit=crop&q=80',
-    rating: t.rating ? t.rating.toFixed(1) : '5.0'
+  const coaches = liveTrainers.map((t: any) => ({
+    id: t.id,
+    userId: t.userId,
+    name: t.fullName || t.user?.fullName || `Coach #${t.userId}`,
+    role: t.specialization || '',
+    experience: t.experience ? `${t.experience}+ năm kinh nghiệm` : '',
+    certs: t.certifications || t.bio || '',
+    image: t.avatar || t.user?.avatar || '',
+    rating: t.rating !== undefined && t.rating !== null ? Number(t.rating).toFixed(1) : '',
+    hourlyRate: t.hourlyRate ? Number(t.hourlyRate) : 0
   }));
+
+  // Smooth scroll helper with header offset
+  const scrollToTarget = (targetId: string) => {
+    const el = document.getElementById(targetId);
+    if (el) {
+      const yOffset = -24;
+      const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  };
 
   // 4 Core Gym Pillars for the Freeletics Interactive Reveal Grid
   const gymPillars = [
     {
       id: 'pillar-weights',
+      targetId: 'free-weights',
       number: '01',
       title: 'Free Weights & Dumbbells',
       tag: 'Khu Tạ Tự Do',
@@ -408,6 +395,7 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
     },
     {
       id: 'pillar-machines',
+      targetId: 'machines',
       number: '02',
       title: 'Resistance & Machines',
       tag: 'Khu Máy Khối',
@@ -417,6 +405,7 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
     },
     {
       id: 'pillar-hiit',
+      targetId: 'schedule',
       number: '03',
       title: 'Metabolic & Cardio HIIT',
       tag: 'Thể Lực & Sức Bền',
@@ -426,6 +415,7 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
     },
     {
       id: 'pillar-pt',
+      targetId: 'coaches',
       number: '04',
       title: '1-1 Personal Coaching',
       tag: 'Huấn Luyện Viên Riêng',
@@ -583,7 +573,7 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
       {/* =========================================================================
           2. FREELETICS INTERACTIVE REVEAL PANELS (Background As Boundary, Hover Reveal)
           ========================================================================= */}
-      <section style={{ padding: '0', borderBottom: '1px solid var(--border-subtle)' }}>
+      <section id="facilities" style={{ padding: '0', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ padding: '48px 36px 32px', textAlign: 'center', background: 'var(--bg-app)' }}>
           <div
             style={{
@@ -609,7 +599,7 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
             4 Khu Vực Thể Hình Chuyên Sâu
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 8 }}>
-            Rê chuột vào từng khu vực để xem chi tiết thiết bị và lộ trình tập luyện.
+            Rê chuột vào từng khu vực để xem chi tiết thiết bị và bấm để điều hướng trực tiếp đến khu vực tương ứng.
           </p>
         </div>
 
@@ -619,10 +609,7 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
             <div
               key={pillar.id}
               className="fl-reveal-card"
-              onClick={() => {
-                const el = document.getElementById('schedule');
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-              }}
+              onClick={() => scrollToTarget(pillar.targetId)}
             >
               {/* Background Photo acting as visual boundary */}
               <img
@@ -661,6 +648,10 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
 
                   <button
                     className="btn-primary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      scrollToTarget(pillar.targetId);
+                    }}
                     style={{
                       padding: '9px 18px',
                       fontSize: 11,
@@ -675,6 +666,400 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Luminous Accent Divider */}
+      <div className="luminous-divider" />
+
+      {/* =========================================================================
+          2B. SHOWCASE CHI TIẾT: KHU TẠ TỰ DO (Free Weights Zone)
+          ========================================================================= */}
+      <section
+        id="free-weights"
+        style={{
+          padding: '64px 44px 72px',
+          width: '100%',
+          position: 'relative',
+          backgroundImage: `linear-gradient(180deg, rgba(14, 6, 2, 0.94) 0%, rgba(24, 10, 4, 0.96) 50%, rgba(12, 5, 2, 0.98) 100%), url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1920&auto=format&fit=crop&q=80')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          borderBottom: '1px solid var(--border-subtle)',
+          overflow: 'hidden'
+        }}
+      >
+        <div className="aura-glow-top-right" />
+        <div className="athletic-dot-grid" style={{ opacity: 0.12 }} />
+        <div className="athletic-watermark" style={{ top: 20, right: 30, color: 'rgba(255, 255, 255, 0.04)' }}>
+          ROGUE ELEIKO
+        </div>
+
+        <div style={{ maxWidth: 1280, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+          {/* Header */}
+          <div style={{ marginBottom: 36 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.18em',
+                color: '#FFA050',
+                marginBottom: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}
+            >
+              <span style={{ display: 'inline-block', width: 24, height: 2, background: 'var(--color-primary)' }} />
+              01 // TIÊU CHUẨN OLYMPIC & HARDCORE
+            </div>
+            <h2
+              style={{
+                fontSize: 'clamp(26px, 3.5vw, 40px)',
+                fontWeight: 900,
+                textTransform: 'uppercase',
+                letterSpacing: '-0.02em',
+                margin: '0 0 12px',
+                color: '#FFFFFF'
+              }}
+            >
+              Khu Tạ Tự Do (Free Weights Arena)
+            </h2>
+            <p style={{ color: 'rgba(255, 255, 255, 0.75)', fontSize: 15, maxWidth: 780, margin: 0, lineHeight: 1.6 }}>
+              Được trang bị 100% thiết bị Rogue Fitness & Eleiko đạt chuẩn thi đấu cử tạ quốc tế. Không gian rộng rãi, thoáng đãng với sàn cao su chống rung đa tầng, đáp ứng mọi bài tập phức hợp từ căn bản đến mức tạ tối thượng.
+            </p>
+          </div>
+
+          {/* Grid Layout: Photo Showcase + Specs List */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: 28,
+              alignItems: 'stretch'
+            }}
+          >
+            {/* Visual Box with Badges */}
+            <div
+              style={{
+                position: 'relative',
+                minHeight: 380,
+                borderRadius: 0,
+                overflow: 'hidden',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                background: '#120704'
+              }}
+            >
+              <img
+                src="https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=1000&auto=format&fit=crop&q=80"
+                alt="Khu Tạ Tự Do"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  filter: 'brightness(0.85) contrast(1.1)'
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(20,8,3,0.85) 100%)'
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 24,
+                  left: 24,
+                  right: 24,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 10
+                }}
+              >
+                <div style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', padding: '8px 14px', border: '1px solid rgba(255,255,255,0.18)', fontSize: 12, fontWeight: 800, color: '#FAF7F2' }}>
+                  ⚡ Rogue Urethane Dumbbells (2 - 60KG)
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', padding: '8px 14px', border: '1px solid rgba(255,255,255,0.18)', fontSize: 12, fontWeight: 800, color: '#FAF7F2' }}>
+                  🛡️ 4 Bục Deadlift Giảm Chấn Eleiko
+                </div>
+              </div>
+            </div>
+
+            {/* Equipment Features Cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                {
+                  title: '100+ Cặp Tạ Đơn Urethane Đúc Liền Khối',
+                  desc: 'Dải tạ từ 2kg đến 60kg bước nhảy 2kg chuẩn mực. Khía kim cương bám tay, bọc cao su PU cao cấp chống va đập, bảo vệ tối đa cổ tay và khớp.',
+                  highlight: 'Rogue Fitness USA'
+                },
+                {
+                  title: '4 Bục Chuyên Dụng Nâng Tạ Deadlift & Olympic',
+                  desc: 'Gỗ sồi Bắc Âu dày 50mm kết hợp 2 bên cao su hấp thụ xung lực đa tầng, triệt tiêu 98% tiếng ồn và chống nảy tạ khi thả tự do từ trên cao.',
+                  highlight: 'Eleiko Sweden Certified'
+                },
+                {
+                  title: '6 Dàn Khung Gánh Power Racks & Squat Stand',
+                  desc: 'Thép hộp dày 3x3 inch chuẩn Monster Lite, trang bị chốt đỡ an toàn chịu tải 1.200kg, thanh xà đơn đa góc độ tập Chin-up/Pull-up.',
+                  highlight: 'Tải trọng 1.200kg'
+                },
+                {
+                  title: 'Bộ Đòn Tạ Olympic Thép Luyện Thủy Lực',
+                  desc: 'Hệ thống đòn 20kg nam (đường kính 28mm) và 15kg nữ (25mm) chuẩn thi đấu cử tạ, trang bị 8 ổ bi bạc đạn kim (needle bearings) xoay siêu êm.',
+                  highlight: 'IPF / IWF Approved'
+                }
+              ].map((feat, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    padding: '16px 20px',
+                    background: 'rgba(28, 12, 5, 0.72)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#FFFFFF' }}>
+                      {feat.title}
+                    </h4>
+                    <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', background: 'rgba(224, 90, 43, 0.2)', color: '#FFA050', border: '1px solid rgba(224, 90, 43, 0.35)', whiteSpace: 'nowrap' }}>
+                      {feat.highlight}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: 'rgba(255, 255, 255, 0.7)' }}>
+                    {feat.desc}
+                  </p>
+                </div>
+              ))}
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button
+                  className="btn-primary"
+                  onClick={() => scrollToTarget('pricing')}
+                  style={{ padding: '12px 24px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                >
+                  <span>Xem Gói Hội Viên Khu Tạ</span>
+                  <ArrowRight size={14} />
+                </button>
+                <button
+                  onClick={() => scrollToTarget('schedule')}
+                  style={{
+                    padding: '12px 20px',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: '#FAF7F2',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.18)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Xem Lịch Tập
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Luminous Accent Divider */}
+      <div className="luminous-divider" />
+
+      {/* =========================================================================
+          2C. SHOWCASE CHI TIẾT: KHU MÁY KHỐI (Resistance & Machines Zone)
+          ========================================================================= */}
+      <section
+        id="machines"
+        style={{
+          padding: '64px 44px 72px',
+          width: '100%',
+          position: 'relative',
+          backgroundImage: `linear-gradient(180deg, rgba(12, 5, 2, 0.95) 0%, rgba(26, 11, 4, 0.96) 50%, rgba(14, 6, 2, 0.98) 100%), url('https://images.unsplash.com/photo-1540497077202-7c8a3999166f?w=1920&auto=format&fit=crop&q=80')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          borderBottom: '1px solid var(--border-subtle)',
+          overflow: 'hidden'
+        }}
+      >
+        <div className="aura-glow-bottom-left" />
+        <div className="athletic-dot-grid" style={{ opacity: 0.12 }} />
+        <div className="athletic-watermark" style={{ top: 20, left: 30, color: 'rgba(255, 255, 255, 0.04)' }}>
+          TECHNOGYM
+        </div>
+
+        <div style={{ maxWidth: 1280, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+          {/* Header */}
+          <div style={{ marginBottom: 36 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.18em',
+                color: '#FFA050',
+                marginBottom: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}
+            >
+              <span style={{ display: 'inline-block', width: 24, height: 2, background: 'var(--color-primary)' }} />
+              02 // CƠ SINH HỌC CHÍNH XÁC & AN TOÀN TUYỆT ĐỐI
+            </div>
+            <h2
+              style={{
+                fontSize: 'clamp(26px, 3.5vw, 40px)',
+                fontWeight: 900,
+                textTransform: 'uppercase',
+                letterSpacing: '-0.02em',
+                margin: '0 0 12px',
+                color: '#FFFFFF'
+              }}
+            >
+              Khu Máy Khối (Resistance & Cable Matrix)
+            </h2>
+            <p style={{ color: 'rgba(255, 255, 255, 0.75)', fontSize: 15, maxWidth: 780, margin: 0, lineHeight: 1.6 }}>
+              Trang bị toàn diện dàn máy Technogym PureStrength và Selection 900 nhập khẩu nguyên chiếc từ Ý. Đường quỹ đạo chuyển động hội tụ và phân kỳ giúp cô lập nhóm cơ mục tiêu hoàn hảo, loại bỏ áp lực xấu lên khớp cổ tay và cột sống.
+            </p>
+          </div>
+
+          {/* Grid Layout: Features List + Photo Showcase */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: 28,
+              alignItems: 'stretch'
+            }}
+          >
+            {/* Equipment Features Cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                {
+                  title: 'Dàn Máy Khối Technogym PureStrength Độc Lập',
+                  desc: 'Hỗ trợ chuyển động Iso-Lateral độc lập cho từng bên tay/chân. Cân bằng lực và khắc phục tình trạng lệch cơ triệt để cho người tập từ mới đến nâng cao.',
+                  highlight: 'Technogym Italy'
+                },
+                {
+                  title: 'Hệ Thống Dual Cable Matrix & Trục Xoay 360°',
+                  desc: 'Dây cáp hàng không chịu tải cao kết hợp ròng rọc mượt mà. Đa dạng bài tập ngực (Cable Fly), vai (Lateral Raise) và xô lưng không góc chết.',
+                  highlight: 'Đa góc độ 360°'
+                },
+                {
+                  title: 'Khu Máy Chân Chuyên Sâu 45° Leg Press & Hack Squat',
+                  desc: 'Bàn đạp góc 45 độ chịu tải 800kg, bảo vệ cột sống thắt lưng. Trang bị máy Pendulum Squat, Seated & Lying Leg Curl tập đùi sau chuyên sâu.',
+                  highlight: 'Tải trọng 800KG'
+                },
+                {
+                  title: 'Smart-Pin Tinh Chỉnh Mức Tạ Vi Mô & Đệm Da Kháng Khuẩn',
+                  desc: 'Chốt chọn tạ nam châm thông minh kèm tạ phụ gia số 2.5kg. Đệm mút nhớ hình học bọc da cao cấp chống thấm mồ hôi và dễ dàng vệ sinh.',
+                  highlight: 'Micro-load 2.5kg'
+                }
+              ].map((feat, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    padding: '16px 20px',
+                    background: 'rgba(28, 12, 5, 0.72)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#FFFFFF' }}>
+                      {feat.title}
+                    </h4>
+                    <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', background: 'rgba(224, 90, 43, 0.2)', color: '#FFA050', border: '1px solid rgba(224, 90, 43, 0.35)', whiteSpace: 'nowrap' }}>
+                      {feat.highlight}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: 'rgba(255, 255, 255, 0.7)' }}>
+                    {feat.desc}
+                  </p>
+                </div>
+              ))}
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button
+                  className="btn-primary"
+                  onClick={() => scrollToTarget('pricing')}
+                  style={{ padding: '12px 24px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                >
+                  <span>Khám Phá Gói Tập Máy Khối</span>
+                  <ArrowRight size={14} />
+                </button>
+                <button
+                  onClick={() => scrollToTarget('coaches')}
+                  style={{
+                    padding: '12px 20px',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: '#FAF7F2',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.18)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Tư Vấn HLV Riêng
+                </button>
+              </div>
+            </div>
+
+            {/* Visual Box with Badges */}
+            <div
+              style={{
+                position: 'relative',
+                minHeight: 380,
+                borderRadius: 0,
+                overflow: 'hidden',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                background: '#120704'
+              }}
+            >
+              <img
+                src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1000&auto=format&fit=crop&q=80"
+                alt="Khu Máy Khối"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  filter: 'brightness(0.85) contrast(1.1)'
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(20,8,3,0.85) 100%)'
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 24,
+                  left: 24,
+                  right: 24,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 10
+                }}
+              >
+                <div style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', padding: '8px 14px', border: '1px solid rgba(255,255,255,0.18)', fontSize: 12, fontWeight: 800, color: '#FAF7F2' }}>
+                  ⚙️ 40+ Dàn Máy Technogym Chuyên Biệt
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', padding: '8px 14px', border: '1px solid rgba(255,255,255,0.18)', fontSize: 12, fontWeight: 800, color: '#FAF7F2' }}>
+                  🎯 Cô Lập Cơ Bắp Chuẩn Cơ Sinh Học
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1267,7 +1652,12 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
             </p>
           </div>
 
-          {coaches.length === 0 ? (
+          {isLoadingCoaches ? (
+            <div style={{ textAlign: 'center', padding: '56px 0', color: 'rgba(255, 255, 255, 0.7)' }}>
+              <Loader2 size={32} className="animate-spin" color="var(--color-primary)" style={{ margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 14 }}>Đang tải danh sách Huấn luyện viên từ máy chủ...</div>
+            </div>
+          ) : coaches.length === 0 ? (
             <div style={{
               textAlign: 'center',
               padding: '48px 24px',
@@ -1308,46 +1698,84 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
                     flexDirection: 'column'
                   }}
                 >
-                  <div style={{ height: 230, position: 'relative', overflow: 'hidden' }}>
-                    <img
-                      src={c.image}
-                      alt={c.name}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover'
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        background: 'rgba(20, 8, 3, 0.92)',
-                        color: '#FFFFFF',
-                        padding: '4px 10px',
-                        borderRadius: 0,
-                        fontSize: 10.5,
-                        fontWeight: 800,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4
-                      }}
-                    >
-                      <Star size={11} color="#FFB300" fill="#FFB300" />
-                      <span>{c.rating} / 5.0</span>
-                    </div>
+                  <div
+                    style={{
+                      height: 230,
+                      position: 'relative',
+                      overflow: 'hidden',
+                      background: 'rgba(20, 8, 3, 0.95)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    {c.image ? (
+                      <img
+                        src={c.image}
+                        alt={c.name}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 10,
+                          color: 'rgba(255, 255, 255, 0.4)'
+                        }}
+                      >
+                        <Users size={52} color="var(--color-primary)" />
+                        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                          Aura Coach
+                        </span>
+                      </div>
+                    )}
+                    {c.rating && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          background: 'rgba(20, 8, 3, 0.92)',
+                          color: '#FFFFFF',
+                          padding: '4px 10px',
+                          borderRadius: 0,
+                          fontSize: 10.5,
+                          fontWeight: 800,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                      >
+                        <Star size={11} color="#FFB300" fill="#FFB300" />
+                        <span>{c.rating} / 5.0</span>
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ padding: '18px 18px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div>
                       <h4 style={{ fontSize: 18, fontWeight: 900, textTransform: 'uppercase', color: '#FFFFFF' }}>{c.name}</h4>
-                      <p style={{ fontSize: 12, color: '#FFA050', fontWeight: 800, marginTop: 4, textTransform: 'uppercase' }}>
-                        {c.role}
-                      </p>
-                      <p style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.72)', marginTop: 6, lineHeight: 1.5 }}>
-                        {c.certs} • {c.experience}
-                      </p>
+                      {c.role && (
+                        <p style={{ fontSize: 12, color: '#FFA050', fontWeight: 800, marginTop: 4, textTransform: 'uppercase' }}>
+                          {c.role}
+                        </p>
+                      )}
+                      {(c.certs || c.experience) && (
+                        <p style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.72)', marginTop: 6, lineHeight: 1.5 }}>
+                          {[c.certs, c.experience].filter(Boolean).join(' • ')}
+                        </p>
+                      )}
+                      {c.hourlyRate > 0 && (
+                        <div style={{ marginTop: 8, fontSize: 11.5, color: '#FFB87A', fontWeight: 700 }}>
+                          Kèm riêng 1-1: {Number(c.hourlyRate).toLocaleString('vi-VN')} ₫ / buổi
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ marginTop: 22 }}>
@@ -1380,8 +1808,6 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
           )}
         </div>
       </section>
-
-      <GuestArticlesSection onNavigate={navigateEditorial} />
 
       {/* =========================================================================
           6. SHARP QR CHECK-IN MODAL (Góc vuông, Luxury High-Tech Style)

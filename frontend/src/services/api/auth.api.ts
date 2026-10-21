@@ -92,6 +92,19 @@ export const authApi = {
     return tokenStorage.getUser();
   },
 
+  async verifySession() {
+    return request<{
+      success: boolean;
+      data?: {
+        userId: number;
+        role: string;
+        expiresIn: number | null;
+      };
+      code?: string;
+      requiresStaffCashout?: boolean;
+    }>('/auth/verify-session');
+  },
+
   logout() {
     tokenStorage.clear();
   }
