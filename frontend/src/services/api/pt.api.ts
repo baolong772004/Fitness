@@ -267,6 +267,13 @@ export const ptApi = {
     );
   },
 
+  async manualCheckIn(bookingId: number | string, reason: string) {
+    return request<{ success: boolean; data: { bookingId: number; status: string } }>(
+      `/pt/booking/${bookingId}/manual-check-in`, {
+        method: 'POST', body: JSON.stringify({ reason })
+      });
+  },
+
   async markAbsent(bookingId: number | string, reason?: string) {
     return request<{
       success: boolean;

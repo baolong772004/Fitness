@@ -41,6 +41,7 @@ export const createReview = async (req: AuthRequest, res: Response) => {
       // 1. Tạo Review
       const review = await tx.review.create({
         data: {
+          bookingId: hasTrained.id,
           memberId: memberId,
           coachProfileId: Number(coachProfileId),
           rating: Number(rating),

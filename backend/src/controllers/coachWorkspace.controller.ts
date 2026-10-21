@@ -4,6 +4,7 @@ import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { normalizeWorkoutPlanContent, presentWorkoutPlan } from '../services/workoutPlan.service.js';
 import { generateCoachPlanWithGemini } from '../services/geminiPlan.service.js';
 import { createUserNotification } from '../services/notification.service.js';
+import { walletSummary } from '../services/ptWallet.service.js';
 
 
 const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -17,6 +18,7 @@ export async function getCoachWorkspace(req: AuthRequest, res: Response) {
       include: {
         user: { select: { id: true, fullName: true, email: true, phone: true, avatar: true } },
         schedules: { orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }] },
+        specializations: { select: { level: true } },
       },
     });
     if (!profile) return res.status(404).json({ success: false, message: 'Coach chưa được quản trị viên tạo hồ sơ PT' });
@@ -50,7 +52,23 @@ export async function getCoachTrainees(req: AuthRequest, res: Response) {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return res.json({ success: true, data: memberships });
+    const bookings = await prisma.booking.findMany({ where: { coachId, type: 'PT',
+      status: { in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'MAKEUP_BOOKED'] } },
+      include: { member: { select: { id: true, fullName: true, phone: true, email: true,
+        avatar: true, gender: true, dateOfBirth: true, height: true, weight: true } } },
+      orderBy: { startTime: 'desc' } });
+    const latestByMember = new Map<number, typeof bookings[number]>();
+    for (const booking of bookings) if (!latestByMember.has(booking.memberId)) latestByMember.set(booking.memberId, booking);
+    const walletTrainees = await Promise.all([...latestByMember.values()].map(async booking => {
+      const wallet = await walletSummary(prisma, booking.memberId);
+      return { id: -booking.id, userId: booking.memberId, user: booking.member,
+        startDate: booking.startTime, endDate: booking.endTime,
+        remainingSessions: wallet.available, status: booking.status,
+        package: { name: 'PT Credit', totalPtSessions: wallet.total } };
+    }));
+    return res.json({ success: true, data: [
+      ...walletTrainees, ...memberships.filter(item => !latestByMember.has(item.userId)),
+    ] });
   } catch (error) {
     console.error('Lỗi tải học viên Coach:', error);
     return res.status(500).json({ success: false, message: 'Không thể tải học viên PT' });
@@ -148,7 +166,9 @@ export async function createCoachPlan(req: AuthRequest, res: Response) {
         where: { userId: memberId, coachId, package: { type: 'PT' } },
         select: { id: true },
       });
-      if (!assigned) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này' });
+      const activeBooking = await prisma.booking.findFirst({ where: { memberId, coachId, type: 'PT',
+        status: { in: ['CONFIRMED', 'IN_PROGRESS'] }, endTime: { gt: new Date() } }, select: { id: true } });
+      if (!assigned && !activeBooking) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này' });
     }
     const plan = await prisma.workoutPlan.create({
       data: { coachId, memberId, title, description, ...content },
@@ -189,8 +209,12 @@ export async function generateCoachPlan(req: AuthRequest, res: Response) {
         where: { userId: memberId, coachId, package: { type: 'PT' } },
         select: { user: { select: { fullName: true, gender: true, dateOfBirth: true, height: true, weight: true } } },
       });
-      if (!membership) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này.' });
-      member = membership.user;
+      const booking = await prisma.booking.findFirst({ where: { memberId, coachId, type: 'PT',
+        status: { in: ['CONFIRMED', 'IN_PROGRESS'] }, endTime: { gt: new Date() } },
+        select: { member: { select: { fullName: true, gender: true, dateOfBirth: true,
+          height: true, weight: true } } } });
+      if (!membership && !booking) return res.status(403).json({ success: false, message: 'Học viên không thuộc Coach này.' });
+      member = membership?.user ?? booking!.member;
     }
     const plan = await generateCoachPlanWithGemini(member, req.body?.request ?? '');
     return res.json({ success: true, data: plan });

@@ -1,4 +1,5 @@
 import prisma from '../config/prisma.js';
+import { verifiedGymPayment } from './gymEntitlement.service.js';
 import { MongoServerError, type Filter } from 'mongodb';
 import {
   getCounterCollection,
@@ -133,7 +134,7 @@ export async function getPtChatAccess(bookingId: number, userId: number) {
     where: { type: 'PT', ...pair }, select: { id: true, membershipId: true },
   });
   const now = new Date();
-  const [liveBooking, liveMembership] = await Promise.all([
+  const [liveBooking, liveMembership, liveGym, wallet] = await Promise.all([
     prisma.booking.findFirst({ where: {
       type: 'PT', ...pair, status: { in: ['CONFIRMED', 'IN_PROGRESS'] }, endTime: { gt: now },
     }, select: { id: true } }),
@@ -144,8 +145,21 @@ export async function getPtChatAccess(bookingId: number, userId: number) {
         { id: { in: history.flatMap((item) => item.membershipId === null ? [] : [item.membershipId]) }, package: { type: 'MEMBERSHIP' }, remainingSessions: { gt: 0 } },
       ],
     }, select: { id: true } }),
+    prisma.membership.findFirst({ where: {
+      userId: booking.memberId, status: 'ACTIVE', startDate: { lte: now }, endDate: { gt: now },
+      package: { type: 'MEMBERSHIP' }, payments: { some: verifiedGymPayment },
+    }, select: { id: true } }),
+    prisma.ptWallet.findUnique({ where: { memberId: booking.memberId }, include: {
+      batches: { where: { OR: [{ coachId: null }, { coachId: booking.coachId }] },
+        select: { initialCount: true, usedCount: true, heldCount: true, level: true,
+          membership: { select: { status: true, startDate: true, endDate: true } } } },
+    } }),
   ]);
-  return { booking, pair, bookingIds: history.map((item) => item.id), canSend: !!(liveBooking || liveMembership) };
+  const liveWallet = Boolean(liveGym && wallet?.batches.some(batch =>
+    batch.initialCount > batch.usedCount + batch.heldCount &&
+    (batch.level !== 'TRIAL' || (batch.membership?.status === 'ACTIVE' &&
+      batch.membership.startDate <= now && batch.membership.endDate > now))));
+  return { booking, pair, bookingIds: history.map((item) => item.id), canSend: !!(liveBooking || liveMembership || liveWallet) };
 }
 
 export async function getPtChatMessages(bookingIds: number[], userId: number, beforeId?: number, afterId?: number, limit = 30) {

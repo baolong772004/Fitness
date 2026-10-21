@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { AuthService } from '../services/auth.service';
+import { AuthService } from '../services/auth.service.js';
 import { z } from 'zod';
-import { AuthRequest } from '../middlewares/auth.middleware';
+import { AuthRequest } from '../middlewares/auth.middleware.js';
 
 // Validation Schemas
 const registerSchema = z.object({
@@ -24,7 +24,7 @@ export class AuthController {
       });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, message: 'Validation failed', errors: error.errors });
+        return res.status(400).json({ success: false, message: 'Validation failed', errors: error.issues });
       }
       if (error.message === 'Email already exists') {
         return res.status(400).json({ success: false, message: error.message });

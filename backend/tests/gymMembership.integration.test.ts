@@ -36,6 +36,10 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   });
   const packages: number[] = [];
   t.after(async () => {
+    const batchIds = (await prisma.ptCreditBatch.findMany({ where: { wallet: { memberId: user.id } }, select: { id: true } })).map(row => row.id);
+    await prisma.ptCreditTransaction.deleteMany({ where: { batchId: { in: batchIds } } });
+    await prisma.ptCreditBatch.deleteMany({ where: { id: { in: batchIds } } });
+    await prisma.ptWallet.deleteMany({ where: { memberId: user.id } });
     await prisma.payment.deleteMany({ where: { userId: user.id } });
     await prisma.membership.deleteMany({ where: { userId: user.id } });
     await prisma.package.deleteMany({ where: { id: { in: packages } } });
@@ -59,20 +63,22 @@ async function checkout(userId: number, packageId: number) {
       startDate: now, endDate: addDays(now, 30), status: 'PENDING',
     },
   });
+  const code = orderCode();
   const payment = await prisma.payment.create({
     data: {
       userId, membershipId: membership.id, amount: 100000, method: 'PAYOS',
-      status: 'PENDING', orderCode: orderCode(),
+      status: 'PENDING', orderCode: code, transactionNo: `TEST-${code}`,
     },
   });
   return { membership, payment };
 }
 
 async function renewal(userId: number, membershipId: number, days: number) {
+  const code = orderCode();
   return prisma.payment.create({
     data: {
       userId, membershipId, amount: 100000, method: 'PAYOS', status: 'PENDING',
-      renewalDurationDays: days, orderCode: orderCode(),
+      renewalDurationDays: days, orderCode: code, transactionNo: `TEST-${code}`,
     },
   });
 }

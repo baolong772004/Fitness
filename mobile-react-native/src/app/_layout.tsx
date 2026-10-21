@@ -24,6 +24,7 @@ function RootNavigation() {
     <Stack.Screen name="pt" options={{ title: 'Lịch tập cùng PT' }} />
     <Stack.Screen name="coach-availability" options={{ title: 'Đăng ký lịch Coach' }} />
     <Stack.Screen name="pt-book" options={{ title: 'Đặt lịch PT' }} />
+    <Stack.Screen name="pt-renew" options={{ title: 'Gia hạn thời gian PT' }} />
     <Stack.Screen name="pt-chat" options={{ title: 'Tin nhắn PT' }} />
     <Stack.Screen name="pt-qr" options={{ title: 'QR buổi tập PT' }} />
     <Stack.Screen name="scanner" options={{ title: 'Quét mã QR' }} />

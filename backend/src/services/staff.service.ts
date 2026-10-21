@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { createUserNotification } from './notification.service.js';
+import { grantPtCredit } from './ptWallet.service.js';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
@@ -648,6 +649,7 @@ export class StaffService {
     if (!pkg || !pkg.isActive) {
       throw new Error('Gói tập không tồn tại hoặc đã ngừng cung cấp.');
     }
+    if (pkg.type === 'PT') throw new Error('Gói PT cũ đã ngừng bán. Hội viên mua PT Credit qua PayOS.');
 
     const packagePrice = Number(pkg.price);
 
@@ -694,60 +696,37 @@ export class StaffService {
     const startDate = new Date();
     const endDate = new Date(startDate.getTime() + pkg.durationDays * 86400000);
 
-    const membership = await prisma.membership.create({
-      data: {
-        userId: member.id,
-        packageId: pkg.id,
-        startDate,
-        endDate,
-        remainingSessions: pkg.type === 'PT' ? pkg.totalPtSessions : null,
-        status: 'ACTIVE',
-        coachId: consultantStaffId || null
-      }
-    });
-
     // 5. Ghi nhận giao dịch Payment
     const generatedOrderCode = BigInt(Date.now() + Math.floor(Math.random() * 1000));
     const transactionNo = paymentMethod === 'POS'
       ? traceRefNo!.trim()
       : `CASH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
 
-    const payment = await prisma.payment.create({
-      data: {
-        userId: member.id,
-        membershipId: membership.id,
-        amount: pkg.price,
-        method: paymentMethod === 'CASH' ? 'CASH' : 'POS_CARD',
-        status: 'COMPLETED',
-        orderCode: generatedOrderCode,
-        transactionNo,
-        staffId,
-        shiftId,
+    const { membership, payment } = await prisma.$transaction(async tx => {
+      const membership = await tx.membership.create({ data: {
+        userId: member!.id, packageId: pkg.id, startDate, endDate,
+        remainingSessions: null, status: 'ACTIVE', coachId: consultantStaffId || null,
+      } });
+      const payment = await tx.payment.create({ data: {
+        userId: member!.id, membershipId: membership.id, amount: pkg.price,
+        method: paymentMethod === 'CASH' ? 'CASH' : 'POS_CARD', status: 'COMPLETED',
+        orderCode: generatedOrderCode, transactionNo, staffId, shiftId,
         consultantId: consultantStaffId || null,
         traceRefNo: paymentMethod === 'POS' ? traceRefNo!.trim() : null,
         cashReceived: cashReceived ? cashReceived : null,
         cashChange: cashChange > 0 ? cashChange : null,
-        note: `Đăng ký gói Walk-in tại quầy [${pkg.name}]`
-      }
-    });
-
-    // 6. Nếu thu Tiền mặt: Ghi nhận ngay vào quỹ tiền mặt ca trực của Lễ tân
-    if (paymentMethod === 'CASH') {
-      await prisma.staffShift.update({
-        where: { id: shiftId },
-        data: {
-          systemCashAmount: { increment: pkg.price }
-        }
-      });
-    }
-
-    // 7. Ghi ActionLog
-    await prisma.actionLog.create({
-      data: {
-        userId: staffId,
-        action: 'WALK_IN_REGISTRATION',
-        details: `Lễ tân ID ${staffId} đăng ký gói [${pkg.name}] cho khách Walk-in ${member.fullName} (${member.phone}). Hình thức: ${paymentMethod}. Số tiền: ${packagePrice.toLocaleString('vi-VN')} đ.`
-      }
+        note: `Đăng ký gói Walk-in tại quầy [${pkg.name}]`,
+      } });
+      if (pkg.trialPtSessions > 0) await grantPtCredit(tx, { memberId: member!.id,
+        level: 'TRIAL', source: 'MEMBERSHIP_GIFT', count: pkg.trialPtSessions,
+        membershipId: membership.id });
+      if (paymentMethod === 'CASH') await tx.staffShift.update({ where: { id: shiftId },
+        data: { systemCashAmount: { increment: pkg.price } } });
+      await tx.actionLog.create({ data: {
+        userId: staffId, action: 'WALK_IN_REGISTRATION',
+        details: `Lễ tân ID ${staffId} đăng ký gói [${pkg.name}] cho khách Walk-in ${member!.fullName} (${member!.phone}). Hình thức: ${paymentMethod}. Số tiền: ${packagePrice.toLocaleString('vi-VN')} đ.`,
+      } });
+      return { membership, payment };
     });
 
     // 8. Sinh link SMS hướng dẫn tải App
@@ -861,6 +840,9 @@ export class StaffService {
     if (payment.status === 'COMPLETED') {
       throw new Error('Hóa đơn này đã được thanh toán trước đó.');
     }
+    if (payment.membership?.package.type === 'PT') {
+      throw new Error('Gói PT cũ đã ngừng bán. Không thể kích hoạt bằng thanh toán tại quầy.');
+    }
 
     const amount = Number(payment.amount);
 
@@ -916,6 +898,11 @@ export class StaffService {
             endDate
           }
         });
+        if (payment.membership.package.trialPtSessions > 0) {
+          await grantPtCredit(tx, { memberId: payment.userId, level: 'TRIAL',
+            source: 'MEMBERSHIP_GIFT', count: payment.membership.package.trialPtSessions,
+            membershipId: payment.membershipId });
+        }
       }
 
       // 3. Nếu là Tiền mặt: ghi nhận vào quỹ ca trực
@@ -1204,7 +1191,7 @@ export class StaffService {
    * Lấy tóm tắt ca trực hiện tại của Lễ tân để chuẩn bị đóng ca
    */
   static async getCurrentShiftSummary(staffId: number) {
-    const shift = await prisma.staffShift.findFirst({
+    let shift = await prisma.staffShift.findFirst({
       where: {
         staffId,
         status: 'OPEN'

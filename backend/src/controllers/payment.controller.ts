@@ -11,16 +11,95 @@ import {
 } from '../services/payment.service.js';
 import { reconcileGymMembershipStates, refreshGymMembershipStates } from '../services/membership.service.js';
 import { lockGymMember } from '../services/gymMembershipLock.service.js';
+import { ptRenewalError, ptRenewalOptionMatchesBatch } from '../services/ptRenewal.service.js';
 
 
 export class PaymentController {
+  static async createPtRenewalCheckout(req: AuthRequest, res: Response) {
+    const userId = req.user?.userId;
+    const batchId = Number(req.body?.batchId);
+    const optionId = Number(req.body?.optionId);
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!Number.isSafeInteger(batchId) || batchId <= 0 || !Number.isSafeInteger(optionId) || optionId <= 0) {
+      return res.status(400).json({ message: 'Cần nguồn PT và gói gia hạn hợp lệ.' });
+    }
+    const [batch, option] = await Promise.all([
+      prisma.ptCreditBatch.findFirst({ where: { id: batchId, wallet: { memberId: userId } },
+        include: { payment: { select: { ptProductId: true } } } }),
+      prisma.ptRenewalOption.findFirst({ where: { id: optionId, isActive: true } }),
+    ]);
+    if (!batch || !option) return res.status(404).json({ message: 'Nguồn PT hoặc gói gia hạn không tồn tại.' });
+    const reason = ptRenewalError(batch);
+    if (reason) return res.status(409).json({ message: reason });
+    if (!ptRenewalOptionMatchesBatch(option, {
+      level: batch.level, ptProductId: batch.payment?.ptProductId ?? null,
+    })) return res.status(409).json({ message: 'Giá gia hạn không áp dụng cho gói PT đã mua.' });
+    const amount = Number(option.price);
+    if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 1000000000) {
+      return res.status(409).json({ message: 'Giá gia hạn không hợp lệ.' });
+    }
+    const payos = getPayOS();
+    if (!payos) return res.status(503).json({ message: 'PayOS chưa được cấu hình.' });
+    const orderCode = generateOrderCode();
+    try {
+      await prisma.payment.create({ data: {
+        userId, amount, method: 'PAYOS', status: 'PENDING',
+        orderCode: BigInt(orderCode), transactionNo: `TXN-${orderCode}`,
+        ptRenewalOptionId: option.id, ptRenewalProductId: option.ptProductId,
+        ptRenewalBatchId: batch.id,
+        ptRenewalDays: option.durationDays, ptLevelSnapshot: option.level,
+      } });
+      const link = await payos.createPaymentLink({ orderCode, amount,
+        description: `PT renew ${option.level}`.slice(0, 25), ...getPayOSRedirectUrls() });
+      return res.json({ success: true, orderCode, checkoutUrl: link.checkoutUrl,
+        qrCode: link.qrCode, batchId, durationDays: option.durationDays, level: option.level });
+    } catch (error) {
+      await markPaymentFailed(BigInt(orderCode)).catch(() => undefined);
+      console.error('PT renewal checkout failed:', error);
+      return res.status(500).json({ message: 'Không thể tạo đơn gia hạn PT.' });
+    }
+  }
+
+  static async createPtCreditCheckout(req: AuthRequest, res: Response) {
+    const userId = req.user?.userId;
+    const productId = Number(req.body?.productId);
+    const quantity = Number(req.body?.quantity ?? 1);
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!Number.isSafeInteger(productId) || productId <= 0 ||
+        !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 20) {
+      return res.status(400).json({ message: 'Cần productId và quantity từ 1 đến 20.' });
+    }
+    const payos = getPayOS();
+    if (!payos) return res.status(503).json({ message: 'PayOS chưa được cấu hình.' });
+    const product = await prisma.ptProduct.findFirst({ where: { id: productId, isActive: true } });
+    if (!product) return res.status(404).json({ message: 'Sản phẩm PT không tồn tại.' });
+    if (!['BEGINNER', 'INTERMEDIATE', 'ADVANCED'].includes(product.level)) return res.status(409).json({ message: 'Cấp độ PT không hợp lệ để bán.' });
+    if (!product.durationDays || product.durationDays <= 0) return res.status(409).json({ message: 'Gói PT chưa được cấu hình thời hạn.' });
+    const amount = Number(product.price) * quantity;
+    if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 1000000000) {
+      return res.status(400).json({ message: 'Giá thanh toán không hợp lệ.' });
+    }
+    const orderCode = generateOrderCode();
+    try {
+      await prisma.payment.create({ data: {
+        userId, amount, method: 'PAYOS', status: 'PENDING',
+        orderCode: BigInt(orderCode), transactionNo: `TXN-${orderCode}`,
+        ptProductId: product.id, ptQuantity: quantity,
+        ptLevelSnapshot: product.level, ptSessionsSnapshot: product.sessionCount,
+        ptDurationDays: product.durationDays,
+      } });
+      const link = await payos.createPaymentLink({ orderCode, amount,
+        description: `PT ${product.level} ${quantity}`.slice(0, 25), ...getPayOSRedirectUrls() });
+      return res.json({ success: true, orderCode, checkoutUrl: link.checkoutUrl, qrCode: link.qrCode,
+        sessions: product.sessionCount * quantity, level: product.level, durationDays: product.durationDays });
+    } catch (error) {
+      await markPaymentFailed(BigInt(orderCode)).catch(() => undefined);
+      console.error('PT credit checkout failed:', error);
+      return res.status(500).json({ message: 'Không thể tạo đơn thanh toán PT.' });
+    }
+  }
   static async createPtCheckoutSession(req: AuthRequest, res: Response) {
-    req.body = {
-      packageId: req.body?.ptPackageId,
-      trainerId: req.body?.trainerId,
-      memberId: req.body?.memberId,
-    };
-    return PaymentController.createCheckoutSession(req, res);
+    return res.status(410).json({ success: false, message: 'Gói PT cũ đã ngừng bán. Dùng /api/payments/pt-credit/checkout.' });
   }
 
   static async createCheckoutSession(req: AuthRequest, res: Response) {
@@ -58,6 +137,9 @@ export class PaymentController {
 
       if (!gymPackage || !gymPackage.isActive) {
         return res.status(404).json({ message: 'Gói tập không tồn tại hoặc đã ngừng bán' });
+      }
+      if (gymPackage.type === 'PT') {
+        return res.status(410).json({ success: false, message: 'Gói PT cũ đã ngừng bán. Dùng sản phẩm PT Credit.' });
       }
 
       let ptCoachId: number | null = null;

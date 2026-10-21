@@ -36,6 +36,7 @@ model User {
   givenReviews      Review[]           @relation("MemberReviews")
   supportRequests   SupportRequest[]   @relation("MemberSupport")
   sentPtChatMessages PtChatMessage[]    @relation("PtChatSender")
+  ptWallet          PtWallet?
 
   coachProfile      CoachProfile?
   coachBookings     Booking[]          @relation("CoachBookings")
@@ -63,10 +64,13 @@ model CoachProfile {
   certifications String?
   rating         Float    @default(5.0)
   hourlyRate     Decimal  @default(0) @db.Decimal(18, 2)
+  rank           String   @default("senior")
+  commissionPercent Int   @default(45)
   status         String   @default("ACTIVE") // ACTIVE | BLOCKED | INACTIVE
   createdAt      DateTime @default(now())
 
   pricing        CoachPricing[]
+  specializations CoachSpecialization[]
   schedules      CoachSchedule[]
   dateAvailability CoachDateAvailability[]
   reviews        Review[]
@@ -79,6 +83,14 @@ model CoachPricing {
   sessionCount   Int          
   price          Decimal      @db.Decimal(18, 2)
   createdAt      DateTime     @default(now())
+}
+
+model CoachSpecialization {
+  coachProfileId Int
+  level          String       @db.VarChar(20)
+  coachProfile   CoachProfile @relation(fields: [coachProfileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([coachProfileId, level])
 }
 
 model CoachSchedule {
@@ -150,11 +162,119 @@ model Package {
   durationDays    Int          // Số ngày sử dụng (ví dụ 30 ngày)
   trialPtSessions Int          @default(0) // Số buổi tập PT tặng kèm (Dành cho gói MEMBERSHIP)
   totalPtSessions Int?         // Tổng số buổi PT mua riêng (Dành cho gói PT)
+  ptLevel         String?      @db.VarChar(20) // BEGINNER | INTERMEDIATE | ADVANCED; legacy rows require mapping
   isActive        Boolean      @default(true)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
   memberships  Membership[]
+  ptProducts   PtProduct[]
+}
+
+model PtProduct {
+  id           Int      @id @default(autoincrement())
+  name         String   @db.NVarChar(100)
+  level        String   @db.VarChar(20)
+  sessionCount Int
+  durationDays Int?
+  price        Decimal  @db.Decimal(18, 2)
+  isActive     Boolean  @default(true)
+  packageId    Int?
+  package      Package? @relation(fields: [packageId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payments     Payment[]
+  renewalOptions PtRenewalOption[]
+  renewalPayments Payment[] @relation("PtRenewalProduct")
+}
+
+model PtRenewalOption {
+  id           Int      @id @default(autoincrement())
+  name         String   @db.NVarChar(100)
+  level        String   @db.VarChar(20)
+  durationDays Int
+  price        Decimal  @db.Decimal(18, 2)
+  isActive     Boolean  @default(true)
+  ptProductId  Int?
+  ptProduct    PtProduct? @relation(fields: [ptProductId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payments     Payment[]
+
+  @@index([ptProductId])
+}
+
+model PtWallet {
+  id        Int       @id @default(autoincrement())
+  memberId  Int       @unique
+  member    User      @relation(fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt DateTime  @default(now())
+  batches   PtCreditBatch[]
+}
+
+model PtCreditBatch {
+  id           Int       @id @default(autoincrement())
+  walletId     Int
+  wallet       PtWallet  @relation(fields: [walletId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  level        String    @db.VarChar(20)
+  source       String    @db.VarChar(30)
+  initialCount Int
+  usedCount    Int       @default(0)
+  heldCount    Int       @default(0)
+  paymentId    Int?
+  payment      Payment?  @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  membershipId Int?
+  membership   Membership? @relation(fields: [membershipId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  coachId      Int?
+  grantedAt    DateTime  @default(now())
+  startAt      DateTime?
+  endAt        DateTime?
+  activatedAt  DateTime?
+  allocations  PtBookingCreditAllocation[]
+  transactions PtCreditTransaction[]
+  renewalPayments Payment[] @relation("PtBatchRenewals")
+  renewalEvents PtRenewalEvent[]
+
+  @@index([walletId, level, grantedAt])
+  @@index([walletId, level, endAt])
+}
+
+model PtBookingCreditAllocation {
+  bookingId Int @id
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  batchId   Int
+  batch     PtCreditBatch @relation(fields: [batchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status    String @default("HELD") @db.VarChar(20)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([batchId, status])
+}
+
+model PtCreditTransaction {
+  id        Int @id @default(autoincrement())
+  batchId   Int
+  batch     PtCreditBatch @relation(fields: [batchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bookingId Int?
+  kind      String @db.VarChar(30)
+  quantity  Int
+  actorId   Int?
+  note      String? @db.NVarChar(500)
+  createdAt DateTime @default(now())
+
+  @@index([batchId, createdAt])
+  @@index([bookingId])
+}
+
+model PtRenewalEvent {
+  id             Int           @id @default(autoincrement())
+  batchId        Int
+  batch          PtCreditBatch @relation(fields: [batchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paymentId      Int           @unique
+  payment        Payment       @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  previousEndAt  DateTime
+  startAt        DateTime
+  endAt          DateTime
+  durationDays   Int
+  createdAt      DateTime      @default(now())
+
+  @@index([batchId, createdAt])
 }
 
 model Membership {
@@ -180,6 +300,7 @@ model Membership {
   payments          Payment[]
   bookings          Booking[]
   checkIns          CheckIn[]
+  ptCreditBatches   PtCreditBatch[]
 }
 
 // ==========================================
@@ -291,6 +412,7 @@ model Booking {
   sessionResult      SessionResult?
   review             Review?
   ptChatMessages     PtChatMessage[]
+  ptCreditAllocation PtBookingCreditAllocation?
 }
 
 model PtChatMessage {
@@ -380,6 +502,21 @@ model Payment {
   orderCode           BigInt?       @unique
   transactionNo       String?       @unique
   renewalDurationDays Int?
+  ptProductId         Int?
+  ptProduct           PtProduct?    @relation(fields: [ptProductId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ptQuantity          Int?
+  ptLevelSnapshot     String?       @db.VarChar(20)
+  ptSessionsSnapshot  Int?
+  ptDurationDays      Int?
+  ptRenewalOptionId   Int?
+  ptRenewalOption     PtRenewalOption? @relation(fields: [ptRenewalOptionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ptRenewalProductId  Int?
+  ptRenewalProduct    PtProduct? @relation("PtRenewalProduct", fields: [ptRenewalProductId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ptRenewalBatchId    Int?
+  ptRenewalBatch      PtCreditBatch? @relation("PtBatchRenewals", fields: [ptRenewalBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ptRenewalDays       Int?
+  ptRenewalEvent      PtRenewalEvent?
+  ptCreditBatches     PtCreditBatch[]
   
   staffId             Int?
   staff               User?         @relation("StaffProcessedPayments", fields: [staffId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -394,6 +531,8 @@ model Payment {
   
   createdAt           DateTime      @default(now())
   paidAt              DateTime?
+
+  @@index([ptRenewalBatchId])
 }
 
 // ==========================================

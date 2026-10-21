@@ -148,6 +148,7 @@ export interface ApiBooking {
       type: string;
     };
   };
+  ptCreditAllocation?: { status: string; batch: { level: string; source: string } } | null;
   sessionResult?: ApiSessionResult | null;
 }
 
@@ -165,7 +166,10 @@ export interface ApiCoachProfile {
   userId: number;
   bio?: string | null;
   specialization?: string | null;
+    specializations?: Array<{ level: string }>;
   hourlyRate: number;
+  rank: 'junior' | 'senior' | 'master';
+  commissionPercent: number;
   experience: number;
   rating?: number | null;
   status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | string;
@@ -303,10 +307,15 @@ export interface ApiReview {
 
 export interface ApiMemberProfile360 {
   profile: ApiUser;
+  currentGymMembership: ApiSubscription | null;
   membershipSubscriptions: any[];
   ptSubscriptions: any[];
+  ptWalletSummary: { total: number; available: number; held: number; used: number;
+    levels: Array<{ level: string; total: number; available: number; held: number; used: number }> };
+  legacyPtSessions: number;
   paymentHistory: any[];
   checkInHistory: any[];
+  checkInTotal: number;
   trainingHistory: {
     ptSessions: any[];
     groupClasses: any[];

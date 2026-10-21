@@ -5,8 +5,26 @@ import { authenticateToken, authorizeRoles } from '../middlewares/auth.middlewar
 import { listPtChatMessages, sendPtChatMessage } from '../controllers/ptChat.controller.js';
 import { getCoachWorkspace, getCoachTrainees, getCoachPlans, createCoachPlan, generateCoachPlan } from '../controllers/coachWorkspace.controller.js';
 import { deleteCoachDate, deleteCoachSlot, getCoachAvailability, listCoachChangeRequests, putCoachDates, putCoachWeekly, requestCoachScheduleChange } from '../controllers/ptAvailability.controller.js';
+import { adjustPtWallet, archivePtProduct, archivePtRenewalOption, createPtProduct, createPtRenewalOption, createWalletBooking, getAdminPtWallet, getMyPtCreditHistory, getMyPtRenewalHistory, getMyPtWallet, listAllPtProducts, listAllPtRenewalOptions, listPtProducts, listPtRenewalOptions, setCoachSpecializations, updatePtProduct, updatePtRenewalOption } from '../controllers/ptWallet.controller.js';
 
 const router = Router();
+router.get('/wallet', authenticateToken, authorizeRoles('MEMBER'), getMyPtWallet);
+router.get('/wallet/history', authenticateToken, authorizeRoles('MEMBER'), getMyPtCreditHistory);
+router.get('/wallet/renewals', authenticateToken, authorizeRoles('MEMBER'), getMyPtRenewalHistory);
+router.get('/products', listPtProducts);
+router.get('/products/manage', authenticateToken, authorizeRoles('ADMIN'), listAllPtProducts);
+router.post('/products', authenticateToken, authorizeRoles('ADMIN'), createPtProduct);
+router.put('/products/:id', authenticateToken, authorizeRoles('ADMIN'), updatePtProduct);
+router.delete('/products/:id', authenticateToken, authorizeRoles('ADMIN'), archivePtProduct);
+router.get('/renewal-options', authenticateToken, authorizeRoles('MEMBER'), listPtRenewalOptions);
+router.get('/renewal-options/manage', authenticateToken, authorizeRoles('ADMIN'), listAllPtRenewalOptions);
+router.post('/renewal-options', authenticateToken, authorizeRoles('ADMIN'), createPtRenewalOption);
+router.put('/renewal-options/:id', authenticateToken, authorizeRoles('ADMIN'), updatePtRenewalOption);
+router.delete('/renewal-options/:id', authenticateToken, authorizeRoles('ADMIN'), archivePtRenewalOption);
+router.put('/trainers/:coachId/specializations', authenticateToken, authorizeRoles('ADMIN'), setCoachSpecializations);
+router.get('/admin/wallets/:memberId', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getAdminPtWallet);
+router.post('/admin/wallets/:memberId/adjust', authenticateToken, authorizeRoles('ADMIN'), adjustPtWallet);
+router.post('/wallet/bookings', authenticateToken, authorizeRoles('MEMBER'), createWalletBooking);
 
 /** @swagger
  * /pt/coach/me:
@@ -238,7 +256,7 @@ router.get('/trainers/:trainerId/slots', authenticateToken, PtController.getTrai
  *       201:
  *         description: Ca hợp lệ được xác nhận ngay (CONFIRMED)
  */
-router.post('/booking', authenticateToken, PtController.createBooking);
+router.post('/booking', authenticateToken, authorizeRoles('MEMBER'), PtController.createBooking);
 
 /**
  * @swagger
@@ -266,7 +284,7 @@ router.post('/booking', authenticateToken, PtController.createBooking);
  *       201: { description: Tất cả ca được xác nhận (CONFIRMED) }
  *       409: { description: Có ca trùng lịch hoặc vượt số buổi khả dụng }
  */
-router.post('/booking/batch', authenticateToken, PtController.createBookingBatch);
+router.post('/booking/batch', authenticateToken, authorizeRoles('MEMBER'), PtController.createBookingBatch);
 
 /**
  * @swagger
@@ -368,7 +386,7 @@ router.post('/booking/:id/messages', authenticateToken, sendPtChatMessage);
  *       400:
  *         description: Lịch hẹn không đúng trạng thái
  */
-router.post('/booking/:id/generate-session-qr', authenticateToken, PtController.generateSessionQr);
+router.post('/booking/:id/generate-session-qr', authenticateToken, authorizeRoles('COACH', 'TRAINER'), PtController.generateSessionQr);
 
 /**
  * @swagger
@@ -391,7 +409,8 @@ router.post('/booking/:id/generate-session-qr', authenticateToken, PtController.
  *       200:
  *         description: Buổi tập đã bắt đầu
  */
-router.post('/booking/start-session', authenticateToken, PtController.startSessionWithQr);
+router.post('/booking/start-session', authenticateToken, authorizeRoles('MEMBER'), PtController.startSessionWithQr);
+router.post('/booking/:id/manual-check-in', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), PtController.manualCheckIn);
 
 /**
  * @swagger
@@ -411,7 +430,7 @@ router.post('/booking/start-session', authenticateToken, PtController.startSessi
  *       200:
  *         description: Thành công
  */
-router.post('/booking/:id/complete-session', authenticateToken, PtController.completeSession);
+router.post('/booking/:id/complete-session', authenticateToken, authorizeRoles('COACH', 'TRAINER'), PtController.completeSession);
 
 /**
  * @swagger
@@ -499,6 +518,6 @@ router.post('/booking/:id/resolve-no-show', authenticateToken, authorizeRoles('A
  *       201:
  *         description: Đặt lịch bù thành công
  */
-router.post('/booking/schedule-makeup', authenticateToken, PtController.scheduleMakeup);
+router.post('/booking/schedule-makeup', authenticateToken, authorizeRoles('MEMBER'), PtController.scheduleMakeup);
 
 export default router;

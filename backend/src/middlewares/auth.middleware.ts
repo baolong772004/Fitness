@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import prisma from '../config/prisma.js';
 
 // Mở rộng Request để chứa thông tin user
 export interface AuthRequest extends Request {
@@ -9,7 +10,7 @@ export interface AuthRequest extends Request {
   };
 }
 
-export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
@@ -17,12 +18,25 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     return res.status(401).json({ success: false, message: 'Access denied. No token provided.' });
   }
 
+  let decoded: { userId: number; role: string };
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret') as { userId: number, role: string };
-    req.user = decoded;
+    decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret') as { userId: number; role: string };
+  } catch {
+    return res.status(403).json({ success: false, message: 'Invalid or expired token.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { role: true }
+    });
+    if (!user) {
+      return res.status(403).json({ success: false, message: 'Tài khoản không còn tồn tại.' });
+    }
+    req.user = { userId: decoded.userId, role: user.role };
     next();
   } catch (error) {
-    return res.status(403).json({ success: false, message: 'Invalid or expired token.' });
+    next(error);
   }
 };
 

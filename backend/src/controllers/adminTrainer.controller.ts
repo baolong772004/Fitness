@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
+import { lockPtCalendar, lockPtCoach, PtBookingError } from '../services/ptBooking.service.js';
+import { PT_LEVELS } from '../services/ptWallet.service.js';
 
 
 /**
@@ -13,10 +15,11 @@ export const getTrainersList = async (req: AuthRequest, res: Response) => {
     const { search, specialization, status, page = 1, limit = 10 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    let whereCondition: Prisma.CoachProfileWhereInput = {};
+    const whereCondition: Prisma.CoachProfileWhereInput = { user: { role: 'COACH' } };
 
     if (search) {
       whereCondition.user = {
+        role: 'COACH',
         OR: [
           { fullName: { contains: String(search) } },
           { email: { contains: String(search) } },
@@ -37,6 +40,7 @@ export const getTrainersList = async (req: AuthRequest, res: Response) => {
       prisma.coachProfile.findMany({
         where: whereCondition,
         include: {
+          specializations: { select: { level: true } },
           user: {
             select: { fullName: true, email: true, phone: true, avatar: true }
           }
@@ -79,20 +83,21 @@ export const setupTrainerProfile = async (req: AuthRequest, res: Response) => {
       workingSchedules,
     } = req.body;
 
-    if (!userId || hourlyRate === undefined) {
+    const targetUserId = Number(userId);
+    const rate = Number(hourlyRate);
+    if (!Number.isInteger(targetUserId) || targetUserId <= 0 || !Number.isFinite(rate) || rate < 0) {
       return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ thông tin bắt buộc (userId, hourlyRate)' });
     }
     if (workingSchedules !== undefined) {
       return res.status(400).json({ success: false, message: 'Coach tự đăng ký lịch qua /api/pt/coach/availability; Admin chỉ cấu hình hồ sơ và lịch chung.' });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: Number(userId) } });
+    const user = await prisma.user.findUnique({ where: { id: targetUserId }, select: { role: true } });
     if (!user) {
        return res.status(404).json({ success: false, message: 'Không tìm thấy User' });
     }
-    // Nếu chưa là COACH thì update role cho họ luôn
     if (user.role !== 'COACH') {
-       await prisma.user.update({ where: { id: Number(userId) }, data: { role: 'COACH' } });
+       return res.status(400).json({ success: false, message: 'Tài khoản này không phải HLV. Hãy cấp vai trò HLV trước khi tạo hồ sơ.' });
     }
 
     const formattedSpecialties = Array.isArray(specialties) ? specialties.join(', ') : specialties;
@@ -100,18 +105,18 @@ export const setupTrainerProfile = async (req: AuthRequest, res: Response) => {
     const result = await prisma.$transaction(async (tx) => {
       // 1. Cập nhật hoặc Tạo CoachProfile
       const profile = await tx.coachProfile.upsert({
-        where: { userId: Number(userId) },
+        where: { userId: targetUserId },
         update: {
-          bio,
-          specialization: formattedSpecialties,
-          hourlyRate: Number(hourlyRate),
-          experience: Number(experienceYears || 1),
+          ...(bio !== undefined ? { bio } : {}),
+          ...(formattedSpecialties !== undefined ? { specialization: formattedSpecialties } : {}),
+          hourlyRate: rate,
+          ...(experienceYears !== undefined ? { experience: Number(experienceYears) } : {}),
         },
         create: {
-          userId: Number(userId),
+          userId: targetUserId,
           bio,
           specialization: formattedSpecialties,
-          hourlyRate: Number(hourlyRate),
+          hourlyRate: rate,
           experience: Number(experienceYears || 1),
           status: 'ACTIVE'
         },
@@ -128,6 +133,68 @@ export const setupTrainerProfile = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Lỗi setupTrainerProfile:', error);
     return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi thiết lập Coach' });
+  }
+};
+
+/** Update pricing by CoachProfile ID, without changing any user's role. */
+export const updateTrainerPricing = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const hourlyRate = Number(req.body?.hourlyRate);
+    const commissionPercent = Number(req.body?.commissionPercent);
+    const rank = req.body?.rank;
+    const levels = req.body?.levels;
+
+    if (!Number.isInteger(id) || id <= 0 || !Number.isFinite(hourlyRate) || hourlyRate < 0 ||
+        !Number.isInteger(commissionPercent) || commissionPercent < 0 || commissionPercent > 100 ||
+        !['junior', 'senior', 'master'].includes(rank) ||
+        (levels !== undefined && (!Array.isArray(levels) || levels.length > PT_LEVELS.length ||
+          new Set(levels).size !== levels.length || levels.some(level => !PT_LEVELS.includes(level))))) {
+      return res.status(400).json({ success: false, message: 'Giá, hoa hồng, cấp bậc hoặc cấp độ PT không hợp lệ.' });
+    }
+
+    const profile = await prisma.coachProfile.findUnique({
+      where: { id },
+      select: { id: true, userId: true, user: { select: { role: true } } }
+    });
+    if (!profile || profile.user.role !== 'COACH') {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy hồ sơ HLV hợp lệ.' });
+    }
+
+    const updated = await prisma.$transaction(async tx => {
+      if (levels !== undefined) {
+        await lockPtCalendar(tx);
+        await lockPtCoach(tx, profile.userId);
+        const previous = await tx.coachSpecialization.findMany({ where: { coachProfileId: id },
+          select: { level: true } });
+        const removed = previous.map(row => row.level).filter(level => !levels.includes(level));
+        const added = levels.filter((level: string) => !previous.some(row => row.level === level));
+        if (removed.length) {
+          const affected = await tx.booking.findFirst({ where: { coachId: profile.userId, type: 'PT',
+            status: { in: ['PENDING', 'UPCOMING', 'CONFIRMED', 'IN_PROGRESS'] },
+            startTime: { gt: new Date() },
+            ptCreditAllocation: { is: { batch: { level: { in: removed } } } },
+          }, select: { id: true } });
+          if (affected) throw new PtBookingError(409, `Coach còn Booking #${affected.id} ở cấp độ đang xóa.`);
+          await tx.coachSpecialization.deleteMany({ where: { coachProfileId: id,
+            level: { in: removed } } });
+        }
+        if (added.length) await tx.coachSpecialization.createMany({ data: added.map((level: string) => ({
+          coachProfileId: id, level,
+        })) });
+        if (removed.length || added.length) await tx.actionLog.create({ data: {
+          userId: req.user!.userId, action: 'COACH_SPECIALIZATION_UPDATE',
+          details: JSON.stringify({ coachId: profile.userId, levels }),
+        } });
+      }
+      return tx.coachProfile.update({ where: { id }, data: { hourlyRate, commissionPercent, rank },
+        include: { specializations: { select: { level: true } } } });
+    });
+    return res.status(200).json({ success: true, data: updated, message: 'Đã lưu cấu hình HLV.' });
+  } catch (error) {
+    if (error instanceof PtBookingError) return res.status(error.status).json({ success: false, message: error.message });
+    console.error('Lỗi updateTrainerPricing:', error);
+    return res.status(500).json({ success: false, message: 'Không thể cập nhật giá HLV.' });
   }
 };
 

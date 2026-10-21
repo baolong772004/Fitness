@@ -4,7 +4,6 @@ import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import { lockGymMember } from '../services/gymMembershipLock.service.js';
 import { reconcileGymMembershipStates } from '../services/membership.service.js';
-import { reservedPtSessions } from '../services/ptBooking.service.js';
 import {
   generateOrderCode,
   getPayOS,
@@ -37,12 +36,15 @@ export class SubscriptionController {
       const data = await Promise.all(subscriptions.map(async subscription => {
         const isPtEntitlement = subscription.package.type === 'PT' ||
           (subscription.package.type === 'MEMBERSHIP' && subscription.package.trialPtSessions > 0);
-        const canBook = isPtEntitlement && subscription.status === 'ACTIVE' &&
-          subscription.startDate <= now && subscription.endDate > now;
-        const reserved = canBook
-          ? await reservedPtSessions(prisma, subscription.id) : 0;
-        return { ...subscription, availableSessions: canBook
-          ? Math.max(0, (subscription.remainingSessions ?? 0) - reserved) : 0 };
+        const batch = isPtEntitlement ? await prisma.ptCreditBatch.findFirst({ where: {
+          membershipId: subscription.id,
+        }, select: { level: true, initialCount: true, usedCount: true, heldCount: true } }) : null;
+        const trialEnabled = subscription.package.type !== 'MEMBERSHIP' ||
+          (['ACTIVE', 'PENDING_ACTIVATION'].includes(subscription.status) && subscription.endDate > now);
+        return { ...subscription, ptCreditLevel: batch?.level ?? subscription.package.ptLevel,
+          availableSessions: batch ? trialEnabled
+            ? Math.max(0, batch.initialCount - batch.usedCount - batch.heldCount) : 0
+            : 0 };
       }));
       res.status(200).json({ success: true, data });
     } catch (error) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Member, Coach, PackagePlan, AuditLog, Invoice, SupportTicket } from '../../types';
 import { api, ApiPackage, ApiUser, ApiCoachProfile, ApiSubscription, ApiRoom, ApiEquipment, ApiGroupClass, ApiGroupClassSchedule, ApiMemberProfile360 } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
@@ -48,6 +48,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Progress } from '@/components/ui/progress';
 import { StatCard, StaffPage, Field } from '@/components/staff/StaffKit';
 import { PtMasterCalendar } from './PtMasterCalendar';
+import { PtCreditAdmin } from './PtCreditAdmin';
+
+const ptLevels = ['TRIAL', 'BEGINNER', 'INTERMEDIATE', 'ADVANCED'] as const;
+const memberDate = (value?: string | null) => value
+  ? new Date(value).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -61,9 +66,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [members, setMembers] = useState<Member[]>([]);
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [packages, setPackages] = useState<PackagePlan[]>([]);
+  const [ptProducts, setPtProducts] = useState<Awaited<ReturnType<typeof api.adminTrainers.getPtProducts>>>([]);
   const [packageStatusFilter, setPackageStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [packageLoadError, setPackageLoadError] = useState<string | null>(null);
+  const [ptProductLoadError, setPtProductLoadError] = useState<string | null>(null);
   const [isLoadingPackages, setIsLoadingPackages] = useState(false);
+  const [isLoadingPtProducts, setIsLoadingPtProducts] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -77,6 +85,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newHourlyRate, setNewHourlyRate] = useState(400000);
   const [newCommission, setNewCommission] = useState(50);
   const [newRank, setNewRank] = useState<'junior' | 'senior' | 'master'>('senior');
+  const [newPtLevels, setNewPtLevels] = useState<string[]>([]);
+  const [savingCoachConfig, setSavingCoachConfig] = useState(false);
+  const [coachFormError, setCoachFormError] = useState('');
 
   // Incident & Support Ticket Management State
   const [ticketSearchQuery, setTicketSearchQuery] = useState('');
@@ -89,6 +100,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // New Package Modal
   const [isCreatingPackage, setIsCreatingPackage] = useState(false);
+  const [isPtCreditOpen, setIsPtCreditOpen] = useState(false);
   const [packageLoading, setPackageLoading] = useState(false);
   const [newPackageForm, setNewPackageForm] = useState({
     name: '',
@@ -143,6 +155,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Member 360 Full Profile State
   const [inspectingMember360, setInspectingMember360] = useState<ApiMemberProfile360 | null>(null);
   const [isLoadingMember360, setIsLoadingMember360] = useState(false);
+  const [memberProfileError, setMemberProfileError] = useState('');
+  const memberProfileRequestId = useRef(0);
   const [correctingNoShowId, setCorrectingNoShowId] = useState<number | null>(null);
 
   const loadPackages = async () => {
@@ -179,37 +193,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const loadPtProducts = async () => {
+    setIsLoadingPtProducts(true);
+    setPtProductLoadError(null);
+    try {
+      setPtProducts(await api.adminTrainers.getPtProducts());
+    } catch (error) {
+      setPtProductLoadError(error instanceof Error ? error.message : 'Không tải được gói PT.');
+    } finally {
+      setIsLoadingPtProducts(false);
+    }
+  };
+
   const reloadData = async () => {
     setIsLoadingGroupClasses(true);
     setGroupClassError(null);
-    // 1. Fetch live Packages from backend
-    await loadPackages();
+    // 1. Fetch live Gym packages and PT products from backend
+    await Promise.all([loadPackages(), loadPtProducts()]);
 
     // 2. Fetch live Members from backend
     try {
       const membersRes = await api.admin.getMembersList({ limit: 50 });
-      if (membersRes.data && membersRes.data.length > 0) {
+      if (membersRes.data) {
         const mappedMembers: Member[] = membersRes.data.map(u => ({
           id: String(u.id),
           code: 'MEM-' + u.id,
           name: u.fullName || u.email,
-          phone: u.phone || '0900000000',
+          phone: u.phone || '',
           email: u.email,
-          avatar: u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
-          cccd: '0012026' + u.id,
-          gender: 'male',
-          birthYear: 1996,
-          emergencyContact: { name: 'Người thân', phone: u.phone || '', relationship: 'Gia đình' },
+          avatar: u.avatar || '',
+          cccd: '',
+          gender: u.gender === 'male' || u.gender === 'female' ? u.gender : 'other',
+          birthYear: u.dateOfBirth ? new Date(u.dateOfBirth).getFullYear() : 0,
+          emergencyContact: { name: '', phone: '', relationship: '' },
           status: u.status === 'ACTIVE' ? 'active' : 'expired',
-          activePackageId: 'pkg-standard',
-          packageName: 'Gói Tiêu Chuẩn',
+          activePackageId: String(u.currentGymMembership?.id ?? ''),
+          packageName: u.currentGymMembership?.package?.name || 'Chưa có gói Gym',
           packageType: 'standard_gym',
-          packageStartDate: new Date().toISOString().slice(0, 10),
-          packageEndDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-          daysRemaining: 30,
-          ptSessionsTotal: 2,
-          ptSessionsRemaining: 2,
-          totalCheckIns: 1,
+          packageStartDate: u.currentGymMembership ? memberDate(u.currentGymMembership.startDate) : '',
+          packageEndDate: u.currentGymMembership ? memberDate(u.currentGymMembership.endDate) : '—',
+          daysRemaining: u.currentGymMembership ? Math.max(0, Math.ceil((new Date(u.currentGymMembership.endDate).getTime() - Date.now()) / 86400000)) : 0,
+          ptSessionsTotal: u.ptCredit.total,
+          ptSessionsRemaining: u.ptCredit.available,
+          legacyPtSessions: u.legacyPtSessions,
+          assignedCoachName: u.currentCoachName || undefined,
+          totalCheckIns: u.checkInCount,
           inBodyHistory: []
         }));
         setMembers(mappedMembers);
@@ -223,21 +251,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const liveTrainers = await api.adminTrainers.getTrainers({ limit: 50 });
       if (liveTrainers.data) {
         setGroupClassTrainers(liveTrainers.data);
-        const mappedCoaches: Coach[] = liveTrainers.data.map((t, idx) => ({
+        const mappedCoaches: Coach[] = liveTrainers.data.map((t) => ({
           id: String(t.id),
           code: `COACH-${t.id}`,
           name: t.user?.fullName || `Coach #${t.id}`,
           email: t.user?.email || `coach${t.id}@aurafitness.vn`,
           phone: t.user?.phone || '0901234567',
           avatar: t.user?.avatar || 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?w=400&auto=format&fit=crop&q=80',
-          rank: idx === 0 ? 'master' : 'senior',
+          rank: t.rank,
           specialties: t.specialization ? t.specialization.split(',').map(s => s.trim()) : ['Gym & PT'],
+          ptLevels: t.specializations?.map(item => item.level) ?? [],
           rating: t.rating || 5.0,
           reviewCount: 24,
           bio: t.bio || 'Huấn luyện viên chuyên nghiệp AURA Fitness',
           certifications: ['NASM-CPT', 'CSCS Specialist'],
-          hourlyRateVND: t.hourlyRate || 350000,
-          commissionPercent: 45,
+          hourlyRateVND: Number(t.hourlyRate),
+          commissionPercent: t.commissionPercent,
           workingHours: { shift: 'Toàn thời gian', start: '07:00', end: '21:00', daysOfWeek: [1, 2, 3, 4, 5, 6] },
           isAcceptingBookings: t.status === 'ACTIVE',
           activeTraineeCount: 8
@@ -327,7 +356,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'packages-engine') void loadPackages();
+    if (activeTab === 'packages-engine') {
+      void loadPackages();
+      void loadPtProducts();
+    }
   }, [activeTab]);
 
   // Total Revenue Calculation
@@ -435,22 +467,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     if (!editingCoach) return;
 
-    const oldRate = editingCoach.hourlyRateVND;
-
+    setSavingCoachConfig(true);
+    setCoachFormError('');
     try {
-      await api.adminTrainers.setupTrainer({
-        userId: Number(editingCoach.id),
+      await api.adminTrainers.updateTrainerPricing(editingCoach.id, {
         hourlyRate: newHourlyRate,
-        bio: 'Huấn luyện viên thể hình & PT cá nhân AURA Fitness Club',
-        experienceYears: 5,
-        specialties: editingCoach.specialties
+        commissionPercent: newCommission,
+        rank: newRank,
+        levels: newPtLevels,
       });
       soundEffects.playSuccessBeep();
-      alert(`Đã cập nhật đơn giá Coach ${editingCoach.name} thành ${newHourlyRate.toLocaleString('vi-VN')} đ/buổi trực tiếp trên hệ thống!`);
-      reloadData();
+      await reloadData();
       setEditingCoach(null);
     } catch (err: any) {
-      alert(`Lỗi cập nhật giá Coach: ${err.message}`);
+      soundEffects.playErrorBeep();
+      setCoachFormError(err.message || 'Không thể lưu cấu hình HLV.');
+    } finally {
+      setSavingCoachConfig(false);
     }
   };
 
@@ -499,6 +532,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleArchivePtProduct = async (product: (typeof ptProducts)[number]) => {
+    if (!window.confirm(`Ngừng bán gói PT "${product.name}"? Các đơn đã mua vẫn được giữ.`)) return;
+    try {
+      await api.adminTrainers.archivePtProduct(product.id);
+      await loadPtProducts();
+      soundEffects.playSuccessBeep();
+    } catch (error) {
+      soundEffects.playErrorBeep();
+      alert(error instanceof Error ? error.message : 'Không thể ngừng bán gói PT.');
+    }
+  };
+
   // Handle Update User Role via Live Backend REST API
   const handleChangeUserRole = async (userId: string | number, newRole: 'ADMIN' | 'STAFF' | 'RECEPTIONIST' | 'COACH' | 'MEMBER' | string) => {
     try {
@@ -514,16 +559,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Inspect Member 360 with live details from API
   const handleInspectMember = async (m: Member) => {
+    const requestId = ++memberProfileRequestId.current;
     setInspectingMember(m);
+    setInspectingMember360(null);
+    setMemberProfileError('');
     setIsLoadingMember360(true);
     try {
       const p360 = await api.admin.getMemberDetailProfile(m.id);
-      setInspectingMember360(p360);
+      if (requestId === memberProfileRequestId.current) setInspectingMember360(p360);
     } catch (e) {
       console.warn('Lỗi tải 360 profile:', e);
-      setInspectingMember360(null);
+      if (requestId === memberProfileRequestId.current) {
+        setMemberProfileError(e instanceof Error ? e.message : 'Không tải được hồ sơ hội viên.');
+        setInspectingMember360(null);
+      }
     } finally {
-      setIsLoadingMember360(false);
+      if (requestId === memberProfileRequestId.current) setIsLoadingMember360(false);
     }
   };
 
@@ -548,6 +599,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } catch (error: any) {
       soundEffects.playErrorBeep();
       alert(error.message || 'Không thể điều chỉnh buổi PT vắng');
+    } finally {
+      setCorrectingNoShowId(null);
+    }
+  };
+
+  const handleManualPtCheckIn = async (bookingId: number) => {
+    const reason = window.prompt('Lý do nhân viên xác nhận check-in PT thủ công:')?.trim();
+    if (!reason) return;
+    setCorrectingNoShowId(bookingId);
+    try {
+      await api.pt.manualCheckIn(bookingId, reason);
+      if (inspectingMember) setInspectingMember360(await api.admin.getMemberDetailProfile(inspectingMember.id));
+      soundEffects.playSuccessBeep();
+    } catch (error: any) {
+      soundEffects.playErrorBeep();
+      alert(error.message || 'Không thể check-in PT thủ công');
     } finally {
       setCorrectingNoShowId(null);
     }
@@ -800,6 +867,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const openTicketsCount = tickets.filter(t => t.status === 'open').length;
   const inProgressTicketsCount = tickets.filter(t => t.status === 'in_progress').length;
+  const visiblePackages = packages.filter(pkg => packageStatusFilter === 'all' ||
+    (packageStatusFilter === 'active' ? pkg.isActive !== false : pkg.isActive === false));
+  const visiblePtProducts = ptProducts.filter(product => packageStatusFilter === 'all' ||
+    (packageStatusFilter === 'active' ? product.isActive : !product.isActive));
+  const catalogCount = packages.length + ptProducts.length;
+  const activeCatalogCount = packages.filter(pkg => pkg.isActive !== false).length + ptProducts.filter(product => product.isActive).length;
 
   return (
     <StaffPage>
@@ -932,8 +1005,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <StatCard
             icon={Layers}
             tone="warning"
-            label="Gói Tập & Khóa Học"
-            value={`${packages.length} gói`}
+            label="Gói Gym & PT"
+            value={`${catalogCount} gói`}
             hint={
               <span className="flex items-center justify-between text-xs">
                 <span>42% doanh thu</span>
@@ -1217,18 +1290,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </Avatar>
                         <div>
                           <div className="font-medium text-foreground">{m.name}</div>
-                          <div className="text-xs text-muted-foreground">{m.code} • {m.phone}</div>
+                          <div className="text-xs text-muted-foreground">{m.code}{m.phone ? ` • ${m.phone}` : ''}</div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="font-medium">{m.packageName}</TableCell>
-                    <TableCell className={m.daysRemaining > 3 ? '' : 'text-destructive font-medium'}>
+                    <TableCell className={m.activePackageId && m.daysRemaining <= 3 ? 'text-destructive font-medium' : ''}>
                       {m.packageEndDate}
                     </TableCell>
                     <TableCell>
                       {m.ptSessionsTotal > 0 ? (
                         <span className="font-semibold text-primary">{m.ptSessionsRemaining}/{m.ptSessionsTotal}</span>
-                      ) : '-'}
+                      ) : m.legacyPtSessions ? `${m.legacyPtSessions} buổi PT cũ` : '—'}
                     </TableCell>
                     <TableCell>{m.assignedCoachName || <span className="text-muted-foreground">Chưa gán</span>}</TableCell>
                     <TableCell className="font-semibold text-success">{m.totalCheckIns} lượt</TableCell>
@@ -1256,7 +1329,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* Member Modal Dialog */}
-      <Dialog open={!!inspectingMember} onOpenChange={(open) => { if (!open) setInspectingMember(null); }}>
+      <Dialog open={!!inspectingMember} onOpenChange={(open) => { if (!open) { memberProfileRequestId.current += 1; setInspectingMember(null); } }}>
         <DialogContent className="max-w-2xl">
           {inspectingMember && (
             <>
@@ -1268,7 +1341,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </Avatar>
                   <div>
                     <DialogTitle>Hồ Sơ Hội Viên - {inspectingMember.name}</DialogTitle>
-                    <DialogDescription>{inspectingMember.code} • SĐT: {inspectingMember.phone} • CCCD: {inspectingMember.cccd}</DialogDescription>
+                    <DialogDescription>{inspectingMember.code} • {inspectingMember.phone ? `SĐT: ${inspectingMember.phone}` : 'Chưa có SĐT'} • {inspectingMember.email}</DialogDescription>
                   </div>
                 </div>
               </DialogHeader>
@@ -1279,30 +1352,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <Loader2 className="size-6 animate-spin mx-auto mb-2 text-primary" />
                     <div>Đang tải hồ sơ từ máy chủ...</div>
                   </div>
-                ) : (
+                ) : memberProfileError ? (
+                  <div role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm text-destructive">{memberProfileError}</div>
+                ) : inspectingMember360 ? (
                   <>
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="p-4 rounded-lg border bg-muted/40">
                         <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Thông tin Gói Tập</div>
                         <div className="font-semibold text-foreground text-sm">
-                          {inspectingMember360?.membershipSubscriptions?.[0]?.package?.name || inspectingMember.packageName}
+                          {inspectingMember360.currentGymMembership?.package?.name || 'Chưa có gói Gym đang hiệu lực'}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {inspectingMember.packageStartDate} đến {inspectingMember.packageEndDate}
-                        </div>
-                        {(inspectingMember360?.ptSubscriptions?.[0]?.remainingSessions !== undefined || inspectingMember.ptSessionsTotal > 0) && (
-                          <div className="text-xs font-bold text-primary mt-2">
-                            PT cá nhân: {inspectingMember360?.ptSubscriptions?.[0]?.remainingSessions ?? inspectingMember.ptSessionsRemaining} buổi
+                        {inspectingMember360.currentGymMembership && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {memberDate(inspectingMember360.currentGymMembership.startDate)} đến {memberDate(inspectingMember360.currentGymMembership.endDate)}
                           </div>
                         )}
+                        <div className="text-xs font-bold text-primary mt-2">
+                          {inspectingMember360.ptWalletSummary.total > 0
+                            ? `PT Credit: ${inspectingMember360.ptWalletSummary.available} buổi khả dụng, ${inspectingMember360.ptWalletSummary.held} buổi đã đặt`
+                            : inspectingMember360.legacyPtSessions > 0
+                              ? `PT cũ: ${inspectingMember360.legacyPtSessions} buổi chưa chuyển ví`
+                              : 'Chưa có PT Credit'}
+                        </div>
                       </div>
 
                       <div className="p-4 rounded-lg border bg-muted/40">
                         <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Lịch Sử Điểm Danh Gần Nhất</div>
                         <div className="font-semibold text-foreground text-sm">
-                          {inspectingMember360?.checkInHistory?.length ? `${inspectingMember360.checkInHistory.length} lượt gần đây` : `${inspectingMember.totalCheckIns} lượt`}
+                          {inspectingMember360.checkInTotal} lượt
                         </div>
-                        {inspectingMember360?.checkInHistory?.[0] && (
+                        {inspectingMember360.checkInHistory[0] && (
                           <div className="text-xs text-muted-foreground mt-1">
                             Lần cuối: {new Date(inspectingMember360.checkInHistory[0].checkInTime).toLocaleString('vi-VN')}
                           </div>
@@ -1336,6 +1415,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {pt.cancelledBy === 'SYSTEM_NO_SHOW_NO_DEBIT' && (
                                 <p className="mt-2 text-amber-700">Hệ thống ghi nhận vắng nhưng gói đã hết buổi; chưa trừ lượt. Cần kiểm tra thủ công.</p>
                               )}
+                              {pt.status === 'CONFIRMED' && <Button size="sm" variant="outline"
+                                className="mt-3" disabled={correctingNoShowId !== null}
+                                onClick={() => handleManualPtCheckIn(pt.id)}>Check-in thủ công</Button>}
                               {pt.status === 'ABSENT_NO_REFUND' && pt.cancelledBy === 'SYSTEM_NO_SHOW' && (
                                 <div className="flex flex-wrap gap-2 mt-3">
                                   <Button size="sm" variant="outline" disabled={correctingNoShowId !== null}
@@ -1356,7 +1438,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       )}
                     </div>
                   </>
-                )}
+                ) : null}
 
                 <div className="p-4 rounded-lg border bg-muted/40">
                   <Field label="Phân Quyền Vai Trò">
@@ -1572,20 +1654,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <Card>
           <CardHeader>
             <CardTitle>Quản Trị Huấn Luyện Viên & Bảng Giá Dạy Lẻ</CardTitle>
-            <CardDescription>Thiết lập cấp bậc (Junior/Senior/Master), đơn giá riêng từng Coach và tỷ lệ chia sẻ hoa hồng</CardDescription>
+            <CardDescription>Quản lý cấp độ PT được phép hướng dẫn, cấp bậc, đơn giá và hoa hồng của từng HLV.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {coaches.map(c => (
-                <div key={c.id} className="p-4 rounded-lg border bg-card flex flex-col justify-between">
+                <div key={c.id} className="flex flex-col justify-between rounded-xl border bg-card p-4 shadow-sm">
                   <div>
-                    <div className="flex items-center gap-3 mb-3">
-                      <Avatar className="size-12">
+                    <div className="mb-4 flex items-start gap-3">
+                      <Avatar className="size-12 shrink-0">
                         <AvatarImage src={c.avatar} alt={c.name} />
                         <AvatarFallback>{c.name.slice(0, 1)}</AvatarFallback>
                       </Avatar>
-                      <div>
-                        <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-foreground">{c.name}</span>
                           <Badge variant={rankVariant(c.rank)}>{c.rank.toUpperCase()}</Badge>
                           <Badge variant={c.isAcceptingBookings ? "success" : "secondary"} className="text-[10px]">
@@ -1596,9 +1678,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-xs text-muted-foreground mb-3">
-                      Chuyên môn: <strong className="text-foreground">{c.specialties.join(', ')}</strong>
-                    </p>
+                    <div className="mb-4">
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">Cấp độ PT được hướng dẫn</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {c.ptLevels?.length ? ptLevels.filter(level => c.ptLevels?.includes(level)).map(level =>
+                          <Badge key={level} variant="outline" className="border-primary/30 bg-primary/5 text-primary">{level}</Badge>
+                        ) : <span className="text-xs text-muted-foreground">Chưa cấu hình cấp độ</span>}
+                      </div>
+                    </div>
 
                     <div className="p-3 rounded-md bg-muted/50 text-xs mb-4">
                       <div className="flex justify-between mb-1">
@@ -1622,9 +1709,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         setNewHourlyRate(c.hourlyRateVND);
                         setNewCommission(c.commissionPercent);
                         setNewRank(c.rank);
+                        setNewPtLevels(c.ptLevels ?? []);
+                        setCoachFormError('');
                       }}
                     >
-                      <Edit3 className="size-3.5" /> Đơn Giá
+                      <Edit3 className="size-3.5" /> Chỉnh sửa HLV
                     </Button>
                     <Button
                       variant={c.isAcceptingBookings ? "ghost" : "outline"}
@@ -1642,17 +1731,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </Card>
       )}
 
-      {/* Edit Coach Pricing Dialog */}
+      {/* Coach configuration: pricing and allowed PT levels share one save. */}
       <Dialog open={!!editingCoach} onOpenChange={(open) => { if (!open) setEditingCoach(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           {editingCoach && (
             <form onSubmit={handleSaveCoachPricing}>
               <DialogHeader>
-                <DialogTitle>Thiết Lập Đơn Giá Cho HLV {editingCoach.name}</DialogTitle>
-                <DialogDescription>Mã HLV: {editingCoach.code}</DialogDescription>
+                <DialogTitle>Cấu hình HLV {editingCoach.name}</DialogTitle>
+                <DialogDescription>{editingCoach.code} • Cấp độ PT, cấp bậc và đơn giá được lưu cùng lúc.</DialogDescription>
               </DialogHeader>
 
               <div className="grid gap-4 py-3">
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-medium">Cấp độ PT được phép hướng dẫn</legend>
+                  <p className="text-xs text-muted-foreground">Chỉ chọn cấp độ HLV đủ điều kiện. Lịch đã đặt sẽ được kiểm tra trước khi gỡ cấp độ.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ptLevels.map(level => <label key={level} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm ${newPtLevels.includes(level) ? 'border-primary bg-primary/5 font-medium text-primary' : 'border-border hover:bg-muted/40'}`}>
+                      <input type="checkbox" className="size-4 accent-primary" checked={newPtLevels.includes(level)}
+                        onChange={event => setNewPtLevels(current => event.target.checked ? [...current, level] : current.filter(item => item !== level))} />
+                      {level}
+                    </label>)}
+                  </div>
+                </fieldset>
                 <Field label="Cấp Bậc Chuyên Môn">
                   <Select value={newRank} onValueChange={(v) => setNewRank(v as any)}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -1686,9 +1786,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </Field>
               </div>
 
+              {coachFormError && <p role="alert" className="mb-3 text-sm text-destructive">{coachFormError}</p>}
+
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setEditingCoach(null)}>Hủy Bỏ</Button>
-                <Button type="submit">Lưu Cấu Hình Giá</Button>
+                <Button type="button" variant="outline" disabled={savingCoachConfig} onClick={() => setEditingCoach(null)}>Hủy Bỏ</Button>
+                <Button type="submit" disabled={savingCoachConfig}>{savingCoachConfig ? 'Đang lưu...' : 'Lưu cấu hình HLV'}</Button>
               </DialogFooter>
             </form>
           )}
@@ -1699,19 +1801,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {activeTab === 'packages-engine' && (
         <Card>
           <CardHeader>
-            <CardTitle>Quản Lý Gói Tập & Khóa Học Chuyên Biệt</CardTitle>
-            <CardDescription>Cấu hình mô hình Hybrid (Vào tập không giới hạn + Quota buổi PT) và Khóa học chuyên sâu</CardDescription>
-            <CardAction>
+            <CardTitle>Quản lý gói tập Gym và buổi tập PT</CardTitle>
+            <CardDescription>Gói Gym cho hội viên vào phòng tập theo thời hạn. Buổi PT được mua riêng theo số buổi.</CardDescription>
+            <CardAction className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => setIsPtCreditOpen(true)}>
+                Quản lý buổi PT
+              </Button>
               <Button onClick={() => setIsCreatingPackage(true)}>
-                <Plus className="size-4" /> Tạo Gói Dịch Vụ Mới
+                <Plus className="size-4" /> Tạo gói Gym
               </Button>
             </CardAction>
           </CardHeader>
           <CardContent>
+            <div className="mb-5 grid gap-3 sm:grid-cols-2" aria-label="Giải thích các loại gói tập">
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <p className="font-semibold text-sm">Gói Gym</p>
+                <p className="mt-1 text-sm text-muted-foreground">Hội viên mua để vào phòng tập trong số ngày đã chọn. Có thể tặng kèm buổi PT trải nghiệm.</p>
+              </div>
+              <div className="rounded-lg border p-4">
+                <p className="font-semibold text-sm">Buổi tập PT với huấn luyện viên</p>
+                <p className="mt-1 text-sm text-muted-foreground">Hội viên mua theo cấp độ và số buổi. Dùng nút “Quản lý buổi PT” để tạo sản phẩm hoặc xem số buổi còn lại.</p>
+              </div>
+            </div>
             {packageLoadError && (
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
                 <span>Không tải được gói tập: {packageLoadError}</span>
                 <Button size="sm" variant="outline" onClick={() => void loadPackages()}>Thử lại</Button>
+              </div>
+            )}
+            {ptProductLoadError && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                <span>Không tải được gói PT: {ptProductLoadError}</span>
+                <Button size="sm" variant="outline" onClick={() => void loadPtProducts()}>Thử lại</Button>
               </div>
             )}
             <div className="mb-5 flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1720,32 +1841,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <p className="text-xs text-muted-foreground">Ngừng bán chỉ ẩn gói khỏi danh sách mua; dữ liệu và lịch sử vẫn được giữ.</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" disabled={isLoadingPackages} onClick={() => void loadPackages()}>
-                  {isLoadingPackages ? 'Đang tải...' : 'Tải lại'}
+                <Button size="sm" variant="outline" disabled={isLoadingPackages || isLoadingPtProducts} onClick={() => { void loadPackages(); void loadPtProducts(); }}>
+                  {isLoadingPackages || isLoadingPtProducts ? 'Đang tải...' : 'Tải lại'}
                 </Button>
                 <Button size="sm" variant={packageStatusFilter === 'all' ? 'default' : 'outline'} onClick={() => setPackageStatusFilter('all')}>
-                  Tất cả ({packages.length})
+                  Tất cả ({catalogCount})
                 </Button>
                 <Button size="sm" variant={packageStatusFilter === 'active' ? 'default' : 'outline'} onClick={() => setPackageStatusFilter('active')}>
-                  Đang bán ({packages.filter(pkg => pkg.isActive !== false).length})
+                  Đang bán ({activeCatalogCount})
                 </Button>
                 <Button size="sm" variant={packageStatusFilter === 'inactive' ? 'default' : 'outline'} onClick={() => setPackageStatusFilter('inactive')}>
-                  Đã ngừng bán ({packages.filter(pkg => pkg.isActive === false).length})
+                  Đã ngừng bán ({catalogCount - activeCatalogCount})
                 </Button>
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {packages.filter(pkg => packageStatusFilter === 'all' || (packageStatusFilter === 'active' ? pkg.isActive !== false : pkg.isActive === false)).map(pkg => (
+              {visiblePackages.map(pkg => (
                 <div key={pkg.id} className={`flex flex-col justify-between rounded-lg border bg-card p-4 ${pkg.isActive === false ? 'border-dashed border-muted-foreground/50 bg-muted/30' : ''}`}>
                   <div>
                     <div className="flex justify-between items-start mb-2">
                       <h4 className="font-semibold text-foreground text-base">{pkg.name}</h4>
                       <div className="flex flex-col items-end gap-1.5">
                         <Badge variant={pkg.type === 'hybrid_pt' ? 'soft' : pkg.type === 'specialized_course' ? 'info' : 'secondary'}>
-                          {pkg.type === 'hybrid_pt' ? 'Hybrid PT' : pkg.type === 'specialized_course' ? 'Chuyên Biệt' : 'Standard'}
+                          {pkg.type === 'hybrid_pt' ? 'Gói PT cũ' : pkg.type === 'specialized_course' ? 'Khóa học' : 'Gói Gym'}
                         </Badge>
                         <Badge className={pkg.isActive === false ? 'border border-red-200 bg-red-50 text-red-700' : 'border border-emerald-200 bg-emerald-50 text-emerald-700'}>
-                          {pkg.isActive === false ? 'ĐÃ NGỪNG BÁN' : 'ĐANG BÁN'}
+                          {pkg.type === 'hybrid_pt' ? 'PT LỊCH SỬ' : pkg.isActive === false ? 'ĐÃ NGỪNG BÁN' : 'ĐANG BÁN'}
                         </Badge>
                       </div>
                     </div>
@@ -1773,6 +1894,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <Button
                         variant="ghost"
                         size="sm"
+                        disabled={pkg.type === 'hybrid_pt'}
                         onClick={() => handleOpenEditPackage(pkg)}
                         title="Chỉnh sửa gói tập"
                         aria-label={`Chỉnh sửa gói ${pkg.name}`}
@@ -1782,6 +1904,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <Button
                         variant="ghost"
                         size="sm"
+                        disabled={pkg.type === 'hybrid_pt'}
                         className={pkg.isActive === false ? 'text-emerald-700 hover:text-emerald-800' : 'text-destructive hover:text-destructive'}
                         onClick={() => handleTogglePackageStatus(pkg)}
                         title={pkg.isActive === false ? 'Bật bán lại gói' : 'Ngừng bán gói'}
@@ -1793,9 +1916,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
               ))}
-              {!packageLoadError && packages.filter(pkg => packageStatusFilter === 'all' || (packageStatusFilter === 'active' ? pkg.isActive !== false : pkg.isActive === false)).length === 0 && (
+              {visiblePtProducts.map(product => (
+                <div key={`pt-${product.id}`} className={`flex flex-col justify-between rounded-lg border bg-card p-4 ${!product.isActive ? 'border-dashed border-muted-foreground/50 bg-muted/30' : ''}`}>
+                  <div>
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <h4 className="text-base font-semibold text-foreground">{product.name}</h4>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <Badge variant="soft">Gói buổi PT</Badge>
+                        <Badge className={product.isActive ? 'border border-emerald-200 bg-emerald-50 text-emerald-700' : 'border border-red-200 bg-red-50 text-red-700'}>
+                          {product.isActive ? 'ĐANG BÁN' : 'ĐÃ NGỪNG BÁN'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="mb-2 text-xl font-bold text-primary">{Number(product.price).toLocaleString('vi-VN')} <span className="text-xs font-normal text-muted-foreground">đ / gói</span></div>
+                    <p className="text-sm text-muted-foreground">{product.sessionCount} buổi tập cùng HLV · Cấp độ {product.level === 'BEGINNER' ? 'Cơ bản' : product.level === 'INTERMEDIATE' ? 'Trung cấp' : product.level === 'ADVANCED' ? 'Nâng cao' : product.level} · {product.durationDays ? `${product.durationDays} ngày sử dụng` : 'Chưa cấu hình thời hạn'}</p>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
+                    <span>Hội viên mua để đặt lịch PT</span>
+                    {product.isActive && <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
+                      onClick={() => void handleArchivePtProduct(product)} title="Ngừng bán gói PT" aria-label={`Ngừng bán gói PT ${product.name}`}>
+                      <Trash2 className="size-4" />
+                    </Button>}
+                  </div>
+                </div>
+              ))}
+              {!packageLoadError && !ptProductLoadError && visiblePackages.length + visiblePtProducts.length === 0 && (
                 <div className="col-span-full rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                  {isLoadingPackages ? 'Đang tải gói tập...' : packages.length === 0 ? 'Chưa có gói nào trong cơ sở dữ liệu.' : 'Không có gói nào trong trạng thái này.'}
+                  {isLoadingPackages || isLoadingPtProducts ? 'Đang tải gói tập...' : catalogCount === 0 ? 'Chưa có gói Gym hoặc PT nào trong cơ sở dữ liệu.' : 'Không có gói nào trong trạng thái này.'}
                 </div>
               )}
             </div>
@@ -1809,14 +1956,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <form onSubmit={handleSavePackage}>
             <DialogHeader>
               <DialogTitle>Tạo Gói Tập Mới</DialogTitle>
-              <DialogDescription>Gói tập mới sẽ đồng bộ trực tiếp tới bảng giá của khách hàng và quầy POS.</DialogDescription>
+              <DialogDescription>Gói Gym được bán theo thời hạn. Số buổi PT tặng kèm là buổi trải nghiệm, không phải gói PT mua riêng.</DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 py-3">
               <Field label="Tên Gói Tập *">
                 <Input
                   required
-                  placeholder="VD: Gói Hybrid VIP 3 Tháng + 12 Buổi PT"
+                  placeholder="VD: Gói Gym 30 ngày"
                   value={newPackageForm.name}
                   onChange={(e) => setNewPackageForm({ ...newPackageForm, name: e.target.value })}
                 />
@@ -1827,8 +1974,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Select value={newPackageForm.type} onValueChange={(v) => setNewPackageForm(current => ({ ...current, type: v as 'MEMBERSHIP' | 'PT' }))}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="MEMBERSHIP">MEMBERSHIP (Thẻ Hội Viên)</SelectItem>
-                      <SelectItem value="PT">PT (Gói Kèm 1:1 Riêng)</SelectItem>
+                      <SelectItem value="MEMBERSHIP">Gói Gym (thẻ hội viên)</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -1870,6 +2016,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   />
                 </Field>
               </div>
+              {newPackageForm.type === 'MEMBERSHIP' && <p className="text-xs text-muted-foreground">Nhập 0 nếu gói Gym không tặng buổi PT trải nghiệm. Buổi PT mua riêng được tạo trong “Quản lý buổi PT”.</p>}
               {newPackageForm.type === 'PT' && <p className="text-xs text-muted-foreground">Đây là số buổi PT khách mua trong gói, không phải số buổi tặng kèm.</p>}
 
               <Field label="Mô Tả Gói">
@@ -1976,6 +2123,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isPtCreditOpen} onOpenChange={setIsPtCreditOpen}>
+        <DialogContent className="max-h-[90vh] min-w-0 overflow-y-auto sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Quản lý buổi tập PT</DialogTitle>
+            <DialogDescription>Tạo gói buổi tập theo cấp độ huấn luyện viên và xem số buổi của từng hội viên.</DialogDescription>
+          </DialogHeader>
+          {isPtCreditOpen && <PtCreditAdmin onProductsChanged={loadPtProducts} />}
         </DialogContent>
       </Dialog>
 

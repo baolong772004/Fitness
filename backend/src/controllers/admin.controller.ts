@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
+import { summarizePtBatches, walletSummary } from '../services/ptWallet.service.js';
 
 
 
@@ -34,7 +35,9 @@ export const getMembersList = async (req: AuthRequest, res: Response) => {
           fullName: true,
           email: true,
           phone: true,
-          avatar: true, // avatar, not avatarUrl in DB
+          avatar: true,
+          gender: true,
+          dateOfBirth: true,
           status: true, // PENDING | ACTIVE | INACTIVE | BLOCKED
           createdAt: true,
           memberships: {
@@ -45,6 +48,7 @@ export const getMembersList = async (req: AuthRequest, res: Response) => {
             },
             include: {
               package: true,
+              ptCreditBatches: { select: { id: true } },
               coach: {
                 select: {
                   id: true,
@@ -56,8 +60,14 @@ export const getMembersList = async (req: AuthRequest, res: Response) => {
             },
             orderBy: [{ endDate: 'desc' }, { createdAt: 'desc' }],
           },
+          memberBookings: { where: { type: 'PT', status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+            endTime: { gt: now }, coachId: { not: null } },
+            select: { coach: { select: { fullName: true } } }, orderBy: { startTime: 'asc' }, take: 1 },
+          ptWallet: { select: { batches: { select: { id: true, level: true, source: true, initialCount: true,
+            usedCount: true, heldCount: true, startAt: true, endAt: true, activatedAt: true,
+            membership: { select: { status: true, startDate: true, endDate: true } } } } } },
           _count: {
-            select: { checkIns: true },
+            select: { checkIns: { where: { status: 'SUCCESS' } } },
           },
         },
         skip: Number(skip),
@@ -69,7 +79,17 @@ export const getMembersList = async (req: AuthRequest, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      data: members,
+      data: members.map(member => {
+        const currentGymMembership = member.memberships.find(row => row.package.type === 'MEMBERSHIP') ?? null;
+        const legacyPtMemberships = member.memberships.filter(row => row.package.type === 'PT' && !row.ptCreditBatches.length);
+        const currentCoachName = member.memberBookings[0]?.coach?.fullName ??
+          member.memberships.find(row => row.package.type === 'PT' && row.coach)?.coach?.fullName ?? null;
+        const { memberships, memberBookings, ptWallet, _count, ...profile } = member;
+        return { ...profile, currentGymMembership, currentCoachName,
+          ptCredit: summarizePtBatches(ptWallet?.batches ?? [], now),
+          legacyPtSessions: legacyPtMemberships.reduce((sum, row) => sum + Math.max(0, row.remainingSessions ?? 0), 0),
+          checkInCount: _count.checkIns };
+      }),
       pagination: {
         total,
         page: Number(page),
@@ -92,8 +112,8 @@ export const getMemberDetailProfile = async (req: AuthRequest, res: Response) =>
     const memberId = Number(req.params.id);
 
     // 1. Kiểm tra Member có tồn tại không
-    const member = await prisma.user.findUnique({
-      where: { id: memberId },
+    const member = await prisma.user.findFirst({
+      where: { id: memberId, role: 'MEMBER' },
       select: {
         id: true,
         fullName: true,
@@ -110,12 +130,13 @@ export const getMemberDetailProfile = async (req: AuthRequest, res: Response) =>
     }
 
     // 2. Truy vấn đồng thời các thông tin liên quan (Parallel Queries)
-    const [memberships, payments, ptBookings, groupBookings, checkIns] = await Promise.all([
+    const [memberships, payments, ptBookings, groupBookings, checkIns, checkInTotal, ptWalletSummary] = await Promise.all([
       // Tất cả gói tập (Gym, Yoga chung và PT)
       prisma.membership.findMany({
         where: { userId: memberId },
         include: {
           package: true,
+          ptCreditBatches: { select: { id: true } },
           coach: { select: { fullName: true } }
         },
         orderBy: { createdAt: 'desc' },
@@ -145,28 +166,39 @@ export const getMemberDetailProfile = async (req: AuthRequest, res: Response) =>
       }),
       // Lịch sử Check-in
       prisma.checkIn.findMany({
-        where: { memberId: memberId },
+        where: { memberId: memberId, status: 'SUCCESS' },
         include: {
            room: { select: { name: true } },
            staff: { select: { fullName: true } }
         },
         orderBy: { checkInTime: 'desc' },
         take: 20,
-      })
+      }),
+      prisma.checkIn.count({ where: { memberId, status: 'SUCCESS' } }),
+      walletSummary(prisma, memberId),
     ]);
 
     // Lọc ra các loại Membership để dễ hiển thị
     const membershipSubscriptions = memberships.filter(m => m.package.type === 'MEMBERSHIP');
-    const ptSubscriptions = memberships.filter(m => m.package.type === 'PT' || m.coachId !== null);
+    const ptSubscriptions = memberships.filter(m => m.package.type === 'PT');
+    const legacyPtSessions = ptSubscriptions.filter(m => m.status === 'ACTIVE' &&
+      !m.ptCreditBatches.length).reduce((sum, m) => sum + Math.max(0, m.remainingSessions ?? 0), 0);
+    const now = new Date();
+    const currentGymMembership = membershipSubscriptions.find(m => m.status === 'ACTIVE' &&
+      m.startDate <= now && m.endDate >= now) ?? null;
 
     return res.status(200).json({
       success: true,
       data: {
         profile: member,
+        currentGymMembership,
         membershipSubscriptions,
         ptSubscriptions,
+        ptWalletSummary,
+        legacyPtSessions,
         paymentHistory: payments,
         checkInHistory: checkIns,
+        checkInTotal,
         trainingHistory: {
           ptSessions: ptBookings,
           groupClasses: groupBookings,

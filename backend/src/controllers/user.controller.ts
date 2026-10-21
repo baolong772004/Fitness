@@ -80,7 +80,7 @@ export class UserController {
 
   static async getUserById(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number(req.params.id);
       if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       const user = await prisma.user.findUnique({
@@ -114,7 +114,7 @@ export class UserController {
 
   static async updateUser(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number(req.params.id);
       if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       // Check permission: Only Admin/Staff or the owner can update
@@ -157,7 +157,7 @@ export class UserController {
 
   static async updateUserRole(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number(req.params.id);
       if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       const { role } = req.body;
@@ -204,9 +204,9 @@ export class UserController {
       next(error);
     }
   }
-  static async updateUserStatus(req: Request, res: Response, next: NextFunction) {
+  static async updateUserStatus(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number(req.params.id);
       if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       const { status } = req.body;

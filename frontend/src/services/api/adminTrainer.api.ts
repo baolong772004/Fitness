@@ -2,6 +2,42 @@ import { request } from './client';
 import { ApiCoachProfile, Pagination } from './types';
 
 export const adminTrainerApi = {
+  async getPtProducts() {
+    const res = await request<{ success: boolean; data: Array<{ id: number; name: string; level: string; sessionCount: number; durationDays: number | null; price: number; isActive: boolean }> }>('/pt/products/manage');
+    return res.data;
+  },
+  async createPtProduct(data: { name: string; level: string; sessionCount: number; durationDays: number; price: number }) {
+    return request('/pt/products', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updatePtProduct(id: number, data: { name: string; level: string; sessionCount: number; durationDays: number; price: number }) {
+    return request(`/pt/products/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
+  async archivePtProduct(id: number) {
+    return request(`/pt/products/${id}`, { method: 'DELETE' });
+  },
+  async getPtRenewalOptions() {
+    const res = await request<{ success: boolean; data: Array<{ id: number; name: string; level: string; durationDays: number; price: number; isActive: boolean; ptProductId: number | null }> }>('/pt/renewal-options/manage');
+    return res.data;
+  },
+  async createPtRenewalOption(data: { productId: number; durationDays: number; price: number }) {
+    return request('/pt/renewal-options', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updatePtRenewalOption(id: number, data: { productId: number; durationDays: number; price: number }) {
+    return request(`/pt/renewal-options/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
+  async archivePtRenewalOption(id: number) {
+    return request(`/pt/renewal-options/${id}`, { method: 'DELETE' });
+  },
+  async setPtSpecializations(coachId: number, levels: string[]) {
+    return request(`/pt/trainers/${coachId}/specializations`, { method: 'PUT', body: JSON.stringify({ levels }) });
+  },
+  async getPtWallet(memberId: number) {
+    const res = await request<{ success: boolean; data: { summary: { total: number; available: number; held: number; used: number; expired: number; levels: Array<{ level: string; available: number; held: number; used: number; expired: number }>; sources: Array<{ id: number; level: string; source: string; quantity: number; remainingSessions: number; availableSessions: number; startAt: string | null; endAt: string | null; activatedAt: string | null; status: string; renewable: boolean; renewalDeadline: string | null }> }; batches: unknown[]; transactions: unknown[]; renewals: Array<{ id: number; batchId: number; durationDays: number; previousEndAt: string; startAt: string; endAt: string; payment: { amount: number; paidAt: string } }> } }>(`/pt/admin/wallets/${memberId}`);
+    return res.data;
+  },
+  async adjustPtWallet(memberId: number, value: { level: string; delta: number; reason: string }) {
+    return request(`/pt/admin/wallets/${memberId}/adjust`, { method: 'POST', body: JSON.stringify(value) });
+  },
   async getCalendar() {
     const res = await request<{ success: boolean; data: {
       calendar: { openTime: string; closeTime: string; slotMinutes: number; breakMinutes: number };
@@ -74,6 +110,18 @@ export const adminTrainerApi = {
       method: 'POST',
       body: JSON.stringify(payload)
     });
+  },
+
+  async updateTrainerPricing(id: number | string, payload: {
+    hourlyRate: number;
+    commissionPercent: number;
+    rank: 'junior' | 'senior' | 'master';
+    levels?: string[];
+  }) {
+    return request<{ success: boolean; message: string; data: ApiCoachProfile }>(
+      `/admin-trainers/${id}/pricing`,
+      { method: 'PATCH', body: JSON.stringify(payload) }
+    );
   },
 
   async toggleTrainerStatus(id: number | string, status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED') {
