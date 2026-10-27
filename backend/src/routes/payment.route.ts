@@ -6,6 +6,33 @@ const router = Router();
 
 /**
  * @swagger
+ * /payments/history:
+ *   get:
+ *     summary: Lấy lịch sử thanh toán của người dùng đang đăng nhập
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Danh sách giao dịch và thông tin phân trang
+ *       401:
+ *         description: Chưa đăng nhập
+ */
+router.get('/history', authenticateToken, PaymentController.getPaymentHistory);
+
+/**
+ * @swagger
  * /payments/checkout:
  *   post:
  *     summary: Tạo đơn hàng và mã QR thanh toán PayOS
