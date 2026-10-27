@@ -123,4 +123,27 @@ export const api = {
   readNotification: (id: number) => request('PATCH', `/notifications/${id}/read`),
   readAllNotifications: () => request('PATCH', '/notifications/read-all'),
   progress: (memberId: number) => get(`/workouts/progress/${memberId}`),
+  // Payment history
+  paymentHistory: (page = 1) => get(`/payments/history?page=${page}&limit=10`),
+  // Booking history (all types)
+  bookingHistory: (page = 1, type?: string) => get(`/member/my-schedule?page=${page}&limit=10${type ? `&type=${type}` : ''}&includeCompleted=true`),
+  // Workout sessions history
+  workoutSessions: (page = 1) => get(`/workouts/sessions?page=${page}&limit=10`),
+  // Ratings
+  submitRating: (bookingId: number, rating: number, comment: string, targetType: 'COACH' | 'CLASS') =>
+    post('/ratings', { bookingId, rating, comment, targetType }),
+  myRatings: () => get('/ratings/my-ratings'),
+  coachRatings: (coachId: number) => get(`/ratings/coach/${coachId}`),
+  // Support
+  supportTickets: () => get('/support/tickets'),
+  createSupportTicket: (subject: string, message: string, category: string) =>
+    post('/support/tickets', { subject, message, category }),
+  // Notification settings
+  notificationSettings: () => get('/notifications/settings'),
+  updateNotificationSettings: (settings: Record<string, boolean>) =>
+    request('PATCH', '/notifications/settings', settings),
+  // Profile update
+  updateProfile: (data: { fullName?: string; phone?: string; dateOfBirth?: string; gender?: string; height?: number; weight?: number }) =>
+    request('PATCH', '/auth/profile', data),
+  myProfile: () => get('/auth/profile'),
 };
