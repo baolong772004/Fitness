@@ -8,6 +8,9 @@ export interface PtChatMessageDocument extends Document {
   createdAt: Date;
   readAt?: Date;
   legacySqlId?: number;
+  pairKey?: string;
+  memberId?: number;
+  coachId?: number;
 }
 
 interface CounterDocument extends Document {
@@ -46,6 +49,7 @@ export async function connectMongoDB(): Promise<boolean> {
     await Promise.all([
       nextMessageCollection.createIndex({ id: 1 }, { unique: true }),
       nextMessageCollection.createIndex({ bookingId: 1, id: -1 }),
+      nextMessageCollection.createIndex({ pairKey: 1, id: -1 }),
       nextMessageCollection.createIndex({ senderId: 1, id: -1 }),
       nextMessageCollection.createIndex({ legacySqlId: 1 }, { unique: true, sparse: true }),
     ]);

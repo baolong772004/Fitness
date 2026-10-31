@@ -1,8 +1,10 @@
 import { Router } from 'express';
-import { logSessionResult, logInBodyProgress, getMemberProgress } from '../controllers/workoutLog.controller.js';
+import { logSessionResult, logInBodyProgress, getMemberProgress, createPtAssessment } from '../controllers/workoutLog.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
+import { getStudentPlanRevisions } from '../controllers/studentWorkoutPlan.controller.js';
 
 const router = Router();
+router.get('/student-plans/:id/revisions', authenticateToken, getStudentPlanRevisions);
 
 /**
  * @swagger
@@ -53,6 +55,7 @@ const router = Router();
  */
 // Chỉ COACH mới được log giáo án buổi tập
 router.post('/log-session', authenticateToken, authorizeRoles('COACH', 'TRAINER', 'ADMIN'), logSessionResult);
+router.post('/pt-assessments', authenticateToken, authorizeRoles('COACH', 'TRAINER'), createPtAssessment);
 
 /**
  * @swagger

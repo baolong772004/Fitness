@@ -1,0 +1,294 @@
+{
+  "schemaVersion": 1,
+  "exerciseId": "PUSH_UP",
+  "exerciseName": "Push-up",
+  "exerciseVariant": "STANDARD",
+  "equipment": [
+    "NONE"
+  ],
+  "trainingLevel": "COACH_ADAPTED",
+  "referenceSources": [
+    {
+      "sourceId": "ACE_PUSH_UP",
+      "title": "ACE Push-up",
+      "url": "https://www.acefitness.org/resources/everyone/exercise-library/41/push-up/",
+      "publisher": "American Council on Exercise",
+      "accessedAt": "2026-10-31",
+      "summary": "Tham chiếu mô tả hạ và đẩy người trong khi kiểm soát thân; vị trí tay và khuỷu có biến thể. Không chuyển chỉ dẫn định tính thành góc đạt mặc định.",
+      "scope": "EXERCISE_COACHING_REFERENCE",
+      "providesValidatedComputerVisionThresholds": false
+    },
+    {
+      "sourceId": "MEDIAPIPE_POSE",
+      "title": "Pose landmark detection guide",
+      "url": "https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker",
+      "publisher": "Google AI Edge",
+      "accessedAt": "2026-10-31",
+      "summary": "Pose Landmarker dự đoán vị trí khớp theo ảnh/video; output không tự xác nhận kỹ thuật hay lực lên khớp.",
+      "scope": "MEASUREMENT_TECHNOLOGY_NOT_TECHNIQUE_STANDARD",
+      "providesValidatedComputerVisionThresholds": false
+    }
+  ],
+  "approvedByCoach": null,
+  "approvedAt": null,
+  "approvedStandardDigest": null,
+  "standardVersion": "standard-push-up-1.0.0-draft",
+  "status": "EXPERIMENTAL",
+  "startingPosition": {
+    "reference": "Thân duỗi trong tư thế chống tay; thấy rõ vai, khuỷu, cổ tay, hông và chân.",
+    "requiredLandmarks": [
+      "Ankle",
+      "Elbow",
+      "Hip",
+      "Shoulder",
+      "Wrist"
+    ],
+    "detectionConditions": [
+      "Nhận diện từ đoạn frame liên tục phù hợp, không chỉ frame đầu.",
+      "Tách điều kiện khởi tạo đo với điều kiện kết luận kỹ thuật."
+    ]
+  },
+  "movementPhases": [
+    {
+      "phaseId": "PREPARE",
+      "description": "Chuẩn bị chống tay."
+    },
+    {
+      "phaseId": "DESCENT",
+      "description": "Gập khuỷu để hạ người."
+    },
+    {
+      "phaseId": "BOTTOM",
+      "description": "Mốc dưới theo mục tiêu."
+    },
+    {
+      "phaseId": "ASCENT",
+      "description": "Đẩy người lên."
+    },
+    {
+      "phaseId": "FINISH",
+      "description": "Trở lại mốc duỗi."
+    }
+  ],
+  "criteria": [
+    {
+      "criterionId": "PUSHUP-01",
+      "criterionName": "Biên độ khuỷu",
+      "type": "A",
+      "description": "Đo góc khuỷu; chưa chứng minh chạm sàn hay rep đạt.",
+      "applicableExerciseVariants": [
+        "STANDARD"
+      ],
+      "requiredCameraAngles": [
+        "SIDE"
+      ],
+      "requiredLandmarks": [
+        "Shoulder",
+        "Elbow",
+        "Wrist"
+      ],
+      "implementationKey": "elbow_flexion",
+      "sourceCriterionCodes": [
+        "ELBOW_FLEXION"
+      ],
+      "referenceSourceIds": [
+        "ACE_PUSH_UP"
+      ],
+      "measurementMethod": {
+        "id": "elbow_flexion",
+        "formula": "angle(shoulder,elbow,wrist)",
+        "units": "degrees",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "QUALITATIVE_COACHING_REFERENCE",
+        "targetKey": null,
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "COACH_REVIEW_PENDING",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": null,
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Quay rõ cả khuỷu và cổ tay để đối chiếu pha hạ/đẩy."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "ACE_PUSH_UP"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "EXPERIMENTAL_NOT_COACH_VALIDATED",
+      "evaluationPolicy": {
+        "status": "EXPERIMENTAL",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    },
+    {
+      "criterionId": "PUSHUP-02",
+      "criterionName": "Đường thân trên ảnh",
+      "type": "C",
+      "description": "Quan sát thân ở từng pha, không suy ra độ cong lưng.",
+      "applicableExerciseVariants": [
+        "STANDARD"
+      ],
+      "requiredCameraAngles": [
+        "SIDE"
+      ],
+      "requiredLandmarks": [
+        "Shoulder",
+        "Hip",
+        "Ankle"
+      ],
+      "implementationKey": "body_alignment",
+      "sourceCriterionCodes": [
+        "BODY_ALIGNMENT"
+      ],
+      "referenceSourceIds": [
+        "ACE_PUSH_UP"
+      ],
+      "measurementMethod": {
+        "id": "body_alignment",
+        "formula": "angle(shoulder,hip,ankle)",
+        "units": "degrees",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "QUALITATIVE_COACHING_REFERENCE",
+        "targetKey": null,
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "COACH_REVIEW_PENDING",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": null,
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Thử giữ thân ổn định, đối chiếu vai–hông–chân trên video ngang."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "ACE_PUSH_UP"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "EXPERIMENTAL_NOT_COACH_VALIDATED",
+      "evaluationPolicy": {
+        "status": "EXPERIMENTAL",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    }
+  ],
+  "measurementConfiguration": {
+    "source": "IMPLEMENTATION_CONFIGURATION",
+    "coordinateSystem": "NORMALIZED_IMAGE_TO_PIXEL_2D",
+    "visibilityThreshold": 0.65,
+    "sampleRateHz": 10,
+    "visibilityMeaning": "landmark visibility, not probability of correct technique",
+    "version": "pose-measurement-1"
+  },
+  "algorithmThresholds": {
+    "source": "EXPERIMENTAL_ALGORITHM_CONFIGURATION",
+    "configurationRef": "exercise-specific measurement adapter",
+    "scientificallyValidatedTechniqueStandard": false,
+    "changesRequireRegressionTests": true
+  },
+  "individualTrainingTargetSchema": {
+    "source": "COACH_WORKOUT_PLAN_OR_EXPLICIT_USER_TARGET",
+    "targetsRequire": [
+      "value",
+      "units",
+      "exerciseVariant",
+      "source",
+      "configuredBy",
+      "configuredAt"
+    ],
+    "defaults": null,
+    "interpretFreeTextNotesAutomatically": false
+  },
+  "history": [
+    {
+      "version": "standard-push-up-1.0.0-draft",
+      "createdAt": "2026-10-31",
+      "status": "DRAFT",
+      "changeReason": "First source-informed reference; pending qualified Coach review and labeled-video validation."
+    }
+  ]
+}

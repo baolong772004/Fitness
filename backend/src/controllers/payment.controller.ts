@@ -12,6 +12,7 @@ import {
 import { reconcileGymMembershipStates, refreshGymMembershipStates } from '../services/membership.service.js';
 import { lockGymMember } from '../services/gymMembershipLock.service.js';
 import { ptRenewalError, ptRenewalOptionMatchesBatch } from '../services/ptRenewal.service.js';
+import { activePaidGymMembershipWhere } from '../services/gymEntitlement.service.js';
 
 
 export class PaymentController {
@@ -32,8 +33,13 @@ export class PaymentController {
     const reason = ptRenewalError(batch);
     if (reason) return res.status(409).json({ message: reason });
     if (!ptRenewalOptionMatchesBatch(option, {
-      level: batch.level, ptProductId: batch.payment?.ptProductId ?? null,
+      level: batch.level, ptProductId: batch.ptProductIdSnapshot ?? batch.payment?.ptProductId ?? null, source: batch.source,
     })) return res.status(409).json({ message: 'Giá gia hạn không áp dụng cho gói PT đã mua.' });
+    await refreshGymMembershipStates(userId);
+    const gymMembership = await prisma.membership.findFirst({
+      where: activePaidGymMembershipWhere(userId, new Date()), select: { id: true },
+    });
+    if (!gymMembership) return res.status(403).json({ message: 'Cần có Membership Gym đã thanh toán và còn hiệu lực để gia hạn PT.' });
     const amount = Number(option.price);
     if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 1000000000) {
       return res.status(409).json({ message: 'Giá gia hạn không hợp lệ.' });
@@ -62,20 +68,59 @@ export class PaymentController {
 
   static async createPtCreditCheckout(req: AuthRequest, res: Response) {
     const userId = req.user?.userId;
-    const productId = Number(req.body?.productId);
-    const quantity = Number(req.body?.quantity ?? 1);
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
-    if (!Number.isSafeInteger(productId) || productId <= 0 ||
-        !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 20) {
-      return res.status(400).json({ message: 'Cần productId và quantity từ 1 đến 20.' });
-    }
+    const requested = Array.isArray(req.body?.items) ? req.body.items : [{
+      mode: req.body?.purchaseMode ?? 'PACKAGE', productId: req.body?.productId,
+      level: req.body?.level, quantity: req.body?.quantity ?? 1,
+    }];
+    if (requested.length < 1 || requested.length > 20) return res.status(400).json({ message: 'Đơn PT cần 1–20 sản phẩm.' });
     const payos = getPayOS();
     if (!payos) return res.status(503).json({ message: 'PayOS chưa được cấu hình.' });
-    const product = await prisma.ptProduct.findFirst({ where: { id: productId, isActive: true } });
-    if (!product) return res.status(404).json({ message: 'Sản phẩm PT không tồn tại.' });
-    if (!['BEGINNER', 'INTERMEDIATE', 'ADVANCED'].includes(product.level)) return res.status(409).json({ message: 'Cấp độ PT không hợp lệ để bán.' });
-    if (!product.durationDays || product.durationDays <= 0) return res.status(409).json({ message: 'Gói PT chưa được cấu hình thời hạn.' });
-    const amount = Number(product.price) * quantity;
+    await refreshGymMembershipStates(userId);
+    const gymMembership = await prisma.membership.findFirst({
+      where: activePaidGymMembershipWhere(userId, new Date()), select: { id: true },
+    });
+    if (!gymMembership) return res.status(403).json({ message: 'Cần có Membership Gym đã thanh toán và còn hiệu lực trước khi mua PT.' });
+    const items: { productId: number | null; mode: string; nameSnapshot: string; levelSnapshot: string;
+      sessionsSnapshot: number; durationDays: number; unitPrice: number; quantity: number;
+      benefitsSnapshot: string | null; unitStartIndex: number }[] = [];
+    let unitStartIndex = 0;
+    for (const raw of requested) {
+      const mode = raw?.mode;
+      const quantity = Number(raw?.quantity ?? 1);
+      if (!['PACKAGE', 'SINGLE'].includes(mode) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100) {
+        return res.status(400).json({ message: 'Hình thức hoặc số lượng PT không hợp lệ.' });
+      }
+      const productId = Number(raw?.productId);
+      const product = Number.isSafeInteger(productId) && productId > 0
+        ? await prisma.ptProduct.findFirst({ where: { id: productId, isActive: true } }) : null;
+      if (mode === 'PACKAGE' && !product) return res.status(404).json({ message: 'Gói PT không còn được bán.' });
+      const level = mode === 'PACKAGE' ? product!.level : product?.level ?? raw?.level;
+      if (!['BEGINNER', 'INTERMEDIATE', 'ADVANCED'].includes(level)) {
+        return res.status(400).json({ message: 'Cấp độ PT không hợp lệ.' });
+      }
+      const single = mode === 'SINGLE'
+        ? await prisma.ptSingleOffer.findFirst({ where: { level, isActive: true } }) : null;
+      if (mode === 'SINGLE' && (!single || quantity > single.maxQuantity)) {
+        return res.status(409).json({ message: 'Buổi lẻ đã ngừng bán hoặc vượt số lượng tối đa.' });
+      }
+      if (mode === 'PACKAGE' && quantity > 20) return res.status(400).json({ message: 'Tối đa 20 gói mỗi dòng hàng.' });
+      const durationDays = mode === 'PACKAGE' ? product!.durationDays : single!.durationDays;
+      const sessionsSnapshot = mode === 'PACKAGE' ? product!.sessionCount : 1;
+      const unitPrice = Number(mode === 'PACKAGE' ? product!.price : single!.price);
+      if (!durationDays || durationDays < 1 || durationDays > 3650 ||
+        !Number.isSafeInteger(sessionsSnapshot) || sessionsSnapshot < 1 ||
+        !Number.isSafeInteger(unitPrice) || unitPrice < 1) {
+        return res.status(409).json({ message: 'Sản phẩm PT chưa được cấu hình hợp lệ.' });
+      }
+      items.push({ productId: mode === 'PACKAGE' ? product!.id : null, mode,
+        nameSnapshot: mode === 'PACKAGE' ? product!.name : `PT ${level} buổi lẻ`,
+        levelSnapshot: level, sessionsSnapshot, durationDays, unitPrice, quantity,
+        benefitsSnapshot: mode === 'PACKAGE' ? product!.benefits : single!.benefits, unitStartIndex });
+      unitStartIndex += mode === 'PACKAGE' ? quantity : 1;
+    }
+    if (unitStartIndex > 100) return res.status(400).json({ message: 'Đơn PT vượt giới hạn số sản phẩm.' });
+    const amount = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
     if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 1000000000) {
       return res.status(400).json({ message: 'Giá thanh toán không hợp lệ.' });
     }
@@ -84,14 +129,13 @@ export class PaymentController {
       await prisma.payment.create({ data: {
         userId, amount, method: 'PAYOS', status: 'PENDING',
         orderCode: BigInt(orderCode), transactionNo: `TXN-${orderCode}`,
-        ptProductId: product.id, ptQuantity: quantity,
-        ptLevelSnapshot: product.level, ptSessionsSnapshot: product.sessionCount,
-        ptDurationDays: product.durationDays,
+        ptPurchaseItems: { create: items },
       } });
       const link = await payos.createPaymentLink({ orderCode, amount,
-        description: `PT ${product.level} ${quantity}`.slice(0, 25), ...getPayOSRedirectUrls() });
+        description: `PT ${items[0].levelSnapshot} ${items.length}`.slice(0, 25), ...getPayOSRedirectUrls() });
       return res.json({ success: true, orderCode, checkoutUrl: link.checkoutUrl, qrCode: link.qrCode,
-        sessions: product.sessionCount * quantity, level: product.level, durationDays: product.durationDays });
+        sessions: items.reduce((sum, item) => sum + item.sessionsSnapshot * item.quantity, 0),
+        items, amount });
     } catch (error) {
       await markPaymentFailed(BigInt(orderCode)).catch(() => undefined);
       console.error('PT credit checkout failed:', error);

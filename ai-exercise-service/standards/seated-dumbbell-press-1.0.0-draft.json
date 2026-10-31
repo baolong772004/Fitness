@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "exerciseId": "SHOULDER_PRESS",
+  "exerciseName": "Seated Dumbbell Shoulder Press",
+  "exerciseVariant": "DUMBBELL_SEATED",
+  "equipment": [
+    "DUMBBELLS",
+    "BENCH"
+  ],
+  "trainingLevel": "COACH_ADAPTED",
+  "referenceSources": [
+    {
+      "sourceId": "ACE_DUMBBELL_PRESS",
+      "title": "ACE Strength Training Workout for Beginners — Dumbbell Shoulder Press",
+      "url": "https://www.acefitness.org/resources/pros/expert-articles/5047/strength-training-workout-for-beginners/",
+      "publisher": "American Council on Exercise",
+      "accessedAt": "2026-10-31",
+      "summary": "Mô tả đưa tạ từ bên đầu lên trên và hạ có kiểm soát; có các cách dùng dụng cụ khác nhau. Hướng dẫn không xác nhận độ chính xác ngưỡng pose.",
+      "scope": "EXERCISE_COACHING_REFERENCE",
+      "providesValidatedComputerVisionThresholds": false
+    },
+    {
+      "sourceId": "ACE_PRESS_VARIANTS",
+      "title": "ACE Smart Shoulder Solutions",
+      "url": "https://www.acefitness.org/resources/pros/expert-articles/9074/smart-shoulder-solutions-an-evidence-based-approach-to-training-the-deltoids/",
+      "publisher": "American Council on Exercise",
+      "accessedAt": "2026-10-31",
+      "summary": "Bài viết đề cập biến thể dumbbell press ngồi hoặc đứng và lựa chọn phù hợp khả năng; không đưa quy tắc đạt kỹ thuật chung cho mọi người.",
+      "scope": "EXERCISE_COACHING_REFERENCE",
+      "providesValidatedComputerVisionThresholds": false
+    },
+    {
+      "sourceId": "MEDIAPIPE_POSE",
+      "title": "Pose landmark detection guide",
+      "url": "https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker",
+      "publisher": "Google AI Edge",
+      "accessedAt": "2026-10-31",
+      "summary": "Pose Landmarker dự đoán vị trí khớp theo ảnh/video; output không tự xác nhận kỹ thuật hay lực lên khớp.",
+      "scope": "MEASUREMENT_TECHNOLOGY_NOT_TECHNIQUE_STANDARD",
+      "providesValidatedComputerVisionThresholds": false
+    }
+  ],
+  "approvedByCoach": null,
+  "approvedAt": null,
+  "approvedStandardDigest": null,
+  "standardVersion": "seated-dumbbell-press-1.0.0-draft",
+  "status": "EXPERIMENTAL",
+  "startingPosition": {
+    "reference": "Ngồi cầm dumbbell ở vùng vai; giữ cả cổ tay trong ảnh ở vị trí đẩy lên.",
+    "requiredLandmarks": [
+      "Elbow",
+      "Hip",
+      "Shoulder",
+      "Wrist"
+    ],
+    "detectionConditions": [
+      "Nhận diện từ đoạn frame liên tục phù hợp, không chỉ frame đầu.",
+      "Tách điều kiện khởi tạo đo với điều kiện kết luận kỹ thuật."
+    ]
+  },
+  "movementPhases": [
+    {
+      "phaseId": "PREPARE",
+      "description": "Tạ tại mốc bắt đầu."
+    },
+    {
+      "phaseId": "PRESS",
+      "description": "Đẩy lên."
+    },
+    {
+      "phaseId": "TOP",
+      "description": "Mốc trên."
+    },
+    {
+      "phaseId": "LOWER",
+      "description": "Hạ có kiểm soát."
+    },
+    {
+      "phaseId": "FINISH",
+      "description": "Trở lại mốc vai."
+    }
+  ],
+  "criteria": [
+    {
+      "criterionId": "PRESS-01",
+      "criterionName": "Góc duỗi khuỷu",
+      "type": "A",
+      "description": "Đo khuỷu trên ảnh; chưa xác nhận đường tạ hoặc tải.",
+      "applicableExerciseVariants": [
+        "DUMBBELL_SEATED"
+      ],
+      "requiredCameraAngles": [
+        "SIDE"
+      ],
+      "requiredLandmarks": [
+        "Shoulder",
+        "Elbow",
+        "Wrist"
+      ],
+      "implementationKey": "elbow_extension",
+      "sourceCriterionCodes": [
+        "ELBOW_EXTENSION"
+      ],
+      "referenceSourceIds": [
+        "ACE_DUMBBELL_PRESS"
+      ],
+      "measurementMethod": {
+        "id": "elbow_extension",
+        "formula": "angle(shoulder,elbow,wrist)",
+        "units": "degrees",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "QUALITATIVE_COACHING_REFERENCE",
+        "targetKey": null,
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "COACH_REVIEW_PENDING",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": null,
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Quay rõ khuỷu, vai và cổ tay đến cuối pha đẩy."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "ACE_DUMBBELL_PRESS"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "EXPERIMENTAL_NOT_COACH_VALIDATED",
+      "evaluationPolicy": {
+        "status": "EXPERIMENTAL",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    },
+    {
+      "criterionId": "PRESS-02",
+      "criterionName": "Độ cao cổ tay so với vai",
+      "type": "A",
+      "description": "Số đo chiều cao 2D không xác nhận độ linh hoạt vai hay an toàn.",
+      "applicableExerciseVariants": [
+        "DUMBBELL_SEATED"
+      ],
+      "requiredCameraAngles": [
+        "FRONT"
+      ],
+      "requiredLandmarks": [
+        "Shoulder",
+        "Hip",
+        "Wrist"
+      ],
+      "implementationKey": "wrist_height",
+      "sourceCriterionCodes": [
+        "WRIST_HEIGHT"
+      ],
+      "referenceSourceIds": [
+        "ACE_DUMBBELL_PRESS"
+      ],
+      "measurementMethod": {
+        "id": "wrist_height",
+        "formula": "(shoulder_y-wrist_y)/projected_torso_length",
+        "units": "torso_lengths",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "QUALITATIVE_COACHING_REFERENCE",
+        "targetKey": null,
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "COACH_REVIEW_PENDING",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": null,
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Giữ cổ tay trong khung và quay chính diện để đối chiếu."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "ACE_DUMBBELL_PRESS"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "EXPERIMENTAL_NOT_COACH_VALIDATED",
+      "evaluationPolicy": {
+        "status": "EXPERIMENTAL",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    }
+  ],
+  "measurementConfiguration": {
+    "source": "IMPLEMENTATION_CONFIGURATION",
+    "coordinateSystem": "NORMALIZED_IMAGE_TO_PIXEL_2D",
+    "visibilityThreshold": 0.65,
+    "sampleRateHz": 10,
+    "visibilityMeaning": "landmark visibility, not probability of correct technique",
+    "version": "pose-measurement-1"
+  },
+  "algorithmThresholds": {
+    "source": "EXPERIMENTAL_ALGORITHM_CONFIGURATION",
+    "configurationRef": "exercise-specific measurement adapter",
+    "scientificallyValidatedTechniqueStandard": false,
+    "changesRequireRegressionTests": true
+  },
+  "individualTrainingTargetSchema": {
+    "source": "COACH_WORKOUT_PLAN_OR_EXPLICIT_USER_TARGET",
+    "targetsRequire": [
+      "value",
+      "units",
+      "exerciseVariant",
+      "source",
+      "configuredBy",
+      "configuredAt"
+    ],
+    "defaults": null,
+    "interpretFreeTextNotesAutomatically": false
+  },
+  "history": [
+    {
+      "version": "seated-dumbbell-press-1.0.0-draft",
+      "createdAt": "2026-10-31",
+      "status": "DRAFT",
+      "changeReason": "First source-informed reference; pending qualified Coach review and labeled-video validation."
+    }
+  ]
+}

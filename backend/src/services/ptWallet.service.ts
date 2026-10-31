@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { PtBookingError } from './ptError.js';
 import prisma from '../config/prisma.js';
 import { PT_RENEWAL_GRACE_DAYS, ptRenewalError } from './ptRenewal.service.js';
+import { isPaidPtSource } from './ptEntitlementPolicy.service.js';
 
 type Db = Prisma.TransactionClient | PrismaClient;
 export const PT_LEVELS = ['TRIAL', 'BEGINNER', 'INTERMEDIATE', 'ADVANCED'] as const;
@@ -39,15 +40,51 @@ export async function assertPtWalletSchemaReady() {
   if (renewalScopeColumns.length !== 2) {
     throw new Error('PT renewal product scope migration is missing. Run prisma migrate deploy before starting the backend.');
   }
+  const paidPolicyColumns = await prisma.$queryRaw<Array<{ name: string }>>`
+    SELECT CONCAT(OBJECT_NAME(object_id), '.', name) AS name FROM sys.columns
+    WHERE (object_id = OBJECT_ID(N'dbo.PtProduct') AND name = N'singleSessionPrice')
+       OR (object_id = OBJECT_ID(N'dbo.Payment') AND name = N'ptPurchaseMode')
+  `;
+  const coachChangeTable = await prisma.$queryRaw<Array<{ name: string }>>`
+    SELECT name FROM sys.tables WHERE name = N'PtCoachChangeRequest'
+  `;
+  if (paidPolicyColumns.length !== 2 || coachChangeTable.length !== 1) {
+    throw new Error('PT Paid entitlement migration is missing. Run prisma migrate deploy before starting the backend.');
+  }
+  const purchaseUnitColumn = await prisma.$queryRaw<Array<{ name: string }>>`
+    SELECT name FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.PtCreditBatch')
+      AND name = N'purchaseUnitIndex'
+  `;
+  if (purchaseUnitColumn.length !== 1) {
+    throw new Error('PT purchase units migration is missing. Run prisma migrate deploy before starting the backend.');
+  }
+  const offerTables = await prisma.$queryRaw<Array<{ name: string }>>`
+    SELECT name FROM sys.tables WHERE name IN (N'PtSingleOffer', N'PtPurchaseItem')
+  `;
+  const batchProductColumn = await prisma.$queryRaw<Array<{ name: string }>>`
+    SELECT name FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.PtCreditBatch')
+      AND name IN (N'ptProductIdSnapshot', N'benefitsSnapshot')
+  `;
+  const renewalModeColumn = await prisma.$queryRaw<Array<{ name: string }>>`
+    SELECT name FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.PtRenewalOption')
+      AND name = N'purchaseMode'
+  `;
+  if (offerTables.length !== 2 || batchProductColumn.length !== 2 || renewalModeColumn.length !== 1) {
+    throw new Error('PT offers and order items migration is missing. Run prisma migrate deploy before starting the backend.');
+  }
 }
 
 export async function grantPtCredit(tx: Prisma.TransactionClient, input: {
   memberId: number; level: PtLevel; source: string; count: number;
-  paymentId?: number; membershipId?: number; coachId?: number | null;
+  paymentId?: number; purchaseBatchOrdinal?: number; ptProductIdSnapshot?: number | null; benefitsSnapshot?: string | null; membershipId?: number; coachId?: number | null;
   startAt?: Date | null; endAt?: Date | null; activatedAt?: Date | null;
 }) {
   if (!Number.isSafeInteger(input.count) || input.count <= 0) throw new Error('Invalid PT credit grant');
-  if (input.paymentId && await tx.ptCreditBatch.findFirst({ where: { paymentId: input.paymentId } })) return;
+  if (input.paymentId) {
+    const alreadyGranted = await tx.ptCreditBatch.findFirst({ where: { paymentId: input.paymentId,
+      purchaseUnitIndex: input.purchaseBatchOrdinal ?? 0 } });
+    if (alreadyGranted) return alreadyGranted;
+  }
   if (input.membershipId && await tx.ptCreditBatch.findFirst({ where: {
     membershipId: input.membershipId, source: input.source,
   } })) return;
@@ -56,6 +93,9 @@ export async function grantPtCredit(tx: Prisma.TransactionClient, input: {
   const batch = await tx.ptCreditBatch.create({ data: {
     walletId: wallet.id, level: input.level, source: input.source,
     initialCount: input.count, paymentId: input.paymentId,
+    purchaseUnitIndex: input.purchaseBatchOrdinal ?? 0,
+    ptProductIdSnapshot: input.ptProductIdSnapshot ?? null,
+    benefitsSnapshot: input.benefitsSnapshot ?? null,
     membershipId: input.membershipId, coachId: input.coachId ?? null,
     startAt: input.startAt ?? null, endAt: input.endAt ?? null,
     activatedAt: input.activatedAt ?? null,
@@ -67,7 +107,7 @@ export async function grantPtCredit(tx: Prisma.TransactionClient, input: {
 }
 
 type SummaryBatch = { level: string; initialCount: number; usedCount: number; heldCount: number;
-  id?: number; source?: string; grantedAt?: Date; paymentId?: number | null; membershipId?: number | null;
+  id?: number; source?: string; coachId?: number | null; grantedAt?: Date; paymentId?: number | null; membershipId?: number | null; ptProductIdSnapshot?: number | null; benefitsSnapshot?: string | null;
   startAt?: Date | null; endAt?: Date | null; activatedAt?: Date | null;
   payment?: { ptProductId: number | null } | null;
   membership?: { status: string; startDate: Date; endDate: Date } | null };
@@ -104,7 +144,7 @@ export function summarizePtBatches(allBatches: SummaryBatch[], now = new Date())
     available: levels.reduce((sum, level) => sum + level.available, 0),
     expired: levels.reduce((sum, level) => sum + level.expired, 0), levels,
     sources: allBatches.map(batch => ({
-      id: batch.id, level: batch.level, source: batch.source,
+      id: batch.id, level: batch.level, source: batch.source, coachId: batch.coachId,
       quantity: batch.initialCount, usedSessions: batch.usedCount, reservedSessions: batch.heldCount,
       remainingSessions: Math.max(0, batch.initialCount - batch.usedCount - batch.heldCount),
       availableSessions: ptBatchCovers(batch, now, now) ?
@@ -112,7 +152,8 @@ export function summarizePtBatches(allBatches: SummaryBatch[], now = new Date())
       startAt: batch.level === 'TRIAL' ? batch.membership?.startDate ?? null : batch.startAt ?? null,
       endAt: batch.level === 'TRIAL' ? batch.membership?.endDate ?? null : batch.endAt ?? null,
       activatedAt: batch.activatedAt ?? null, paymentId: batch.paymentId ?? null,
-      ptProductId: batch.payment?.ptProductId ?? null,
+      ptProductId: batch.ptProductIdSnapshot ?? batch.payment?.ptProductId ?? null,
+      benefits: batch.benefitsSnapshot ?? null,
       membershipId: batch.membershipId ?? null,
       renewable: !ptRenewalError(batch, now),
       renewalDeadline: batch.endAt ? new Date(batch.endAt.getTime() + PT_RENEWAL_GRACE_DAYS * 86400000) : null,
@@ -147,6 +188,11 @@ export async function reservePtCredit(tx: Prisma.TransactionClient, input: {
   const batch = batches.find(row => row.initialCount > row.usedCount + row.heldCount &&
     ptBatchCovers(row, input.start, input.end));
   if (!batch) throw new PtBookingError(409, `Không đủ credit ${input.level} khả dụng cho ca này.`);
+  if (isPaidPtSource(batch.source) && batch.coachId === null) {
+    const assigned = await tx.ptCreditBatch.updateMany({ where: { id: batch.id, coachId: null },
+      data: { coachId: input.coachId } });
+    if (assigned.count !== 1) throw new PtBookingError(409, 'Coach của gói PT vừa thay đổi. Vui lòng đặt lại lịch.');
+  }
   const held = await tx.ptCreditBatch.updateMany({ where: {
     id: batch.id, usedCount: batch.usedCount, heldCount: batch.heldCount,
   }, data: { heldCount: { increment: 1 } } });
@@ -175,7 +221,8 @@ export async function settlePtCredit(tx: Prisma.TransactionClient, bookingId: nu
   return true;
 }
 
-export async function releasePtCredit(tx: Prisma.TransactionClient, bookingId: number) {
+export async function releasePtCredit(tx: Prisma.TransactionClient, bookingId: number,
+  options?: { kind: 'PROTECTED_CANCEL'; actorId: number; note: string }) {
   const allocation = await tx.ptBookingCreditAllocation.findUnique({ where: { bookingId } });
   if (!allocation || allocation.status !== 'HELD') return false;
   const claimed = await tx.ptBookingCreditAllocation.updateMany({ where: { bookingId, status: 'HELD' },
@@ -185,7 +232,8 @@ export async function releasePtCredit(tx: Prisma.TransactionClient, bookingId: n
     data: { heldCount: { decrement: 1 } } });
   if (updated.count !== 1) throw new PtBookingError(409, 'Số dư giữ chỗ PT không hợp lệ.');
   await tx.ptCreditTransaction.create({ data: {
-    batchId: allocation.batchId, bookingId, kind: 'RELEASE', quantity: 1,
+    batchId: allocation.batchId, bookingId, kind: options?.kind ?? 'RELEASE', quantity: 1,
+    actorId: options?.actorId, note: options?.note,
   } });
   return true;
 }

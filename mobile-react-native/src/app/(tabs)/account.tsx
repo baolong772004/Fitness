@@ -8,8 +8,22 @@ import { useAuth } from '../../lib/auth';
 import { aura, money } from '../../lib/theme';
 
 export default function Account() {
-  const { user, signOut } = useAuth();
-  return <Page><LinearGradient colors={[aura.espresso, aura.darkCoffee]} style={{ marginHorizontal: -16, marginTop: -16, height: 222, borderBottomLeftRadius: 34, borderBottomRightRadius: 34, paddingHorizontal: 22, paddingTop: 34, flexDirection: 'row', alignItems: 'flex-start', gap: 15 }}>
+  const { user, signOut, refreshSession } = useAuth();
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refreshSession?.(),
+        new Promise(resolve => setTimeout(resolve, 600)),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshSession]);
+
+  return <Page refresh={onRefresh} refreshing={refreshing}><LinearGradient colors={[aura.espresso, aura.darkCoffee]} style={{ marginHorizontal: -16, marginTop: -16, height: 222, borderBottomLeftRadius: 34, borderBottomRightRadius: 34, paddingHorizontal: 22, paddingTop: 34, flexDirection: 'row', alignItems: 'flex-start', gap: 15 }}>
     <View style={{ width: 66, height: 66, borderRadius: 33, borderColor: '#FFFFFF57', borderWidth: 2, backgroundColor: '#FFFFFF29', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="person" size={37} color="#fff" /></View>
     <View style={{ flex: 1, paddingTop: 7 }}><Text numberOfLines={2} style={{ color: '#fff', fontSize: 17, fontWeight: '900' }}>{user?.fullName || 'Chào mừng đến Aura Fitness'}</Text><Text numberOfLines={1} style={{ color: '#E8D8CF', fontSize: 12, marginTop: 5 }}>{user ? `Mã tài khoản: ${user.id}` : 'Đăng nhập để xem hồ sơ hội viên'}</Text><Text numberOfLines={1} style={{ color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 4 }}>{user?.email || 'Hồ sơ ›'}</Text></View>
   </LinearGradient>

@@ -39,7 +39,7 @@ export class AuthService {
 
   static async login(data: any) {
     const user = await prisma.user.findUnique({
-      where: { email: data.email }
+      where: { email: data.email.trim().toLowerCase() }
     });
 
     if (!user) {
@@ -82,11 +82,15 @@ export class AuthService {
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isMatch) throw new Error('Incorrect old password');
+    if (await bcrypt.compare(newPassword, user.password)) throw new Error('New password must differ from old password');
+    if (user.mustChangePassword && (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword))) {
+      throw new Error('New password must contain letters and numbers');
+    }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({
       where: { id: userId },
-      data: { password: hashedPassword }
+      data: { password: hashedPassword, mustChangePassword: false }
     });
   }
 
@@ -104,17 +108,23 @@ export class AuthService {
   }
 
   static async resetPassword(resetToken: string, newPassword: string) {
+    let decoded: { userId: number };
     try {
-      const decoded: any = jwt.verify(resetToken, JWT_SECRET);
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-      await prisma.user.update({
-        where: { id: decoded.userId },
-        data: { password: hashedPassword }
-      });
+      decoded = jwt.verify(resetToken, JWT_SECRET) as { userId: number };
     } catch (error) {
       throw new Error('Invalid or expired reset token');
     }
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    if (!user) throw new Error('User not found');
+    if (await bcrypt.compare(newPassword, user.password)) throw new Error('New password must differ from old password');
+    if (user.mustChangePassword && (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword))) {
+      throw new Error('New password must contain letters and numbers');
+    }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: decoded.userId },
+      data: { password: hashedPassword, mustChangePassword: false }
+    });
   }
 
   static async googleLogin(idToken: string) {

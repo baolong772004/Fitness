@@ -1,0 +1,53 @@
+{
+  "testedAt": "2026-10-31T14:16:25.928Z",
+  "videoSha256": "5d27d9b378af0d323237fa48fa2fe32befec20a72e4f24988f7979f7fef9c7a8",
+  "historical12": {
+    "id": 12,
+    "mode": "OFFICIAL",
+    "resultVersion": "exercise-analysis-result-2",
+    "experimental": null
+  },
+  "aiHealth": {
+    "ready": true,
+    "ruleVersion": "squat-observation-6",
+    "techniqueEngineVersion": "technique-evaluation-2",
+    "experimentalEvaluationEnabled": true
+  },
+  "queued": {
+    "id": 17,
+    "status": "PENDING",
+    "evaluationMode": "EXPERIMENTAL"
+  },
+  "workerSql": {
+    "id": 17,
+    "status": "COMPLETED",
+    "evaluationMode": "EXPERIMENTAL",
+    "ruleVersion": "squat-observation-6",
+    "resultVersion": "exercise-analysis-result-2",
+    "experimentalPassed": 1,
+    "experimentalImproved": 0
+  },
+  "backendDetail": {
+    "id": 17,
+    "status": "COMPLETED",
+    "evaluationMode": "EXPERIMENTAL",
+    "experimentalPassed": 1,
+    "experimentalImproved": 0,
+    "criterionId": "SQUAT-03",
+    "predictionCount": 10,
+    "firstPrediction": {
+      "status": "MEETS_CRITERION",
+      "bodyPart": "LEFT_KNEE",
+      "repNumber": 1,
+      "timestampSeconds": 1.602,
+      "observedValue": 0.0261,
+      "threshold": {
+        "maximum": 0.1,
+        "source": "SQUAT_CONFIG.knee_inward_ratio",
+        "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+      },
+      "landmarkEvidenceFrames": 3
+    }
+  },
+  "temporaryJobRemovedAfterCapture": true
+}

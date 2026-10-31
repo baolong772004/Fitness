@@ -5,7 +5,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { aura } from '../lib/theme';
 import { AuraLoader } from './AuraLoader';
 
-export function Page({ children, refresh, loading, style }: { children: React.ReactNode; refresh?: () => void; loading?: boolean; style?: StyleProp<ViewStyle> }) {
+export function Page({
+  children,
+  refresh,
+  loading,
+  refreshing,
+  style,
+}: {
+  children: React.ReactNode;
+  refresh?: () => void | Promise<void>;
+  loading?: boolean;
+  refreshing?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
   const [showLoader, setShowLoader] = useState(!!loading);
   const loadStartedAt = useRef(0);
 
@@ -21,18 +33,40 @@ export function Page({ children, refresh, loading, style }: { children: React.Re
     return () => { if (timer) clearTimeout(timer); };
   }, [loading, showLoader]);
 
-  return <View style={[styles.page, style]}>
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} refreshControl={refresh ? <RefreshControl refreshing={!!loading} onRefresh={refresh} tintColor={loading ? 'transparent' : aura.caramel} colors={[loading ? 'transparent' : aura.caramel]} /> : undefined}>
-      {children}
-    </ScrollView>
-    {showLoader && <View accessibilityViewIsModal pointerEvents="auto" style={styles.pageLoading}>
-      <View style={styles.pageLoadingCard}>
-        <AuraLoader size={68} />
-<Text style={styles.pageLoadingTitle}>Đang tải dữ liệu</Text>
-<Text style={styles.pageLoadingSub}>Vui lòng đợi trong giây lát</Text>
-      </View>
-    </View>}
-  </View>;
+  const isPullRefreshing = refreshing !== undefined ? refreshing : !!loading;
+
+  return (
+    <View style={[styles.page, style]}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.pageContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          refresh ? (
+            <RefreshControl
+              refreshing={isPullRefreshing}
+              onRefresh={refresh}
+              tintColor={aura.caramel}
+              colors={[aura.caramel]}
+              progressBackgroundColor="#FFFFFF"
+            />
+          ) : undefined
+        }
+      >
+        {children}
+      </ScrollView>
+      {showLoader && (
+        <View accessibilityViewIsModal pointerEvents="auto" style={styles.pageLoading}>
+          <View style={styles.pageLoadingCard}>
+            <AuraLoader size={68} />
+            <Text style={styles.pageLoadingTitle}>Đang tải dữ liệu</Text>
+            <Text style={styles.pageLoadingSub}>Vui lòng đợi trong giây lát</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
 }
 
 export function Header({ title, subtitle, dark = false }: { title: string; subtitle?: string; dark?: boolean }) {

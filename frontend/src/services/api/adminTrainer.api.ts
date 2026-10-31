@@ -3,30 +3,53 @@ import { ApiCoachProfile, Pagination } from './types';
 
 export const adminTrainerApi = {
   async getPtProducts() {
-    const res = await request<{ success: boolean; data: Array<{ id: number; name: string; level: string; sessionCount: number; durationDays: number | null; price: number; isActive: boolean }> }>('/pt/products/manage');
+    const res = await request<{ success: boolean; data: Array<{ id: number; name: string; level: string; sessionCount: number; durationDays: number | null; price: number; singleSessionPrice: number | null; benefits: string | null; isActive: boolean }> }>('/pt/products/manage');
     return res.data;
   },
-  async createPtProduct(data: { name: string; level: string; sessionCount: number; durationDays: number; price: number }) {
+  async createPtProduct(data: { name: string; level: string; sessionCount: number; durationDays: number; price: number; singleSessionPrice: number | null; benefits: string }) {
     return request('/pt/products', { method: 'POST', body: JSON.stringify(data) });
   },
-  async updatePtProduct(id: number, data: { name: string; level: string; sessionCount: number; durationDays: number; price: number }) {
+  async updatePtProduct(id: number, data: { name: string; level: string; sessionCount: number; durationDays: number; price: number; singleSessionPrice: number | null; benefits: string }) {
     return request(`/pt/products/${id}`, { method: 'PUT', body: JSON.stringify(data) });
   },
   async archivePtProduct(id: number) {
     return request(`/pt/products/${id}`, { method: 'DELETE' });
   },
-  async getPtRenewalOptions() {
-    const res = await request<{ success: boolean; data: Array<{ id: number; name: string; level: string; durationDays: number; price: number; isActive: boolean; ptProductId: number | null }> }>('/pt/renewal-options/manage');
+  async restorePtProduct(id: number) {
+    return request(`/pt/products/${id}/restore`, { method: 'PATCH' });
+  },
+  async getPtSingleOffers() {
+    const res = await request<{ success: boolean; data: Array<{ id: number; level: string; price: number; durationDays: number; maxQuantity: number; benefits: string | null; isActive: boolean }> }>('/pt/single-offers/all');
     return res.data;
   },
-  async createPtRenewalOption(data: { productId: number; durationDays: number; price: number }) {
+  async savePtSingleOffer(level: string, data: { price: number; durationDays: number; maxQuantity: number; benefits: string }) {
+    return request(`/pt/single-offers/${level}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
+  async setPtSingleOfferActive(level: string, isActive: boolean) {
+    return request(`/pt/single-offers/${level}/active`, { method: 'PATCH', body: JSON.stringify({ isActive }) });
+  },
+  async getPendingPtCoachChanges() {
+    const res = await request<{ success: boolean; data: Array<{ id: number; batchId: number; memberId: number; memberName: string; oldCoachId: number; oldCoachName: string; newCoachId: number; newCoachName: string; reason: string; requestedAt: string; batch: { level: string; source: string } }> }>('/pt/coach-change-requests/pending');
+    return res.data;
+  },
+  async resolvePtCoachChange(id: number, decision: 'APPROVED' | 'REJECTED', adminNote: string) {
+    return request(`/pt/coach-change-requests/${id}`, { method: 'PATCH', body: JSON.stringify({ decision, adminNote }) });
+  },
+  async getPtRenewalOptions() {
+    const res = await request<{ success: boolean; data: Array<{ id: number; name: string; level: string; durationDays: number; price: number; isActive: boolean; ptProductId: number | null; purchaseMode: string | null }> }>('/pt/renewal-options/manage');
+    return res.data;
+  },
+  async createPtRenewalOption(data: { productId?: number; level?: string; purchaseMode: 'PACKAGE' | 'SINGLE' | null; durationDays: number; price: number }) {
     return request('/pt/renewal-options', { method: 'POST', body: JSON.stringify(data) });
   },
-  async updatePtRenewalOption(id: number, data: { productId: number; durationDays: number; price: number }) {
+  async updatePtRenewalOption(id: number, data: { productId?: number; level?: string; purchaseMode: 'PACKAGE' | 'SINGLE' | null; durationDays: number; price: number }) {
     return request(`/pt/renewal-options/${id}`, { method: 'PUT', body: JSON.stringify(data) });
   },
   async archivePtRenewalOption(id: number) {
     return request(`/pt/renewal-options/${id}`, { method: 'DELETE' });
+  },
+  async restorePtRenewalOption(id: number) {
+    return request(`/pt/renewal-options/${id}/restore`, { method: 'PATCH' });
   },
   async setPtSpecializations(coachId: number, levels: string[]) {
     return request(`/pt/trainers/${coachId}/specializations`, { method: 'PUT', body: JSON.stringify({ levels }) });

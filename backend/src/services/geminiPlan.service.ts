@@ -33,7 +33,9 @@ const readGeminiText = (payload: any) => {
   }
 };
 
-export async function generateCoachPlanWithGemini(member: MemberContext | null, request: string) {
+export async function generateCoachPlanWithGemini(member: MemberContext | null, request: string,
+  trainingContext?: { level: string; goal: string | null; movementNotes: string | null;
+    metricName?: string | null; metricValue?: number | null; phaseName?: string | null; nextSteps?: string | null } | null) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error('Chưa cấu hình GEMINI_API_KEY trên máy chủ.');
   if (typeof request !== 'string' || request.trim().length > MAX_REQUEST_LENGTH) {
@@ -51,7 +53,10 @@ export async function generateCoachPlanWithGemini(member: MemberContext | null, 
   const prompt = `Bạn là trợ lý lập giáo án cho huấn luyện viên thể hình tại Việt Nam. Tạo một bản nháp an toàn để PT chuyên môn duyệt trước khi giao cho học viên. Không đưa ra chẩn đoán y khoa; với đau/chấn thương/bệnh nền, luôn ghi chú tham vấn chuyên gia.
 
 Thông tin học viên: ${JSON.stringify(profile)}
+Đánh giá PT theo cấp đã mua: ${JSON.stringify(trainingContext ?? 'Chưa chọn học viên cụ thể')}
 Yêu cầu từ PT: ${request.trim() || 'Lập giáo án cân bằng trong 1 tuần.'}
+
+Nếu đã có đánh giá PT, bám sát mục tiêu, nhận xét và bước tiếp theo của Coach. Cấp BEGINNER ưu tiên kỹ thuật và khả năng duy trì; INTERMEDIATE cần tiến trình theo chỉ số đã đo; ADVANCED cần nội dung phù hợp giai đoạn và mục tiêu thành tích. Không tự tăng độ khó chỉ vì tên cấp, và không tự bịa chỉ số của học viên.
 
 Chỉ trả về JSON hợp lệ, không markdown, theo đúng cấu trúc:
 {

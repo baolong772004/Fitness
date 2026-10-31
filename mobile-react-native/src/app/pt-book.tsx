@@ -102,7 +102,8 @@ export default function PtBook() {
           if (makeupFor) await api.makeupPt(Number(makeupFor), selected[0].bookingDate);
           else await api.bookPtCredit(String(sub.level), Number(coachId), selected.map(item => item.bookingDate));
           Alert.alert('Thành công', makeupFor ? 'Đã đặt lịch học bù.' : `${selected.length} buổi PT đã được xác nhận.`);
-          router.back();
+          if (router.canGoBack()) router.back();
+          else router.replace('/pt');
         } catch (cause) { showError(cause); await load(); }
         finally { setBusy(false); }
       })() },
@@ -118,7 +119,7 @@ export default function PtBook() {
     <Section title={`Ngày tập · ${dateLabel(date)}`} subtitle={makeupFor ? 'Chọn một ca học bù' : 'Có thể chọn ca ở nhiều ngày khác nhau'} icon="calendar-outline" />
     {!makeupFor && creditSources.some(source => source.level === sub.level && source.remainingSessions > 0 && source.status === 'EXPIRED') && <Card><Text style={{ color: aura.caramel }}>Một số buổi PT đã hết hạn; chỉ các ca được nguồn còn hiệu lực bao phủ mới có thể đặt.</Text></Card>}
     <Button secondary title="Chọn ngày khác" onPress={() => setShowDate(true)} />
-    {showDate && <DateTimePicker mode="date" value={date} minimumDate={new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())} maximumDate={deadline ? new Date(deadline) : new Date(Date.now() + 90 * 86400000)} onChange={(_, value) => { setShowDate(false); if (value) setDate(value); }} />}
+    {showDate && <DateTimePicker mode="date" value={date} minimumDate={new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())} maximumDate={deadline ? new Date(deadline) : new Date(Date.now() + 90 * 86400000)} onValueChange={(_, value) => { setShowDate(false); setDate(value); }} onDismiss={() => setShowDate(false)} />}
     <Section title="Ca tập còn trống" subtitle="Chạm nhiều ca rồi chuyển ngày để chọn tiếp" icon="time-outline" />
     {!makeupFor && <Text style={{ color: aura.muted, fontSize: 12 }}>Ca nằm ngoài thời hạn của mọi nguồn PT còn buổi sẽ bị khóa. Cần có Membership Gym hợp lệ cho toàn bộ ca.</Text>}
     {error && <><Empty title="Chưa tải được lịch Coach" message={error} icon="wifi-outline" /><Button secondary title="Thử lại" onPress={() => void load()} /></>}

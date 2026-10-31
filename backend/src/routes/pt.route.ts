@@ -2,29 +2,47 @@ import { Router } from 'express';
 import { PtController } from '../controllers/pt.controller.js';
 import { PaymentController } from '../controllers/payment.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
-import { listPtChatMessages, sendPtChatMessage } from '../controllers/ptChat.controller.js';
+import {
+  listPairChatMessages,
+  listPtChatMessages,
+  listPtConversations,
+  sendPairChatMessage,
+  sendPtChatMessage,
+} from '../controllers/ptChat.controller.js';
 import { getCoachWorkspace, getCoachTrainees, getCoachPlans, createCoachPlan, generateCoachPlan } from '../controllers/coachWorkspace.controller.js';
+import { assignCoachPlan, getStudentPlanRevisions, restoreStudentPlan, updateStudentPlan } from '../controllers/studentWorkoutPlan.controller.js';
 import { deleteCoachDate, deleteCoachSlot, getCoachAvailability, listCoachChangeRequests, putCoachDates, putCoachWeekly, requestCoachScheduleChange } from '../controllers/ptAvailability.controller.js';
-import { adjustPtWallet, archivePtProduct, archivePtRenewalOption, createPtProduct, createPtRenewalOption, createWalletBooking, getAdminPtWallet, getMyPtCreditHistory, getMyPtRenewalHistory, getMyPtWallet, listAllPtProducts, listAllPtRenewalOptions, listPtProducts, listPtRenewalOptions, setCoachSpecializations, updatePtProduct, updatePtRenewalOption } from '../controllers/ptWallet.controller.js';
+import { adjustPtWallet, archivePtProduct, archivePtRenewalOption, createPtProduct, createPtRenewalOption, createWalletBooking, getAdminPtWallet, getMyPtCreditHistory, getMyPtRenewalHistory, getMyPtWallet, listAllPtProducts, listAllPtRenewalOptions, listAllPtSingleOffers, listPtProducts, listPtRenewalOptions, listPtSingleOffers, restorePtProduct, restorePtRenewalOption, savePtSingleOffer, setCoachSpecializations, setPtSingleOfferActive, updatePtProduct, updatePtRenewalOption } from '../controllers/ptWallet.controller.js';
+import { listMyCoachChanges, listPendingCoachChanges, requestCoachChange, resolveCoachChange } from '../controllers/ptCoachChange.controller.js';
 
 const router = Router();
 router.get('/wallet', authenticateToken, authorizeRoles('MEMBER'), getMyPtWallet);
 router.get('/wallet/history', authenticateToken, authorizeRoles('MEMBER'), getMyPtCreditHistory);
 router.get('/wallet/renewals', authenticateToken, authorizeRoles('MEMBER'), getMyPtRenewalHistory);
 router.get('/products', listPtProducts);
+router.get('/single-offers', listPtSingleOffers);
+router.get('/single-offers/all', authenticateToken, authorizeRoles('ADMIN'), listAllPtSingleOffers);
+router.put('/single-offers/:level', authenticateToken, authorizeRoles('ADMIN'), savePtSingleOffer);
+router.patch('/single-offers/:level/active', authenticateToken, authorizeRoles('ADMIN'), setPtSingleOfferActive);
 router.get('/products/manage', authenticateToken, authorizeRoles('ADMIN'), listAllPtProducts);
 router.post('/products', authenticateToken, authorizeRoles('ADMIN'), createPtProduct);
 router.put('/products/:id', authenticateToken, authorizeRoles('ADMIN'), updatePtProduct);
 router.delete('/products/:id', authenticateToken, authorizeRoles('ADMIN'), archivePtProduct);
+router.patch('/products/:id/restore', authenticateToken, authorizeRoles('ADMIN'), restorePtProduct);
 router.get('/renewal-options', authenticateToken, authorizeRoles('MEMBER'), listPtRenewalOptions);
 router.get('/renewal-options/manage', authenticateToken, authorizeRoles('ADMIN'), listAllPtRenewalOptions);
 router.post('/renewal-options', authenticateToken, authorizeRoles('ADMIN'), createPtRenewalOption);
 router.put('/renewal-options/:id', authenticateToken, authorizeRoles('ADMIN'), updatePtRenewalOption);
 router.delete('/renewal-options/:id', authenticateToken, authorizeRoles('ADMIN'), archivePtRenewalOption);
+router.patch('/renewal-options/:id/restore', authenticateToken, authorizeRoles('ADMIN'), restorePtRenewalOption);
 router.put('/trainers/:coachId/specializations', authenticateToken, authorizeRoles('ADMIN'), setCoachSpecializations);
 router.get('/admin/wallets/:memberId', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getAdminPtWallet);
 router.post('/admin/wallets/:memberId/adjust', authenticateToken, authorizeRoles('ADMIN'), adjustPtWallet);
 router.post('/wallet/bookings', authenticateToken, authorizeRoles('MEMBER'), createWalletBooking);
+router.get('/coach-change-requests/mine', authenticateToken, authorizeRoles('MEMBER'), listMyCoachChanges);
+router.post('/coach-change-requests', authenticateToken, authorizeRoles('MEMBER'), requestCoachChange);
+router.get('/coach-change-requests/pending', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), listPendingCoachChanges);
+router.patch('/coach-change-requests/:id', authenticateToken, authorizeRoles('ADMIN'), resolveCoachChange);
 
 /** @swagger
  * /pt/coach/me:
@@ -152,6 +170,10 @@ router.post('/coach/availability/change-requests', authenticateToken, authorizeR
 router.get('/coach/plans', authenticateToken, authorizeRoles('COACH', 'TRAINER'), getCoachPlans);
 router.post('/coach/plans/generate', authenticateToken, authorizeRoles('COACH', 'TRAINER'), generateCoachPlan);
 router.post('/coach/plans', authenticateToken, authorizeRoles('COACH', 'TRAINER'), createCoachPlan);
+router.post('/coach/plans/:id/assign', authenticateToken, authorizeRoles('COACH', 'TRAINER'), assignCoachPlan);
+router.put('/coach/assigned-plans/:id', authenticateToken, authorizeRoles('COACH', 'TRAINER', 'ADMIN'), updateStudentPlan);
+router.post('/coach/assigned-plans/:id/restore', authenticateToken, authorizeRoles('COACH', 'TRAINER', 'ADMIN'), restoreStudentPlan);
+router.get('/coach/assigned-plans/:id/revisions', authenticateToken, authorizeRoles('COACH', 'TRAINER', 'ADMIN'), getStudentPlanRevisions);
 
 /**
  * @swagger
@@ -361,6 +383,9 @@ router.get('/my-trainees', authenticateToken, authorizeRoles('COACH', 'TRAINER')
  *     responses:
  *       201: { description: Đã lưu và gửi tin nhắn }
  */
+router.get('/conversations', authenticateToken, listPtConversations);
+router.get('/conversations/:partnerId/messages', authenticateToken, listPairChatMessages);
+router.post('/conversations/:partnerId/messages', authenticateToken, sendPairChatMessage);
 router.get('/booking/:id/messages', authenticateToken, listPtChatMessages);
 router.post('/booking/:id/messages', authenticateToken, sendPtChatMessage);
 
@@ -457,6 +482,7 @@ router.post('/booking/:id/complete-session', authenticateToken, authorizeRoles('
  *       200:
  *         description: Báo vắng thành công
  */
+router.get('/booking/:id/absence-policy', authenticateToken, PtController.getAbsencePolicy);
 router.post('/booking/:id/mark-absent', authenticateToken, PtController.markAbsent);
 
 /**

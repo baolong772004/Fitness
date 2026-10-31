@@ -42,6 +42,43 @@ export async function listAllPtProducts(_req: AuthRequest, res: Response) {
   return res.json({ success: true, data });
 }
 
+export async function listPtSingleOffers(_req: AuthRequest, res: Response) {
+  const data = await prisma.ptSingleOffer.findMany({ where: { isActive: true }, orderBy: { level: 'asc' } });
+  return res.json({ success: true, data });
+}
+
+export async function listAllPtSingleOffers(_req: AuthRequest, res: Response) {
+  const data = await prisma.ptSingleOffer.findMany({ orderBy: { level: 'asc' } });
+  return res.json({ success: true, data });
+}
+
+export async function savePtSingleOffer(req: AuthRequest, res: Response) {
+  const level = String(req.params.level);
+  const price = Number(req.body?.price), durationDays = Number(req.body?.durationDays);
+  const maxQuantity = Number(req.body?.maxQuantity);
+  const benefits = req.body?.benefits;
+  if (!PT_LEVELS.slice(1).includes(level as typeof PT_LEVELS[number]) ||
+    !Number.isSafeInteger(price) || price < 1 || price > 1000000000 ||
+    !Number.isSafeInteger(durationDays) || durationDays < 1 || durationDays > 3650 ||
+    !Number.isSafeInteger(maxQuantity) || maxQuantity < 1 || maxQuantity > 100 ||
+    (benefits != null && (typeof benefits !== 'string' || benefits.length > 1000))) {
+    return res.status(400).json({ success: false, message: 'Cấu hình buổi lẻ không hợp lệ.' });
+  }
+  const data = await prisma.ptSingleOffer.upsert({ where: { level },
+    create: { level, price, durationDays, maxQuantity, benefits: benefits?.trim() || null },
+    update: { price, durationDays, maxQuantity, benefits: benefits?.trim() || null } });
+  return res.json({ success: true, data });
+}
+
+export async function setPtSingleOfferActive(req: AuthRequest, res: Response) {
+  const level = String(req.params.level);
+  if (!PT_LEVELS.slice(1).includes(level as typeof PT_LEVELS[number]) || typeof req.body?.isActive !== 'boolean') {
+    return res.status(400).json({ success: false });
+  }
+  const updated = await prisma.ptSingleOffer.updateMany({ where: { level }, data: { isActive: req.body.isActive } });
+  return res.status(updated.count ? 200 : 404).json({ success: Boolean(updated.count) });
+}
+
 export async function listPtRenewalOptions(_req: AuthRequest, res: Response) {
   const data = await prisma.ptRenewalOption.findMany({ where: { isActive: true },
     orderBy: [{ level: 'asc' }, { durationDays: 'asc' }] });
@@ -57,14 +94,20 @@ export async function listAllPtRenewalOptions(_req: AuthRequest, res: Response) 
 async function renewalOptionInput(body: unknown) {
   const value = body as Record<string, unknown> | null;
   const productId = Number(value?.productId), durationDays = Number(value?.durationDays), price = Number(value?.price);
-  if (!Number.isSafeInteger(productId) || productId <= 0 ||
-    !Number.isSafeInteger(durationDays) || durationDays < 1 || durationDays > 3650 ||
+  if (!Number.isSafeInteger(durationDays) || durationDays < 1 || durationDays > 3650 ||
     !Number.isSafeInteger(price) || price < 1 || price > 1000000000) return null;
+  if (value?.purchaseMode === 'SINGLE') {
+    const level = value?.level;
+    if (typeof level !== 'string' || !PT_LEVELS.slice(1).includes(level as typeof PT_LEVELS[number])) return null;
+    return { name: `PT ${level} buổi lẻ`, level, durationDays, price, ptProductId: null, purchaseMode: 'SINGLE' };
+  }
+  if (!Number.isSafeInteger(productId) || productId <= 0 || (value?.purchaseMode != null && value.purchaseMode !== 'PACKAGE')) return null;
   const product = await prisma.ptProduct.findFirst({ where: {
     id: productId, isActive: true, durationDays: { gt: 0 }, level: { in: PT_LEVELS.slice(1) },
   } });
   if (!product || !product.durationDays || product.durationDays > 3650) return null;
-  return { name: product.name, level: product.level, durationDays, price, ptProductId: product.id };
+  return { name: product.name, level: product.level, durationDays, price, ptProductId: product.id,
+    purchaseMode: value?.purchaseMode === 'PACKAGE' ? 'PACKAGE' : null };
 }
 
 export async function createPtRenewalOption(req: AuthRequest, res: Response) {
@@ -85,6 +128,13 @@ export async function archivePtRenewalOption(req: AuthRequest, res: Response) {
   const id = Number(req.params.id);
   if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ success: false });
   const updated = await prisma.ptRenewalOption.updateMany({ where: { id, isActive: true }, data: { isActive: false } });
+  return res.status(updated.count ? 200 : 404).json({ success: Boolean(updated.count) });
+}
+
+export async function restorePtRenewalOption(req: AuthRequest, res: Response) {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ success: false });
+  const updated = await prisma.ptRenewalOption.updateMany({ where: { id, isActive: false }, data: { isActive: true } });
   return res.status(updated.count ? 200 : 404).json({ success: Boolean(updated.count) });
 }
 
@@ -160,14 +210,19 @@ export async function adjustPtWallet(req: AuthRequest, res: Response) {
 export async function createPtProduct(req: AuthRequest, res: Response) {
   const { name, level } = req.body ?? {};
   const sessionCount = Number(req.body?.sessionCount), price = Number(req.body?.price);
+  const singleSessionPrice = req.body?.singleSessionPrice == null || req.body.singleSessionPrice === ''
+    ? null : Number(req.body.singleSessionPrice);
   const durationDays = Number(req.body?.durationDays);
+  const benefits = req.body?.benefits;
   if (typeof name !== 'string' || !name.trim() || name.length > 100 ||
     !PT_LEVELS.slice(1).includes(level) || !Number.isSafeInteger(sessionCount) || sessionCount < 1 || sessionCount > 100 ||
     !Number.isSafeInteger(price) || price <= 0 ||
-    !Number.isSafeInteger(durationDays) || durationDays < 1 || durationDays > 3650) {
+    (singleSessionPrice !== null && (!Number.isSafeInteger(singleSessionPrice) || singleSessionPrice <= 0)) ||
+    !Number.isSafeInteger(durationDays) || durationDays < 1 || durationDays > 3650 ||
+    (benefits != null && (typeof benefits !== 'string' || benefits.length > 1000))) {
     return res.status(400).json({ success: false, message: 'Tên, cấp độ, số buổi hoặc giá không hợp lệ.' });
   }
-  const data = await prisma.ptProduct.create({ data: { name: name.trim(), level, sessionCount, price, durationDays } });
+  const data = await prisma.ptProduct.create({ data: { name: name.trim(), level, sessionCount, price, singleSessionPrice, durationDays, benefits: benefits?.trim() || null } });
   return res.status(201).json({ success: true, data });
 }
 
@@ -175,13 +230,19 @@ export async function updatePtProduct(req: AuthRequest, res: Response) {
   const id = Number(req.params.id);
   const { name, level } = req.body ?? {};
   const sessionCount = Number(req.body?.sessionCount), price = Number(req.body?.price);
+  const singleSessionPrice = req.body?.singleSessionPrice == null || req.body.singleSessionPrice === ''
+    ? null : Number(req.body.singleSessionPrice);
   const durationDays = Number(req.body?.durationDays);
+  const benefits = req.body?.benefits;
   if (!Number.isSafeInteger(id) || id <= 0 || typeof name !== 'string' || !name.trim() || name.length > 100 ||
     !PT_LEVELS.slice(1).includes(level) || !Number.isSafeInteger(sessionCount) || sessionCount < 1 || sessionCount > 100 ||
-    !Number.isSafeInteger(price) || price <= 0 || !Number.isSafeInteger(durationDays) ||
-    durationDays < 1 || durationDays > 3650) return res.status(400).json({ success: false, message: 'Thông tin gói PT không hợp lệ.' });
+    !Number.isSafeInteger(price) || price <= 0 ||
+    (singleSessionPrice !== null && (!Number.isSafeInteger(singleSessionPrice) || singleSessionPrice <= 0)) ||
+    !Number.isSafeInteger(durationDays) ||
+    durationDays < 1 || durationDays > 3650 ||
+    (benefits != null && (typeof benefits !== 'string' || benefits.length > 1000))) return res.status(400).json({ success: false, message: 'Thông tin gói PT không hợp lệ.' });
   const result = await prisma.ptProduct.updateMany({ where: { id },
-    data: { name: name.trim(), level, sessionCount, price, durationDays } });
+    data: { name: name.trim(), level, sessionCount, price, singleSessionPrice, durationDays, benefits: benefits?.trim() || null } });
   if (!result.count) return res.status(404).json({ success: false });
   return res.json({ success: true, data: await prisma.ptProduct.findUnique({ where: { id } }) });
 }
@@ -190,6 +251,13 @@ export async function archivePtProduct(req: AuthRequest, res: Response) {
   const id = Number(req.params.id);
   if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ success: false });
   const updated = await prisma.ptProduct.updateMany({ where: { id, isActive: true }, data: { isActive: false } });
+  return res.status(updated.count ? 200 : 404).json({ success: Boolean(updated.count) });
+}
+
+export async function restorePtProduct(req: AuthRequest, res: Response) {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ success: false });
+  const updated = await prisma.ptProduct.updateMany({ where: { id, isActive: false }, data: { isActive: true } });
   return res.status(updated.count ? 200 : 404).json({ success: Boolean(updated.count) });
 }
 

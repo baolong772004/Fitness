@@ -1,0 +1,179 @@
+{
+  "claim": "Smoke results only; no Coach labels and no accuracy metrics. Targets were explicitly set to HIP_AT_KNEE and 2s descent for this development run.",
+  "clips": [
+    {
+      "file": "barbell-back-squat.mp4",
+      "sourceType": "REAL_UNLABELED",
+      "durationSeconds": 14.0,
+      "processingSeconds": 7.07,
+      "status": "COMPLETED",
+      "reps": 4,
+      "view": "SIDE",
+      "observations": [
+        {
+          "code": "DESCENT_TARGET",
+          "rep": 1,
+          "at": 0.5
+        },
+        {
+          "code": "DESCENT_TARGET",
+          "rep": 2,
+          "at": 4.3
+        },
+        {
+          "code": "DESCENT_TARGET",
+          "rep": 3,
+          "at": 7.8
+        },
+        {
+          "code": "DESCENT_TARGET",
+          "rep": 4,
+          "at": 11.5
+        }
+      ],
+      "assessed": [
+        {
+          "code": "DEPTH_TARGET",
+          "assessedReps": 2,
+          "totalReps": 4
+        },
+        {
+          "code": "TORSO_ASCENT_CHANGE",
+          "assessedReps": 2,
+          "totalReps": 4
+        },
+        {
+          "code": "DESCENT_TARGET",
+          "assessedReps": 4,
+          "totalReps": 4
+        }
+      ],
+      "reason": null,
+      "groundTruth": null
+    },
+    {
+      "file": "dumbbell-goblet-squat.mp4",
+      "sourceType": "REAL_UNLABELED",
+      "durationSeconds": 19.12,
+      "processingSeconds": 9.27,
+      "status": "INSUFFICIENT_DATA",
+      "reps": null,
+      "view": "UNKNOWN",
+      "observations": [],
+      "assessed": [],
+      "reason": "Góc quay chéo hoặc thay đổi trong video. Hãy quay rõ từ bên hông hoặc chính diện, giữ camera cố định.",
+      "groundTruth": null
+    },
+    {
+      "file": "github-side-squat.mp4",
+      "sourceType": "REAL_UNLABELED",
+      "durationSeconds": 20.49,
+      "processingSeconds": 13.64,
+      "status": "COMPLETED",
+      "reps": 2,
+      "view": "SIDE",
+      "observations": [],
+      "assessed": [
+        {
+          "code": "DESCENT_TARGET",
+          "assessedReps": 2,
+          "totalReps": 2
+        }
+      ],
+      "reason": null,
+      "groundTruth": null
+    },
+    {
+      "file": "kettlebell-goblet-squat.mp4",
+      "sourceType": "REAL_UNLABELED",
+      "durationSeconds": 17.2,
+      "processingSeconds": 8.68,
+      "status": "INSUFFICIENT_DATA",
+      "reps": null,
+      "view": "UNKNOWN",
+      "observations": [],
+      "assessed": [],
+      "reason": "Góc quay chéo hoặc thay đổi trong video. Hãy quay rõ từ bên hông hoặc chính diện, giữ camera cố định.",
+      "groundTruth": null
+    },
+    {
+      "file": "squat-variable-depth-test.mp4",
+      "sourceType": "EDITED",
+      "durationSeconds": 7.24,
+      "processingSeconds": 3.03,
+      "status": "COMPLETED",
+      "reps": 2,
+      "view": "SIDE",
+      "observations": [
+        {
+          "code": "DESCENT_TARGET",
+          "rep": 2,
+          "at": 4.7
+        },
+        {
+          "code": "DEPTH_TARGET",
+          "rep": 2,
+          "at": 5.2
+        }
+      ],
+      "assessed": [
+        {
+          "code": "DEPTH_TARGET",
+          "assessedReps": 1,
+          "totalReps": 2
+        },
+        {
+          "code": "TORSO_ASCENT_CHANGE",
+          "assessedReps": 1,
+          "totalReps": 2
+        },
+        {
+          "code": "DESCENT_TARGET",
+          "assessedReps": 2,
+          "totalReps": 2
+        }
+      ],
+      "reason": null,
+      "groundTruth": null
+    },
+    {
+      "file": "squat_first_view-220k.mp4",
+      "sourceType": "REAL_UNLABELED",
+      "durationSeconds": 38.24,
+      "processingSeconds": 0.01,
+      "status": "INSUFFICIENT_DATA",
+      "reps": null,
+      "view": "UNKNOWN",
+      "observations": [],
+      "assessed": [],
+      "reason": "Video cần dài từ 3 đến 30 giây và có thể giải mã được.",
+      "groundTruth": null
+    },
+    {
+      "file": "squat_second_view-220k.mp4",
+      "sourceType": "REAL_UNLABELED",
+      "durationSeconds": 35.48,
+      "processingSeconds": 0.01,
+      "status": "INSUFFICIENT_DATA",
+      "reps": null,
+      "view": "UNKNOWN",
+      "observations": [],
+      "assessed": [],
+      "reason": "Video cần dài từ 3 đến 30 giây và có thể giải mã được.",
+      "groundTruth": null
+    },
+    {
+      "file": "squat_third_view-220k.mp4",
+      "sourceType": "REAL_UNLABELED",
+      "durationSeconds": 38.61,
+      "processingSeconds": 0.01,
+      "status": "INSUFFICIENT_DATA",
+      "reps": null,
+      "view": "UNKNOWN",
+      "observations": [],
+      "assessed": [],
+      "reason": "Video cần dài từ 3 đến 30 giây và có thể giải mã được.",
+      "groundTruth": null
+    }
+  ]
+}

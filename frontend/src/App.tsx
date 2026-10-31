@@ -61,6 +61,10 @@ export default function App() {
         const saved = JSON.parse(savedUserJson);
         const token = tokenStorage.getAccessToken();
         if (token && saved) {
+          if (saved.mustChangePassword) {
+            setIsAuthModalOpen(true);
+            return;
+          }
           let mappedRole: UserRole = 'guest';
           const r = (saved.role || '').toUpperCase().trim();
           if (r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'MANAGER') {
@@ -441,7 +445,10 @@ export default function App() {
       {/* Auth Modal for Login, Register, and Forgot Password */}
       <AuthModal
         isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
+        onClose={() => {
+          if (tokenStorage.getUser()?.mustChangePassword) api.auth.logout();
+          setIsAuthModalOpen(false);
+        }}
         initialTab={authModalTab}
         onLoginSuccess={handleLoginSuccess}
       />

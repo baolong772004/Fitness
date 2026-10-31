@@ -10,6 +10,7 @@ const names: Record<string, string> = {
   CONSUME: 'Đã sử dụng', RELEASE: 'Hoàn giữ chỗ', REFUND: 'Hoàn buổi',
   ADMIN_CREDIT: 'Admin cộng', ADMIN_DEBIT: 'Admin trừ', LEGACY_CONSUMED: 'Lịch sử cũ',
   MEMBER_MAKEUP: 'Quyền học bù đã dùng',
+  PROTECTED_CANCEL: 'Đã dùng lượt hủy được bảo lưu',
 };
 
 export default function PtCreditHistory() {
@@ -29,6 +30,6 @@ export default function PtCreditHistory() {
     {error && <Empty title="Chưa tải được lịch sử" message={error} />}
     {!error && !loading && rows.length === 0 && renewals.length === 0 && <Empty title="Chưa có giao dịch PT" />}
     {renewals.map(row => <Card key={`renew-${row.id}`}><Text style={{ color: aura.ink, fontWeight: '900' }}>Gia hạn {row.batch.level} · Nguồn #{row.batchId}</Text><Text style={{ color: aura.muted, marginTop: 5 }}>+{row.durationDays} ngày · {Number(row.payment.amount).toLocaleString('vi-VN')} đ · {dateLabel(row.createdAt)}</Text><Text style={{ color: aura.muted, marginTop: 5 }}>Hạn cũ: {dateLabel(row.previousEndAt)} · Hạn mới: {dateLabel(row.endAt)}</Text></Card>)}
-    {rows.filter(row => row.kind !== 'RENEW_DURATION').map(row => <Card key={String(row.id)}><Text style={{ color: aura.ink, fontWeight: '900' }}>{names[row.kind] || row.kind} · {row.quantity} buổi {row.batch?.level}</Text><Text style={{ color: aura.muted, marginTop: 5 }}>{row.batch?.source} · {dateLabel(row.createdAt)}{row.bookingId ? ` · Lịch #${row.bookingId}` : ''}</Text><Text style={{ color: aura.muted, marginTop: 5 }}>Hết hạn: {(row.batch?.level === 'TRIAL' ? row.batch?.membership?.endDate : row.batch?.endAt) ? dateLabel(row.batch?.level === 'TRIAL' ? row.batch.membership.endDate : row.batch.endAt) : 'Không giới hạn (quyền cũ)'}</Text>{row.note && <Text style={{ color: aura.muted, marginTop: 5 }}>{row.note}</Text>}</Card>)}
+    {rows.filter(row => row.kind !== 'RENEW_DURATION').map(row => <Card key={String(row.id)}><Text style={{ color: aura.ink, fontWeight: '900' }}>{names[row.kind] || row.kind} · {row.kind === 'PROTECTED_CANCEL' ? '1 lượt' : `${row.quantity} buổi`} {row.batch?.level}</Text><Text style={{ color: aura.muted, marginTop: 5 }}>{row.batch?.source} · {dateLabel(row.createdAt)}{row.bookingId ? ` · Lịch #${row.bookingId}` : ''}</Text><Text style={{ color: aura.muted, marginTop: 5 }}>Hết hạn: {(row.batch?.level === 'TRIAL' ? row.batch?.membership?.endDate : row.batch?.endAt) ? dateLabel(row.batch?.level === 'TRIAL' ? row.batch.membership.endDate : row.batch.endAt) : 'Không giới hạn (quyền cũ)'}</Text>{row.note && <Text style={{ color: aura.muted, marginTop: 5 }}>{row.note}</Text>}</Card>)}
   </Page>;
 }

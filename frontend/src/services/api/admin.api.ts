@@ -36,5 +36,21 @@ export const adminApi = {
       data: ApiMemberProfile360;
     }>(`/admin/members/${id}/profile`);
     return res.data;
+  },
+
+  async getAnalytics(range: string = 'month') {
+    const res = await request<{
+      success: boolean;
+      data: import('./types').ApiAdminAnalytics;
+    }>(`/admin/analytics?range=${encodeURIComponent(range)}`);
+    return res.data;
+  },
+
+  async getPayments(limit: number = 20) {
+    const res = await request<{
+      success: boolean;
+      data: import('./types').ApiAdminAnalytics['recentPayments'];
+    }>(`/admin/payments?limit=${limit}`);
+    return res.data;
   }
 };

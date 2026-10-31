@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../../types';
-import { api, ApiUser } from '../../services/api';
+import { api, ApiUser, tokenStorage, STORAGE_KEYS } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import { 
   X, 
@@ -56,12 +56,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialTab = 'login',
   onLoginSuccess
 }) => {
-  const [tab, setTab] = useState<'login' | 'register' | 'forgot'>(initialTab);
+  const [tab, setTab] = useState<'login' | 'register' | 'forgot' | 'change'>(initialTab);
 
   // Synchronize internal tab state when initialTab or isOpen changes
   React.useEffect(() => {
     if (isOpen) {
-      setTab(initialTab);
+      setTab(tokenStorage.getUser()?.mustChangePassword ? 'change' : initialTab);
       setAuthError(null);
       setSuccessMsg(null);
     }
@@ -70,6 +70,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Login form state
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newAccountPassword, setNewAccountPassword] = useState('');
+  const [confirmAccountPassword, setConfirmAccountPassword] = useState('');
 
   // Register form state
   const [registerForm, setRegisterForm] = useState({
@@ -106,6 +109,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         password: loginPassword
       });
 
+      if (data.user.mustChangePassword) {
+        setCurrentPassword(loginPassword);
+        setLoginPassword('');
+        setTab('change');
+        return;
+      }
+
       // Nếu là role nhân viên quầy (STAFF) / admin, tự động đồng bộ ca trực trong background
       const roleUpper = (data.user?.role || '').toUpperCase();
       if (roleUpper === 'STAFF' || roleUpper === 'RECEPTIONIST' || roleUpper === 'ADMIN') {
@@ -130,6 +140,40 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } catch (err: any) {
       soundEffects.playErrorBeep();
       setAuthError(err.message || 'Đăng nhập không thành công. Vui lòng kiểm tra lại tài khoản.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFirstPasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    if (newAccountPassword.length < 6 || !/[A-Za-z]/.test(newAccountPassword) || !/\d/.test(newAccountPassword)) {
+      setAuthError('Mật khẩu mới cần ít nhất 6 ký tự, gồm chữ và số.');
+      return;
+    }
+    if (newAccountPassword === currentPassword || newAccountPassword === '123456') {
+      setAuthError('Mật khẩu mới cần khác mật khẩu tạm thời.');
+      return;
+    }
+    if (newAccountPassword !== confirmAccountPassword) {
+      setAuthError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await api.auth.changePassword({ oldPassword: currentPassword, newPassword: newAccountPassword });
+      const savedUser = tokenStorage.getUser();
+      if (!savedUser) throw new Error('Không tìm thấy phiên đăng nhập. Vui lòng đăng nhập lại.');
+      const updatedUser = { ...savedUser, mustChangePassword: false };
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedUser));
+      setCurrentPassword('');
+      setNewAccountPassword('');
+      setConfirmAccountPassword('');
+      onLoginSuccess(mapBackendUserToFrontend(updatedUser));
+      onClose();
+    } catch (err: any) {
+      setAuthError(err.message || 'Không thể đổi mật khẩu.');
     } finally {
       setIsLoading(false);
     }
@@ -244,6 +288,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {tab === 'login' && 'Đăng Nhập Tài Khoản'}
                 {tab === 'register' && 'Tạo Tài Khoản Mới'}
                 {tab === 'forgot' && 'Quên Mật Khẩu'}
+                {tab === 'change' && 'Đổi Mật Khẩu Lần Đầu'}
               </h3>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
                 Aura Gym & Fitness Club System
@@ -252,6 +297,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label={tab === 'change' ? 'Đăng xuất' : 'Đóng'}
+            title={tab === 'change' ? 'Đăng xuất' : 'Đóng'}
             style={{
               background: 'transparent',
               border: 'none',
@@ -265,7 +312,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Tab switchers */}
-        <div style={{
+        {tab !== 'change' && <div style={{
           display: 'flex',
           borderBottom: '1px solid var(--aura-border)',
           background: 'var(--bg-card)'
@@ -302,7 +349,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           >
             Đăng Ký
           </button>
-        </div>
+        </div>}
 
         {/* Form Body */}
         <div style={{ padding: '24px 28px' }}>
@@ -341,6 +388,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <CheckCircle2 size={16} />
               <span>{successMsg}</span>
             </div>
+          )}
+
+          {tab === 'change' && (
+            <form onSubmit={handleFirstPasswordChange} style={{ display: 'grid', gap: 14 }}>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Tài khoản do lễ tân tạo đang dùng mật khẩu tạm. Hãy đổi mật khẩu để tiếp tục sử dụng hệ thống.</p>
+              <label>Mật khẩu tạm thời
+                <input className="form-input" type="password" required value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} autoComplete="current-password" />
+              </label>
+              <label>Mật khẩu mới
+                <input className="form-input" type="password" required value={newAccountPassword} onChange={e => setNewAccountPassword(e.target.value)} autoComplete="new-password" />
+              </label>
+              <label>Xác nhận mật khẩu mới
+                <input className="form-input" type="password" required value={confirmAccountPassword} onChange={e => setConfirmAccountPassword(e.target.value)} autoComplete="new-password" />
+              </label>
+              <button type="submit" disabled={isLoading} className="btn-primary">{isLoading ? 'Đang cập nhật...' : 'Đổi mật khẩu và tiếp tục'}</button>
+            </form>
           )}
 
           {/* TAB 1: LOGIN */}

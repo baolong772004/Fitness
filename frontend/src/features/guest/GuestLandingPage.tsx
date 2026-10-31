@@ -69,7 +69,7 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
   const fetchLiveData = async () => {
     setIsLoadingPackages(true);
     try {
-      const pkgs = await api.packages.getPackages();
+      const pkgs = await api.packages.getPackages({ type: 'MEMBERSHIP' });
       setLivePackages(pkgs || []);
     } catch (e) {
       console.warn('API packages fetch warning:', e);

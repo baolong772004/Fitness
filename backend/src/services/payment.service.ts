@@ -5,6 +5,7 @@ import { lockGymMember } from './gymMembershipLock.service.js';
 import { reconcileGymMembershipStates } from './membership.service.js';
 import { grantPtCredit, isPtLevel } from './ptWallet.service.js';
 import { ptRenewalError, ptRenewalOptionMatchesBatch, renewedPtPeriod } from './ptRenewal.service.js';
+import { activePaidGymMembershipWhere } from './gymEntitlement.service.js';
 
 const prisma = new PrismaClient();
 
@@ -82,13 +83,24 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
       : null;
     const ptProduct = payment.ptProductId !== null
       ? await tx.ptProduct.findUnique({ where: { id: payment.ptProductId } }) : null;
+    const ptPurchaseItems = await tx.ptPurchaseItem.findMany({ where: { paymentId: payment.id },
+      orderBy: { unitStartIndex: 'asc' } });
     const ptRenewalBatch = payment.ptRenewalBatchId !== null
       ? await tx.ptCreditBatch.findUnique({ where: { id: payment.ptRenewalBatchId },
           include: { wallet: true, payment: { select: { ptProductId: true } } } }) : null;
     const ptRenewalOption = payment.ptRenewalOptionId !== null
       ? await tx.ptRenewalOption.findUnique({ where: { id: payment.ptRenewalOptionId } }) : null;
     const paidAt = new Date();
-    const ptPurchaseUnavailable = Boolean(purchaseTarget?.package.type === 'PT' &&
+    const isPtPayment = ptPurchaseItems.length > 0 || payment.ptProductId !== null || payment.ptRenewalBatchId !== null ||
+      purchaseTarget?.package.type === 'PT';
+    const activeGymMembership = isPtPayment ? await tx.membership.findFirst({
+      where: activePaidGymMembershipWhere(payment.userId, paidAt), select: { id: true },
+    }) : null;
+    const invalidPurchaseItems = ptPurchaseItems.some(item =>
+      !['PACKAGE', 'SINGLE'].includes(item.mode) || !isPtLevel(item.levelSnapshot) ||
+      item.levelSnapshot === 'TRIAL' || item.quantity < 1 || item.sessionsSnapshot < 1 ||
+      item.durationDays < 1 || Number(item.unitPrice) < 1);
+    const ptPurchaseUnavailable = invalidPurchaseItems || Boolean(purchaseTarget?.package.type === 'PT' &&
       !isPtLevel(purchaseTarget.package.ptLevel)) ||
       Boolean(payment.ptProductId !== null && (!ptProduct || !payment.ptQuantity ||
         !['BEGINNER', 'INTERMEDIATE', 'ADVANCED'].includes(payment.ptLevelSnapshot ?? ptProduct.level) ||
@@ -97,8 +109,8 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
       payment.ptRenewalOptionId !== null || payment.ptRenewalProductId !== null || payment.ptRenewalDays !== null) && (
       !ptRenewalBatch || !ptRenewalOption || ptRenewalBatch.wallet.memberId !== payment.userId ||
       !ptRenewalOptionMatchesBatch({ level: payment.ptLevelSnapshot ?? '',
-        ptProductId: payment.ptRenewalProductId }, {
-        level: ptRenewalBatch.level, ptProductId: ptRenewalBatch.payment?.ptProductId ?? null,
+        ptProductId: payment.ptRenewalProductId, purchaseMode: ptRenewalOption?.purchaseMode }, {
+        level: ptRenewalBatch.level, ptProductId: ptRenewalBatch.ptProductIdSnapshot ?? ptRenewalBatch.payment?.ptProductId ?? null, source: ptRenewalBatch.source,
       }) ||
       !payment.ptRenewalDays || payment.ptRenewalDays < 1 ||
       Boolean(ptRenewalBatch && ptRenewalError(ptRenewalBatch, paidAt)));
@@ -106,7 +118,7 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
       renewalTarget?.package.type === 'PT' ||
       (renewalTarget?.package.type === 'MEMBERSHIP' && !['ACTIVE', 'EXPIRED'].includes(renewalTarget.status)) ||
       (purchaseTarget !== null && purchaseTarget.status !== 'PENDING') ||
-      ptPurchaseUnavailable || ptRenewalUnavailable;
+      ptPurchaseUnavailable || ptRenewalUnavailable || (isPtPayment && !activeGymMembership);
 
     const updated = await tx.payment.updateMany({
       where: { id: payment.id, status: { in: ['PENDING', 'FAILED', 'CANCELLED'] } },
@@ -115,15 +127,38 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
     if (updated.count === 0) return { result: 'NOT_PENDING' as const };
     if (requiresReview) return { result: 'PAID_REVIEW' as const };
 
-    if (ptProduct && payment.ptQuantity) {
+    for (const item of ptPurchaseItems) {
+      const startAt = paidAt;
+      const endAt = addPtDurationDays(startAt, item.durationDays);
+      const batchCount = item.mode === 'PACKAGE' ? item.quantity : 1;
+      for (let index = 0; index < batchCount; index += 1) {
+        await grantPtCredit(tx, { memberId: payment.userId,
+          level: item.levelSnapshot as 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED',
+          source: item.mode === 'PACKAGE' ? 'PACKAGE_PURCHASE' : 'SINGLE_PURCHASE',
+          count: item.mode === 'PACKAGE' ? item.sessionsSnapshot : item.quantity,
+          paymentId: payment.id, purchaseBatchOrdinal: item.unitStartIndex + index,
+          ptProductIdSnapshot: item.productId,
+          benefitsSnapshot: item.benefitsSnapshot,
+          startAt, endAt, activatedAt: paidAt });
+      }
+    }
+
+    if (ptPurchaseItems.length === 0 && ptProduct && payment.ptQuantity) {
       const sessions = payment.ptSessionsSnapshot ?? ptProduct.sessionCount;
       const startAt = paidAt;
       const endAt = payment.ptDurationDays ? addPtDurationDays(startAt, payment.ptDurationDays) : null;
-      await grantPtCredit(tx, { memberId: payment.userId,
-        level: (payment.ptLevelSnapshot ?? ptProduct.level) as 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED',
-        source: sessions === 1 ? 'SINGLE_PURCHASE' : 'PACKAGE_PURCHASE',
-        count: sessions * payment.ptQuantity, paymentId: payment.id,
-        startAt, endAt, activatedAt: paidAt });
+      const source = payment.ptPurchaseMode === 'SINGLE' || (!payment.ptPurchaseMode && sessions === 1)
+        ? 'SINGLE_PURCHASE' : 'PACKAGE_PURCHASE';
+      const batchCount = payment.ptPurchaseMode === 'PACKAGE' ? payment.ptQuantity : 1;
+      for (let index = 0; index < batchCount; index += 1) {
+        await grantPtCredit(tx, { memberId: payment.userId,
+          level: (payment.ptLevelSnapshot ?? ptProduct.level) as 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED',
+          source, count: payment.ptPurchaseMode === 'PACKAGE' ? sessions : sessions * payment.ptQuantity,
+          paymentId: payment.id,
+          ptProductIdSnapshot: ptProduct.id,
+          purchaseBatchOrdinal: payment.ptPurchaseMode === 'PACKAGE' ? index : undefined,
+          startAt, endAt, activatedAt: paidAt });
+      }
     }
 
     if (ptRenewalBatch?.endAt && payment.ptRenewalDays) {

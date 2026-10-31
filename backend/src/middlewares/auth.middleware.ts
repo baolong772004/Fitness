@@ -72,10 +72,17 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   try {
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { role: true },
+      select: { role: true, mustChangePassword: true },
     });
     if (!user) {
       return res.status(403).json({ success: false, message: 'Tài khoản không còn tồn tại.' });
+    }
+    if (user.mustChangePassword && !req.originalUrl.split('?')[0].endsWith('/auth/change-password')) {
+      return res.status(403).json({
+        success: false,
+        code: 'PASSWORD_CHANGE_REQUIRED',
+        message: 'Vui lòng đổi mật khẩu tạm thời trước khi tiếp tục.'
+      });
     }
 
     req.user = {

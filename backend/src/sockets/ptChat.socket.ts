@@ -2,7 +2,7 @@ import type { Server as HttpServer } from 'http';
 import prisma from '../config/prisma.js';
 import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
-import { getPtChatAccess, PtChatError } from '../services/ptChat.service.js';
+import { checkPtChatPermission, getPtChatAccess, PtChatError } from '../services/ptChat.service.js';
 
 
 let chatIo: Server | null = null;
@@ -57,6 +57,33 @@ export function configurePtChatSocket(httpServer: HttpServer) {
         const access = await getPtChatAccess(id, socket.data.userId);
         socket.leave(ptChatPairRoom(access.pair.memberId, access.pair.coachId));
       } catch { /* Disconnect also clears joined rooms. */ }
+    });
+
+    socket.on('pair:join', async (data: unknown, acknowledge?: (result: { ok: boolean; error?: string }) => void) => {
+      try {
+        const payload = data as { memberId?: number; coachId?: number };
+        const memberId = Number(payload?.memberId);
+        const coachId = Number(payload?.coachId);
+        if (!memberId || !coachId) throw new PtChatError(400, 'Thiếu thông tin cặp chat.');
+        const permission = await checkPtChatPermission(memberId, coachId, socket.data.userId);
+        if (!permission.canView) throw new PtChatError(403, permission.reason);
+        await socket.join(ptChatPairRoom(memberId, coachId));
+        acknowledge?.({ ok: true });
+      } catch (error) {
+        acknowledge?.({
+          ok: false,
+          error: error instanceof PtChatError ? error.message : 'Không thể mở cuộc trò chuyện.',
+        });
+      }
+    });
+
+    socket.on('pair:leave', (data: unknown) => {
+      const payload = data as { memberId?: number; coachId?: number };
+      const memberId = Number(payload?.memberId);
+      const coachId = Number(payload?.coachId);
+      if (memberId && coachId) {
+        socket.leave(ptChatPairRoom(memberId, coachId));
+      }
     });
   });
 

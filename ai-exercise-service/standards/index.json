@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "activation": "READ_ONLY_DRAFTS_NO_AUTO_APPROVAL",
+  "standards": [
+    {
+      "exerciseId": "SQUAT",
+      "exerciseVariant": "BODYWEIGHT",
+      "standardVersion": "bodyweight-squat-1.0.0-draft",
+      "path": "bodyweight-squat-1.0.0-draft.json"
+    },
+    {
+      "exerciseId": "PUSH_UP",
+      "exerciseVariant": "STANDARD",
+      "standardVersion": "standard-push-up-1.0.0-draft",
+      "path": "standard-push-up-1.0.0-draft.json"
+    },
+    {
+      "exerciseId": "PLANK",
+      "exerciseVariant": "FRONT",
+      "standardVersion": "front-plank-1.0.0-draft",
+      "path": "front-plank-1.0.0-draft.json"
+    },
+    {
+      "exerciseId": "LUNGE",
+      "exerciseVariant": "FORWARD_BODYWEIGHT",
+      "standardVersion": "forward-lunge-1.0.0-draft",
+      "path": "forward-lunge-1.0.0-draft.json"
+    },
+    {
+      "exerciseId": "BICEPS_CURL",
+      "exerciseVariant": "DUMBBELL_STANDING",
+      "standardVersion": "standing-dumbbell-curl-1.0.0-draft",
+      "path": "standing-dumbbell-curl-1.0.0-draft.json"
+    },
+    {
+      "exerciseId": "SHOULDER_PRESS",
+      "exerciseVariant": "DUMBBELL_SEATED",
+      "standardVersion": "seated-dumbbell-press-1.0.0-draft",
+      "path": "seated-dumbbell-press-1.0.0-draft.json"
+    }
+  ]
+}

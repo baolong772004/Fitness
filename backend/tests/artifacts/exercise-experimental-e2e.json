@@ -1,0 +1,2263 @@
+{
+  "testedAt": "2026-10-31T19:54:03.312Z",
+  "videoSha256": "5d27d9b378af0d323237fa48fa2fe32befec20a72e4f24988f7979f7fef9c7a8",
+  "fastApiOfficial": {
+    "evaluationMode": "OFFICIAL",
+    "resultVersion": "exercise-analysis-result-4",
+    "ruleVersion": "squat-observation-7",
+    "videoSha256": "5d27d9b378af0d323237fa48fa2fe32befec20a72e4f24988f7979f7fef9c7a8",
+    "repetitions": 5,
+    "official": {
+      "passed": 0,
+      "improved": 0
+    },
+    "experimental": null
+  },
+  "fastApiExperimental": {
+    "evaluationMode": "EXPERIMENTAL",
+    "resultVersion": "exercise-analysis-result-4",
+    "ruleVersion": "squat-observation-7",
+    "videoSha256": "5d27d9b378af0d323237fa48fa2fe32befec20a72e4f24988f7979f7fef9c7a8",
+    "repetitions": 5,
+    "official": {
+      "passed": 0,
+      "improved": 0
+    },
+    "experimental": {
+      "validation": "UNVALIDATED",
+      "ruleVersion": "technique-experimental-4",
+      "passed": 3,
+      "improved": 0,
+      "criteria": [
+        {
+          "id": "SQUAT-01",
+          "status": "MEETS_CRITERION",
+          "reasonCode": null,
+          "predictions": [
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "WHOLE_BODY",
+              "rep": 1,
+              "timestampSeconds": 1.602,
+              "observedValue": 1.502,
+              "threshold": {
+                "minimum": 0.6,
+                "maximum": 15,
+                "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "WHOLE_BODY",
+              "rep": 2,
+              "timestampSeconds": 4.304,
+              "observedValue": 1.501,
+              "threshold": {
+                "minimum": 0.6,
+                "maximum": 15,
+                "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "WHOLE_BODY",
+              "rep": 3,
+              "timestampSeconds": 7.207,
+              "observedValue": 1.601,
+              "threshold": {
+                "minimum": 0.6,
+                "maximum": 15,
+                "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "WHOLE_BODY",
+              "rep": 4,
+              "timestampSeconds": 10.21,
+              "observedValue": 1.702,
+              "threshold": {
+                "minimum": 0.6,
+                "maximum": 15,
+                "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "WHOLE_BODY",
+              "rep": 5,
+              "timestampSeconds": 13.614,
+              "observedValue": 1.802,
+              "threshold": {
+                "minimum": 0.6,
+                "maximum": 15,
+                "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+            }
+          ]
+        },
+        {
+          "id": "SQUAT-02",
+          "status": "UNABLE_TO_ASSESS",
+          "reasonCode": "VIEW_NOT_SUITABLE",
+          "predictions": []
+        },
+        {
+          "id": "SQUAT-03",
+          "status": "MEETS_CRITERION",
+          "reasonCode": null,
+          "predictions": [
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "LEFT_KNEE",
+              "rep": 1,
+              "timestampSeconds": 1.602,
+              "observedValue": 0.0261,
+              "threshold": {
+                "maximum": 0.1,
+                "source": "SQUAT_CONFIG.knee_inward_ratio",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "RIGHT_KNEE",
+              "rep": 1,
+              "timestampSeconds": 1.602,
+              "observedValue": 0.0081,
+              "threshold": {
+                "maximum": 0.1,
+                "source": "SQUAT_CONFIG.knee_inward_ratio",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "LEFT_KNEE",
+              "rep": 2,
+              "timestampSeconds": 4.304,
+              "observedValue": 0.0183,
+              "threshold": {
+                "maximum": 0.1,
+                "source": "SQUAT_CONFIG.knee_inward_ratio",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "RIGHT_KNEE",
+              "rep": 2,
+              "timestampSeconds": 2.803,
+              "observedValue": 0,
+              "threshold": {
+                "maximum": 0.1,
+                "source": "SQUAT_CONFIG.knee_inward_ratio",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "LEFT_KNEE",
+              "rep": 3,
+              "timestampSeconds": 5.606,
+              "observedValue": 0,
+              "threshold": {
+                "maximum": 0.1,
+                "source": "SQUAT_CONFIG.knee_inward_ratio",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "RIGHT_KNEE",
+              "rep": 3,
+              "timestampSeconds": 7.207,
+              "observedValue": 0.0163,
+              "threshold": {
+                "maximum": 0.1,
+                "source": "SQUAT_CONFIG.knee_inward_ratio",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "LEFT_KNEE",
+              "rep": 4,
+              "timestampSeconds": 10.21,
+              "observedValue": 0.0468,
+              "threshold": {
+                "maximum": 0.1,
+                "source": "SQUAT_CONFIG.knee_inward_ratio",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "RIGHT_KNEE",
+              "rep": 4,
+              "timestampSeconds": 8.508,
+              "observedValue": 0,
+              "threshold": {
+                "maximum": 0.1,
+                "source": "SQUAT_CONFIG.knee_inward_ratio",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "LEFT_KNEE",
+              "rep": 5,
+              "timestampSeconds": 13.614,
+              "observedValue": 0.0395,
+              "threshold": {
+                "maximum": 0.1,
+                "source": "SQUAT_CONFIG.knee_inward_ratio",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "RIGHT_KNEE",
+              "rep": 5,
+              "timestampSeconds": 13.614,
+              "observedValue": 0.0091,
+              "threshold": {
+                "maximum": 0.1,
+                "source": "SQUAT_CONFIG.knee_inward_ratio",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+            }
+          ]
+        },
+        {
+          "id": "SQUAT-04",
+          "status": "UNABLE_TO_ASSESS",
+          "reasonCode": "VIEW_NOT_SUITABLE",
+          "predictions": []
+        },
+        {
+          "id": "SQUAT-05",
+          "status": "MEETS_CRITERION",
+          "reasonCode": null,
+          "predictions": [
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "WHOLE_BODY",
+              "rep": 1,
+              "timestampSeconds": 0.801,
+              "observedValue": 0.1,
+              "threshold": {
+                "maximum": 0.3,
+                "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "WHOLE_BODY",
+              "rep": 2,
+              "timestampSeconds": 3.504,
+              "observedValue": 0.101,
+              "threshold": {
+                "maximum": 0.3,
+                "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "WHOLE_BODY",
+              "rep": 3,
+              "timestampSeconds": 6.306,
+              "observedValue": 0.001,
+              "threshold": {
+                "maximum": 0.3,
+                "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "WHOLE_BODY",
+              "rep": 4,
+              "timestampSeconds": 9.309,
+              "observedValue": 0.1,
+              "threshold": {
+                "maximum": 0.3,
+                "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+            },
+            {
+              "status": "MEETS_CRITERION",
+              "bodyPart": "WHOLE_BODY",
+              "rep": 5,
+              "timestampSeconds": 12.713,
+              "observedValue": 0.2,
+              "threshold": {
+                "maximum": 0.3,
+                "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+              },
+              "evidenceFrames": 3,
+              "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+            }
+          ]
+        },
+        {
+          "id": "SQUAT-06",
+          "status": "UNABLE_TO_ASSESS",
+          "reasonCode": "NO_VALIDATED_BILATERAL_DECISION_RULE",
+          "predictions": []
+        },
+        {
+          "id": "SQUAT-07",
+          "status": "UNABLE_TO_ASSESS",
+          "reasonCode": "NOT_SUPPORTED",
+          "predictions": []
+        },
+        {
+          "id": "SQUAT-08",
+          "status": "UNABLE_TO_ASSESS",
+          "reasonCode": "NO_INDIVIDUAL_TARGET",
+          "predictions": []
+        }
+      ]
+    }
+  },
+  "referenceComparison": {
+    "status": "BLOCKED_NO_COMPARABLE_COACH_LABELED_REFERENCES",
+    "validatedForDecision": false,
+    "referenceExamples": 0,
+    "repetitions": [
+      {
+        "criterionId": "SQUAT-02",
+        "repNumber": 1,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_QUALITY_GATED_QUERY_MEASUREMENT"
+      },
+      {
+        "criterionId": "SQUAT-03",
+        "repNumber": 1,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_MATCHING_LABELED_REFERENCES"
+      },
+      {
+        "criterionId": "SQUAT-04",
+        "repNumber": 1,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_QUALITY_GATED_QUERY_MEASUREMENT"
+      },
+      {
+        "criterionId": "SQUAT-02",
+        "repNumber": 2,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_QUALITY_GATED_QUERY_MEASUREMENT"
+      },
+      {
+        "criterionId": "SQUAT-03",
+        "repNumber": 2,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_MATCHING_LABELED_REFERENCES"
+      },
+      {
+        "criterionId": "SQUAT-04",
+        "repNumber": 2,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_QUALITY_GATED_QUERY_MEASUREMENT"
+      },
+      {
+        "criterionId": "SQUAT-02",
+        "repNumber": 3,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_QUALITY_GATED_QUERY_MEASUREMENT"
+      },
+      {
+        "criterionId": "SQUAT-03",
+        "repNumber": 3,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_MATCHING_LABELED_REFERENCES"
+      },
+      {
+        "criterionId": "SQUAT-04",
+        "repNumber": 3,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_QUALITY_GATED_QUERY_MEASUREMENT"
+      },
+      {
+        "criterionId": "SQUAT-02",
+        "repNumber": 4,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_QUALITY_GATED_QUERY_MEASUREMENT"
+      },
+      {
+        "criterionId": "SQUAT-03",
+        "repNumber": 4,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_MATCHING_LABELED_REFERENCES"
+      },
+      {
+        "criterionId": "SQUAT-04",
+        "repNumber": 4,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_QUALITY_GATED_QUERY_MEASUREMENT"
+      },
+      {
+        "criterionId": "SQUAT-02",
+        "repNumber": 5,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_QUALITY_GATED_QUERY_MEASUREMENT"
+      },
+      {
+        "criterionId": "SQUAT-03",
+        "repNumber": 5,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_MATCHING_LABELED_REFERENCES"
+      },
+      {
+        "criterionId": "SQUAT-04",
+        "repNumber": 5,
+        "status": "UNABLE_TO_COMPARE",
+        "reason": "NO_QUALITY_GATED_QUERY_MEASUREMENT"
+      }
+    ]
+  },
+  "backendQueued": {
+    "id": 13,
+    "status": "PENDING",
+    "evaluationMode": "EXPERIMENTAL",
+    "resultVersion": null
+  },
+  "workerSql": {
+    "id": 13,
+    "status": "COMPLETED",
+    "evaluationMode": "EXPERIMENTAL",
+    "ruleVersion": "squat-observation-7",
+    "resultVersion": "exercise-analysis-result-4",
+    "result": {
+      "evaluationMode": "EXPERIMENTAL",
+      "resultVersion": "exercise-analysis-result-4",
+      "ruleVersion": "squat-observation-7",
+      "videoSha256": "5d27d9b378af0d323237fa48fa2fe32befec20a72e4f24988f7979f7fef9c7a8",
+      "repetitions": 5,
+      "official": {
+        "passed": 0,
+        "improved": 0
+      },
+      "experimental": {
+        "validation": "UNVALIDATED",
+        "ruleVersion": "technique-experimental-4",
+        "passed": 3,
+        "improved": 0,
+        "criteria": [
+          {
+            "id": "SQUAT-01",
+            "status": "MEETS_CRITERION",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 1,
+                "timestampSeconds": 1.602,
+                "observedValue": 1.502,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 2,
+                "timestampSeconds": 4.304,
+                "observedValue": 1.501,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 3,
+                "timestampSeconds": 7.207,
+                "observedValue": 1.601,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 4,
+                "timestampSeconds": 10.21,
+                "observedValue": 1.702,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 5,
+                "timestampSeconds": 13.614,
+                "observedValue": 1.802,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-02",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-03",
+            "status": "MEETS_CRITERION",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 1,
+                "timestampSeconds": 1.602,
+                "observedValue": 0.0261,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 1,
+                "timestampSeconds": 1.602,
+                "observedValue": 0.0081,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 2,
+                "timestampSeconds": 4.304,
+                "observedValue": 0.0183,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 2,
+                "timestampSeconds": 2.803,
+                "observedValue": 0,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 3,
+                "timestampSeconds": 5.606,
+                "observedValue": 0,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 3,
+                "timestampSeconds": 7.207,
+                "observedValue": 0.0163,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 4,
+                "timestampSeconds": 10.21,
+                "observedValue": 0.0468,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 4,
+                "timestampSeconds": 8.508,
+                "observedValue": 0,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 5,
+                "timestampSeconds": 13.614,
+                "observedValue": 0.0395,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 5,
+                "timestampSeconds": 13.614,
+                "observedValue": 0.0091,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-04",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-05",
+            "status": "MEETS_CRITERION",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 1,
+                "timestampSeconds": 0.801,
+                "observedValue": 0.1,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 2,
+                "timestampSeconds": 3.504,
+                "observedValue": 0.101,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 3,
+                "timestampSeconds": 6.306,
+                "observedValue": 0.001,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 4,
+                "timestampSeconds": 9.309,
+                "observedValue": 0.1,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 5,
+                "timestampSeconds": 12.713,
+                "observedValue": 0.2,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-06",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NO_VALIDATED_BILATERAL_DECISION_RULE",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-07",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NOT_SUPPORTED",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-08",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NO_INDIVIDUAL_TARGET",
+            "predictions": []
+          }
+        ]
+      }
+    }
+  },
+  "backendApi": {
+    "id": 13,
+    "status": "COMPLETED",
+    "evaluationMode": "EXPERIMENTAL",
+    "ruleVersion": "squat-observation-7",
+    "resultVersion": "exercise-analysis-result-4",
+    "result": {
+      "evaluationMode": "EXPERIMENTAL",
+      "resultVersion": "exercise-analysis-result-4",
+      "ruleVersion": "squat-observation-7",
+      "videoSha256": "5d27d9b378af0d323237fa48fa2fe32befec20a72e4f24988f7979f7fef9c7a8",
+      "repetitions": 5,
+      "official": {
+        "passed": 0,
+        "improved": 0
+      },
+      "experimental": {
+        "validation": "UNVALIDATED",
+        "ruleVersion": "technique-experimental-4",
+        "passed": 3,
+        "improved": 0,
+        "criteria": [
+          {
+            "id": "SQUAT-01",
+            "status": "MEETS_CRITERION",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 1,
+                "timestampSeconds": 1.602,
+                "observedValue": 1.502,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 2,
+                "timestampSeconds": 4.304,
+                "observedValue": 1.501,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 3,
+                "timestampSeconds": 7.207,
+                "observedValue": 1.601,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 4,
+                "timestampSeconds": 10.21,
+                "observedValue": 1.702,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 5,
+                "timestampSeconds": 13.614,
+                "observedValue": 1.802,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-02",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-03",
+            "status": "MEETS_CRITERION",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 1,
+                "timestampSeconds": 1.602,
+                "observedValue": 0.0261,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 1,
+                "timestampSeconds": 1.602,
+                "observedValue": 0.0081,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 2,
+                "timestampSeconds": 4.304,
+                "observedValue": 0.0183,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 2,
+                "timestampSeconds": 2.803,
+                "observedValue": 0,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 3,
+                "timestampSeconds": 5.606,
+                "observedValue": 0,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 3,
+                "timestampSeconds": 7.207,
+                "observedValue": 0.0163,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 4,
+                "timestampSeconds": 10.21,
+                "observedValue": 0.0468,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 4,
+                "timestampSeconds": 8.508,
+                "observedValue": 0,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 5,
+                "timestampSeconds": 13.614,
+                "observedValue": 0.0395,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 5,
+                "timestampSeconds": 13.614,
+                "observedValue": 0.0091,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-04",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-05",
+            "status": "MEETS_CRITERION",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 1,
+                "timestampSeconds": 0.801,
+                "observedValue": 0.1,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 2,
+                "timestampSeconds": 3.504,
+                "observedValue": 0.101,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 3,
+                "timestampSeconds": 6.306,
+                "observedValue": 0.001,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 4,
+                "timestampSeconds": 9.309,
+                "observedValue": 0.1,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 5,
+                "timestampSeconds": 12.713,
+                "observedValue": 0.2,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-06",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NO_VALIDATED_BILATERAL_DECISION_RULE",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-07",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NOT_SUPPORTED",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-08",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NO_INDIVIDUAL_TARGET",
+            "predictions": []
+          }
+        ]
+      }
+    }
+  },
+  "mobileProjection": {
+    "visibleToDeveloper": true,
+    "visibleToMember": false,
+    "predictionCount": 20,
+    "validation": "UNVALIDATED",
+    "finalPoseOverlay": {
+      "playbackSeconds": 16.522,
+      "sampleSeconds": 16.416,
+      "deltaSeconds": 0.1059999999999981,
+      "toleranceSeconds": 0.15000000000000002,
+      "landmarkCount": 16
+    }
+  },
+  "replay": {
+    "id": 14,
+    "evaluationMode": "EXPERIMENTAL",
+    "protocol": {
+      "cameraView": "FRONT",
+      "depthTarget": "NONE",
+      "descentTargetSeconds": null
+    },
+    "videoSha256": "5d27d9b378af0d323237fa48fa2fe32befec20a72e4f24988f7979f7fef9c7a8",
+    "cameraView": {
+      "requested": "FRONT",
+      "detected": "FRONT",
+      "supportFraction": 0.815,
+      "votes": {
+        "SIDE": 0,
+        "FRONT": 140,
+        "OBLIQUE": 25,
+        "UNKNOWN": 0
+      },
+      "referenceVotes": {
+        "SIDE": 0,
+        "FRONT": 110,
+        "OBLIQUE": 25,
+        "UNKNOWN": 0
+      },
+      "referenceFrames": 135,
+      "wideStanceReferenceFraction": null,
+      "wideStanceReferenceFrames": 0,
+      "obliqueFromSideConflict": false,
+      "method": "upright_projected_shoulder_hip_and_ankle_width",
+      "validated": false
+    },
+    "result": {
+      "evaluationMode": "EXPERIMENTAL",
+      "resultVersion": "exercise-analysis-result-4",
+      "ruleVersion": "squat-observation-7",
+      "videoSha256": "5d27d9b378af0d323237fa48fa2fe32befec20a72e4f24988f7979f7fef9c7a8",
+      "repetitions": 5,
+      "official": {
+        "passed": 0,
+        "improved": 0
+      },
+      "experimental": {
+        "validation": "UNVALIDATED",
+        "ruleVersion": "technique-experimental-4",
+        "passed": 3,
+        "improved": 0,
+        "criteria": [
+          {
+            "id": "SQUAT-01",
+            "status": "MEETS_CRITERION",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 1,
+                "timestampSeconds": 1.602,
+                "observedValue": 1.502,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 2,
+                "timestampSeconds": 4.304,
+                "observedValue": 1.501,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 3,
+                "timestampSeconds": 7.207,
+                "observedValue": 1.601,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 4,
+                "timestampSeconds": 10.21,
+                "observedValue": 1.702,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 5,
+                "timestampSeconds": 13.614,
+                "observedValue": 1.802,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-02",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-03",
+            "status": "MEETS_CRITERION",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 1,
+                "timestampSeconds": 1.602,
+                "observedValue": 0.0261,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 1,
+                "timestampSeconds": 1.602,
+                "observedValue": 0.0081,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 2,
+                "timestampSeconds": 4.304,
+                "observedValue": 0.0183,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 2,
+                "timestampSeconds": 2.803,
+                "observedValue": 0,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 3,
+                "timestampSeconds": 5.606,
+                "observedValue": 0,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 3,
+                "timestampSeconds": 7.207,
+                "observedValue": 0.0163,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 4,
+                "timestampSeconds": 10.21,
+                "observedValue": 0.0468,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 4,
+                "timestampSeconds": 8.508,
+                "observedValue": 0,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "LEFT_KNEE",
+                "rep": 5,
+                "timestampSeconds": 13.614,
+                "observedValue": 0.0395,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "RIGHT_KNEE",
+                "rep": 5,
+                "timestampSeconds": 13.614,
+                "observedValue": 0.0091,
+                "threshold": {
+                  "maximum": 0.1,
+                  "source": "SQUAT_CONFIG.knee_inward_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo dịch chuyển vào giữa nằm dưới ngưỡng thử nghiệm; điều này chưa chứng minh toàn bộ kỹ thuật đạt."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-04",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-05",
+            "status": "MEETS_CRITERION",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 1,
+                "timestampSeconds": 0.801,
+                "observedValue": 0.1,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 2,
+                "timestampSeconds": 3.504,
+                "observedValue": 0.101,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 3,
+                "timestampSeconds": 6.306,
+                "observedValue": 0.001,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 4,
+                "timestampSeconds": 9.309,
+                "observedValue": 0.1,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 5,
+                "timestampSeconds": 12.713,
+                "observedValue": 0.2,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống và đứng lên ổn định giữa các rep trong ngưỡng thử nghiệm."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-06",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NO_VALIDATED_BILATERAL_DECISION_RULE",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-07",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NOT_SUPPORTED",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-08",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NO_INDIVIDUAL_TARGET",
+            "predictions": []
+          }
+        ]
+      }
+    }
+  },
+  "sideDepth": {
+    "fastApi": {
+      "evaluationMode": "EXPERIMENTAL",
+      "resultVersion": "exercise-analysis-result-4",
+      "ruleVersion": "squat-observation-7",
+      "videoSha256": "d093fffb25f91cc58bd3828aba59b3cf247140d40715724e4a10337f2c358532",
+      "repetitions": 2,
+      "official": {
+        "passed": 0,
+        "improved": 0
+      },
+      "experimental": {
+        "validation": "UNVALIDATED",
+        "ruleVersion": "technique-experimental-4",
+        "passed": 1,
+        "improved": 3,
+        "criteria": [
+          {
+            "id": "SQUAT-01",
+            "status": "MEETS_CRITERION",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 1,
+                "timestampSeconds": 3.5,
+                "observedValue": 2.6,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 2,
+                "timestampSeconds": 5.81,
+                "observedValue": 1.1,
+                "threshold": {
+                  "minimum": 0.6,
+                  "maximum": 15,
+                  "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-02",
+            "status": "NEEDS_IMPROVEMENT",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "UNABLE_TO_ASSESS",
+                "bodyPart": "HIP",
+                "rep": 1,
+                "timestampSeconds": 2.703,
+                "observedValue": 0.2966,
+                "threshold": {
+                  "maximum": 0,
+                  "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo độ sâu chỉ để xem lại; mốc tham chiếu hoặc tracking chưa đủ ổn định để dự đoán."
+              },
+              {
+                "status": "NEEDS_IMPROVEMENT",
+                "bodyPart": "HIP",
+                "rep": 2,
+                "timestampSeconds": 5.205,
+                "observedValue": 0.7501,
+                "threshold": {
+                  "maximum": 0,
+                  "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Trên ảnh quay ngang, hông còn cao hơn gối ở đáy rep; thử xuống tới mục tiêu đã chọn và nhờ Coach kiểm tra độ sâu thực tế."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-03",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-04",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "UNABLE_TO_ASSESS",
+                "bodyPart": "TORSO",
+                "rep": 1,
+                "timestampSeconds": 3.003,
+                "observedValue": 2.818,
+                "threshold": {
+                  "maximum": 12,
+                  "hipShoulderRiseMaximum": 0.12,
+                  "source": "SQUAT_CONFIG.torso_increase_degrees+hip_shoulder_rise_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 4,
+                "feedback": "Số đo thân trên chỉ để xem lại; thiếu khung hình đầu pha lên hoặc mốc tham chiếu chưa ổn định."
+              },
+              {
+                "status": "MEETS_CRITERION",
+                "bodyPart": "TORSO",
+                "rep": 2,
+                "timestampSeconds": 5.305,
+                "observedValue": -0.824,
+                "threshold": {
+                  "maximum": 12,
+                  "hipShoulderRiseMaximum": 0.12,
+                  "source": "SQUAT_CONFIG.torso_increase_degrees+hip_shoulder_rise_ratio",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 4,
+                "feedback": "Độ nghiêng thân trên và phối hợp hông-vai đầu pha đứng lên nằm trong ngưỡng thử nghiệm."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-05",
+            "status": "NEEDS_IMPROVEMENT",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "NEEDS_IMPROVEMENT",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 1,
+                "timestampSeconds": 2.7,
+                "observedValue": 0.65,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống hoặc đứng lên ở rep này lệch nhiều so với trung vị của hiệp tập; hãy giữ tốc độ đều giữa các rep."
+              },
+              {
+                "status": "NEEDS_IMPROVEMENT",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 2,
+                "timestampSeconds": 5.21,
+                "observedValue": 0.65,
+                "threshold": {
+                  "maximum": 0.3,
+                  "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Nhịp hạ xuống hoặc đứng lên ở rep này lệch nhiều so với trung vị của hiệp tập; hãy giữ tốc độ đều giữa các rep."
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-06",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NOT_SUPPORTED",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-07",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NO_FLOOR_CALIBRATION",
+            "predictions": []
+          },
+          {
+            "id": "SQUAT-08",
+            "status": "NEEDS_IMPROVEMENT",
+            "reasonCode": null,
+            "predictions": [
+              {
+                "status": "UNABLE_TO_ASSESS",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 1,
+                "timestampSeconds": 2.7,
+                "observedValue": 0.2966,
+                "threshold": {
+                  "maximum": 0,
+                  "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Số đo mục tiêu cá nhân chỉ để xem lại; dữ liệu theo dõi chưa đủ ổn định."
+              },
+              {
+                "status": "NEEDS_IMPROVEMENT",
+                "bodyPart": "WHOLE_BODY",
+                "rep": 2,
+                "timestampSeconds": 5.21,
+                "observedValue": 0.7501,
+                "threshold": {
+                  "maximum": 0,
+                  "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                  "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                },
+                "evidenceFrames": 3,
+                "feedback": "Thời gian hạ người hoặc độ sâu ở rep này chưa khớp mục tiêu cá nhân đã chọn; điều chỉnh nhịp đếm và độ sâu theo hướng dẫn của Coach."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "workerSql": {
+      "id": 15,
+      "evaluationMode": "EXPERIMENTAL",
+      "ruleVersion": "squat-observation-7",
+      "resultVersion": "exercise-analysis-result-4",
+      "result": {
+        "evaluationMode": "EXPERIMENTAL",
+        "resultVersion": "exercise-analysis-result-4",
+        "ruleVersion": "squat-observation-7",
+        "videoSha256": "d093fffb25f91cc58bd3828aba59b3cf247140d40715724e4a10337f2c358532",
+        "repetitions": 2,
+        "official": {
+          "passed": 0,
+          "improved": 0
+        },
+        "experimental": {
+          "validation": "UNVALIDATED",
+          "ruleVersion": "technique-experimental-4",
+          "passed": 1,
+          "improved": 3,
+          "criteria": [
+            {
+              "id": "SQUAT-01",
+              "status": "MEETS_CRITERION",
+              "reasonCode": null,
+              "predictions": [
+                {
+                  "status": "MEETS_CRITERION",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 1,
+                  "timestampSeconds": 3.5,
+                  "observedValue": 2.6,
+                  "threshold": {
+                    "minimum": 0.6,
+                    "maximum": 15,
+                    "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+                },
+                {
+                  "status": "MEETS_CRITERION",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 2,
+                  "timestampSeconds": 5.81,
+                  "observedValue": 1.1,
+                  "threshold": {
+                    "minimum": 0.6,
+                    "maximum": 15,
+                    "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+                }
+              ]
+            },
+            {
+              "id": "SQUAT-02",
+              "status": "NEEDS_IMPROVEMENT",
+              "reasonCode": null,
+              "predictions": [
+                {
+                  "status": "UNABLE_TO_ASSESS",
+                  "bodyPart": "HIP",
+                  "rep": 1,
+                  "timestampSeconds": 2.703,
+                  "observedValue": 0.2966,
+                  "threshold": {
+                    "maximum": 0,
+                    "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Số đo độ sâu chỉ để xem lại; mốc tham chiếu hoặc tracking chưa đủ ổn định để dự đoán."
+                },
+                {
+                  "status": "NEEDS_IMPROVEMENT",
+                  "bodyPart": "HIP",
+                  "rep": 2,
+                  "timestampSeconds": 5.205,
+                  "observedValue": 0.7501,
+                  "threshold": {
+                    "maximum": 0,
+                    "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Trên ảnh quay ngang, hông còn cao hơn gối ở đáy rep; thử xuống tới mục tiêu đã chọn và nhờ Coach kiểm tra độ sâu thực tế."
+                }
+              ]
+            },
+            {
+              "id": "SQUAT-03",
+              "status": "UNABLE_TO_ASSESS",
+              "reasonCode": "VIEW_NOT_SUITABLE",
+              "predictions": []
+            },
+            {
+              "id": "SQUAT-04",
+              "status": "UNABLE_TO_ASSESS",
+              "reasonCode": null,
+              "predictions": [
+                {
+                  "status": "UNABLE_TO_ASSESS",
+                  "bodyPart": "TORSO",
+                  "rep": 1,
+                  "timestampSeconds": 3.003,
+                  "observedValue": 2.818,
+                  "threshold": {
+                    "maximum": 12,
+                    "hipShoulderRiseMaximum": 0.12,
+                    "source": "SQUAT_CONFIG.torso_increase_degrees+hip_shoulder_rise_ratio",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 4,
+                  "feedback": "Số đo thân trên chỉ để xem lại; thiếu khung hình đầu pha lên hoặc mốc tham chiếu chưa ổn định."
+                },
+                {
+                  "status": "MEETS_CRITERION",
+                  "bodyPart": "TORSO",
+                  "rep": 2,
+                  "timestampSeconds": 5.305,
+                  "observedValue": -0.824,
+                  "threshold": {
+                    "maximum": 12,
+                    "hipShoulderRiseMaximum": 0.12,
+                    "source": "SQUAT_CONFIG.torso_increase_degrees+hip_shoulder_rise_ratio",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 4,
+                  "feedback": "Độ nghiêng thân trên và phối hợp hông-vai đầu pha đứng lên nằm trong ngưỡng thử nghiệm."
+                }
+              ]
+            },
+            {
+              "id": "SQUAT-05",
+              "status": "NEEDS_IMPROVEMENT",
+              "reasonCode": null,
+              "predictions": [
+                {
+                  "status": "NEEDS_IMPROVEMENT",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 1,
+                  "timestampSeconds": 2.7,
+                  "observedValue": 0.65,
+                  "threshold": {
+                    "maximum": 0.3,
+                    "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Nhịp hạ xuống hoặc đứng lên ở rep này lệch nhiều so với trung vị của hiệp tập; hãy giữ tốc độ đều giữa các rep."
+                },
+                {
+                  "status": "NEEDS_IMPROVEMENT",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 2,
+                  "timestampSeconds": 5.21,
+                  "observedValue": 0.65,
+                  "threshold": {
+                    "maximum": 0.3,
+                    "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Nhịp hạ xuống hoặc đứng lên ở rep này lệch nhiều so với trung vị của hiệp tập; hãy giữ tốc độ đều giữa các rep."
+                }
+              ]
+            },
+            {
+              "id": "SQUAT-06",
+              "status": "UNABLE_TO_ASSESS",
+              "reasonCode": "NOT_SUPPORTED",
+              "predictions": []
+            },
+            {
+              "id": "SQUAT-07",
+              "status": "UNABLE_TO_ASSESS",
+              "reasonCode": "NO_FLOOR_CALIBRATION",
+              "predictions": []
+            },
+            {
+              "id": "SQUAT-08",
+              "status": "NEEDS_IMPROVEMENT",
+              "reasonCode": null,
+              "predictions": [
+                {
+                  "status": "UNABLE_TO_ASSESS",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 1,
+                  "timestampSeconds": 2.7,
+                  "observedValue": 0.2966,
+                  "threshold": {
+                    "maximum": 0,
+                    "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Số đo mục tiêu cá nhân chỉ để xem lại; dữ liệu theo dõi chưa đủ ổn định."
+                },
+                {
+                  "status": "NEEDS_IMPROVEMENT",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 2,
+                  "timestampSeconds": 5.21,
+                  "observedValue": 0.7501,
+                  "threshold": {
+                    "maximum": 0,
+                    "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Thời gian hạ người hoặc độ sâu ở rep này chưa khớp mục tiêu cá nhân đã chọn; điều chỉnh nhịp đếm và độ sâu theo hướng dẫn của Coach."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "backendApi": {
+      "id": 15,
+      "evaluationMode": "EXPERIMENTAL",
+      "result": {
+        "evaluationMode": "EXPERIMENTAL",
+        "resultVersion": "exercise-analysis-result-4",
+        "ruleVersion": "squat-observation-7",
+        "videoSha256": "d093fffb25f91cc58bd3828aba59b3cf247140d40715724e4a10337f2c358532",
+        "repetitions": 2,
+        "official": {
+          "passed": 0,
+          "improved": 0
+        },
+        "experimental": {
+          "validation": "UNVALIDATED",
+          "ruleVersion": "technique-experimental-4",
+          "passed": 1,
+          "improved": 3,
+          "criteria": [
+            {
+              "id": "SQUAT-01",
+              "status": "MEETS_CRITERION",
+              "reasonCode": null,
+              "predictions": [
+                {
+                  "status": "MEETS_CRITERION",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 1,
+                  "timestampSeconds": 3.5,
+                  "observedValue": 2.6,
+                  "threshold": {
+                    "minimum": 0.6,
+                    "maximum": 15,
+                    "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+                },
+                {
+                  "status": "MEETS_CRITERION",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 2,
+                  "timestampSeconds": 5.81,
+                  "observedValue": 1.1,
+                  "threshold": {
+                    "minimum": 0.6,
+                    "maximum": 15,
+                    "source": "SQUAT_CONFIG.minimum_rep_seconds",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Chu kỳ hạ xuống và đứng lên hoàn chỉnh với tracking liên tục."
+                }
+              ]
+            },
+            {
+              "id": "SQUAT-02",
+              "status": "NEEDS_IMPROVEMENT",
+              "reasonCode": null,
+              "predictions": [
+                {
+                  "status": "UNABLE_TO_ASSESS",
+                  "bodyPart": "HIP",
+                  "rep": 1,
+                  "timestampSeconds": 2.703,
+                  "observedValue": 0.2966,
+                  "threshold": {
+                    "maximum": 0,
+                    "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Số đo độ sâu chỉ để xem lại; mốc tham chiếu hoặc tracking chưa đủ ổn định để dự đoán."
+                },
+                {
+                  "status": "NEEDS_IMPROVEMENT",
+                  "bodyPart": "HIP",
+                  "rep": 2,
+                  "timestampSeconds": 5.205,
+                  "observedValue": 0.7501,
+                  "threshold": {
+                    "maximum": 0,
+                    "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Trên ảnh quay ngang, hông còn cao hơn gối ở đáy rep; thử xuống tới mục tiêu đã chọn và nhờ Coach kiểm tra độ sâu thực tế."
+                }
+              ]
+            },
+            {
+              "id": "SQUAT-03",
+              "status": "UNABLE_TO_ASSESS",
+              "reasonCode": "VIEW_NOT_SUITABLE",
+              "predictions": []
+            },
+            {
+              "id": "SQUAT-04",
+              "status": "UNABLE_TO_ASSESS",
+              "reasonCode": null,
+              "predictions": [
+                {
+                  "status": "UNABLE_TO_ASSESS",
+                  "bodyPart": "TORSO",
+                  "rep": 1,
+                  "timestampSeconds": 3.003,
+                  "observedValue": 2.818,
+                  "threshold": {
+                    "maximum": 12,
+                    "hipShoulderRiseMaximum": 0.12,
+                    "source": "SQUAT_CONFIG.torso_increase_degrees+hip_shoulder_rise_ratio",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 4,
+                  "feedback": "Số đo thân trên chỉ để xem lại; thiếu khung hình đầu pha lên hoặc mốc tham chiếu chưa ổn định."
+                },
+                {
+                  "status": "MEETS_CRITERION",
+                  "bodyPart": "TORSO",
+                  "rep": 2,
+                  "timestampSeconds": 5.305,
+                  "observedValue": -0.824,
+                  "threshold": {
+                    "maximum": 12,
+                    "hipShoulderRiseMaximum": 0.12,
+                    "source": "SQUAT_CONFIG.torso_increase_degrees+hip_shoulder_rise_ratio",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 4,
+                  "feedback": "Độ nghiêng thân trên và phối hợp hông-vai đầu pha đứng lên nằm trong ngưỡng thử nghiệm."
+                }
+              ]
+            },
+            {
+              "id": "SQUAT-05",
+              "status": "NEEDS_IMPROVEMENT",
+              "reasonCode": null,
+              "predictions": [
+                {
+                  "status": "NEEDS_IMPROVEMENT",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 1,
+                  "timestampSeconds": 2.7,
+                  "observedValue": 0.65,
+                  "threshold": {
+                    "maximum": 0.3,
+                    "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Nhịp hạ xuống hoặc đứng lên ở rep này lệch nhiều so với trung vị của hiệp tập; hãy giữ tốc độ đều giữa các rep."
+                },
+                {
+                  "status": "NEEDS_IMPROVEMENT",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 2,
+                  "timestampSeconds": 5.21,
+                  "observedValue": 0.65,
+                  "threshold": {
+                    "maximum": 0.3,
+                    "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Nhịp hạ xuống hoặc đứng lên ở rep này lệch nhiều so với trung vị của hiệp tập; hãy giữ tốc độ đều giữa các rep."
+                }
+              ]
+            },
+            {
+              "id": "SQUAT-06",
+              "status": "UNABLE_TO_ASSESS",
+              "reasonCode": "NOT_SUPPORTED",
+              "predictions": []
+            },
+            {
+              "id": "SQUAT-07",
+              "status": "UNABLE_TO_ASSESS",
+              "reasonCode": "NO_FLOOR_CALIBRATION",
+              "predictions": []
+            },
+            {
+              "id": "SQUAT-08",
+              "status": "NEEDS_IMPROVEMENT",
+              "reasonCode": null,
+              "predictions": [
+                {
+                  "status": "UNABLE_TO_ASSESS",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 1,
+                  "timestampSeconds": 2.7,
+                  "observedValue": 0.2966,
+                  "threshold": {
+                    "maximum": 0,
+                    "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Số đo mục tiêu cá nhân chỉ để xem lại; dữ liệu theo dõi chưa đủ ổn định."
+                },
+                {
+                  "status": "NEEDS_IMPROVEMENT",
+                  "bodyPart": "WHOLE_BODY",
+                  "rep": 2,
+                  "timestampSeconds": 5.21,
+                  "observedValue": 0.7501,
+                  "threshold": {
+                    "maximum": 0,
+                    "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+                    "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+                  },
+                  "evidenceFrames": 3,
+                  "feedback": "Thời gian hạ người hoặc độ sâu ở rep này chưa khớp mục tiêu cá nhân đã chọn; điều chỉnh nhịp đếm và độ sâu theo hướng dẫn của Coach."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "mobileProjection": {
+      "visibleToDeveloper": true,
+      "visibleToMember": false
+    }
+  }
+}

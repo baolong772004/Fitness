@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CalendarDays, LoaderCircle, MessageSquare, QrCode, RefreshCw, Save, SendHorizontal, UserRound } from 'lucide-react';
+import { CalendarDays, ChevronDown, FileText, LoaderCircle, MessageSquare, QrCode, RefreshCw, Save, Search, SendHorizontal, UserRound } from 'lucide-react';
 import { api, type ApiBooking, type ApiCoachProfile, type ApiCoachSchedule, type ApiGroupClassSchedule, type ApiProgressLog } from '../../services/api';
 import type { CoachPlanDraft, CoachTraineeMembership, CoachWorkoutPlan } from '../../services/api/pt.api';
 import { CoachPlanEditor, CoachSavedPlan } from './CoachPlanEditor';
+import { CoachPtAssessments } from './CoachPtAssessments';
+import { CoachSharedExerciseAnalyses } from './CoachSharedExerciseAnalyses';
+import type { PtTrainingAssessment } from '../../services/api/workoutLog.api';
 import { CoachAvailabilityGrid } from './CoachAvailabilityGrid';
 import { StaffPage } from '@/components/staff/StaffKit';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,6 +41,9 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
   const [trainees, setTrainees] = useState<CoachTraineeMembership[]>([]);
   const [plans, setPlans] = useState<CoachWorkoutPlan[]>([]);
+  const [planSearch, setPlanSearch] = useState('');
+  const [showUnassignedPlans, setShowUnassignedPlans] = useState(false);
+  const [showArchivedPlans, setShowArchivedPlans] = useState(false);
   const [classes, setClasses] = useState<ApiGroupClassSchedule[]>([]);
   const [classQr, setClassQr] = useState<{ schedule: ApiGroupClassSchedule; image: string } | null>(null);
   const [classAttendees, setClassAttendees] = useState<Array<{ id: number; status: 'BOOKED' | 'CHECKED_IN'; user: { id: number; fullName: string } }>>([]);
@@ -48,7 +54,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   const [notice, setNotice] = useState('');
   const [profileError, setProfileError] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
-  const [progress, setProgress] = useState<{ inbodyLogs: ApiProgressLog[]; workoutLogs: any[] } | null>(null);
+  const [progress, setProgress] = useState<{ inbodyLogs: ApiProgressLog[]; workoutLogs: any[]; assessments: PtTrainingAssessment[]; trainingPolicy: Record<PtTrainingAssessment['level'], { reviewEverySessions: number }> } | null>(null);
   const [weight, setWeight] = useState('');
   const [bodyFat, setBodyFat] = useState('');
   const [muscleMass, setMuscleMass] = useState('');
@@ -127,6 +133,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   }, [activeTab]);
   useEffect(() => {
     if (!selectedMemberId) { setProgress(null); return; }
+    setProgress(null);
     void api.workouts.getMemberProgress(selectedMemberId)
       .then(setProgress).catch(error => setNotice(errorText(error)));
   }, [selectedMemberId]);
@@ -240,16 +247,29 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   const savePlan = (draft: CoachPlanDraft) =>
     run(() => api.pt.createCoachPlan(draft), 'Đã lưu giáo án mẫu.');
 
-  const assignPlan = (plan: CoachWorkoutPlan, memberId: number) =>
-    run(() => api.pt.createCoachPlan({
-      memberId,
-      title: plan.title,
-      description: plan.description || '',
-      sessions: plan.sessions,
-      mealDays: plan.mealDays,
-    }), 'Đã gán giáo án cho học viên.');
+  const mutatePlan = async (work: () => Promise<{ data: CoachWorkoutPlan }>, success: string) => {
+    setBusy(true);
+    try {
+      const { data: updated } = await work();
+      setPlans(rows => [...rows.filter(row => row.kind !== updated.kind || row.id !== updated.id).map(row =>
+        updated.status === 'ACTIVE' && row.kind === 'ASSIGNED' && row.memberId === updated.memberId && row.coachId === updated.coachId && row.programName === updated.programName
+          ? { ...row, status: 'ARCHIVED' as const } : row), updated]);
+      setNotice(success);
+      await load();
+      return true;
+    } finally { setBusy(false); }
+  };
+
+  const assignPlan = (plan: CoachWorkoutPlan, memberId: number, programName: string) =>
+    mutatePlan(() => api.pt.assignCoachPlan(plan.id, memberId, programName), 'Đã gán giáo án riêng cho học viên.');
+  const updatePlan = (plan: CoachWorkoutPlan, draft: CoachPlanDraft) =>
+    mutatePlan(() => api.pt.updateStudentPlan(plan.id, draft, plan.version!), 'Đã cập nhật giáo án và thông báo cho học viên.');
+  const restorePlan = (plan: CoachWorkoutPlan, revisionId: number, reason: string) =>
+    mutatePlan(() => api.pt.restoreStudentPlan(plan.id, revisionId, plan.version!, reason), 'Đã khôi phục giáo án thành phiên bản mới.');
 
   const generatePlan = (memberId: number | null, request: string) => api.pt.generateCoachPlan(memberId, request);
+  const savedPlanActions = { onAssign: assignPlan, onUpdate: updatePlan, onRestore: restorePlan,
+    onHistory: (plan: CoachWorkoutPlan) => api.pt.getStudentPlanRevisions(plan.id), onGenerate: generatePlan };
 
   const saveInBody = async () => {
     if (!selectedMemberId || !Number.isFinite(Number(weight)) || Number(weight) <= 0) {
@@ -272,23 +292,40 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
     }
   };
 
+  const saveAssessment = async (draft: Parameters<typeof api.workouts.createPtAssessment>[0]) => {
+    const saved = await run(() => api.workouts.createPtAssessment(draft), 'Đã lưu đánh giá lộ trình PT.', false);
+    if (saved) {
+      try { setProgress(await api.workouts.getMemberProgress(draft.memberId)); }
+      catch (error) { setNotice(`Đã lưu đánh giá nhưng chưa tải lại tiến độ: ${errorText(error)}`); }
+    }
+    return saved;
+  };
+
   const dayBookings = bookings.filter(booking => gymDay(booking.startTime) === date).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const selectedTrainee = trainees.find(row => row.userId === selectedMemberId);
   const assignableTrainees = [...new Map(trainees.map(row => [row.user.id, row.user])).values()];
+  const normalizeSearch = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLocaleLowerCase('vi-VN');
+  const unassignedPlans = plans.filter(plan => plan.memberId == null && !plan.member);
+  const assignedPlans = plans.filter(plan => plan.memberId != null || !!plan.member);
+  const matchingPlans = assignedPlans.filter(plan => normalizeSearch(`${plan.title} ${plan.member?.fullName || ''} ${plan.programName || ''}`).includes(normalizeSearch(planSearch.trim())));
+  const filteredAssignedPlans = matchingPlans.filter(plan => plan.status !== 'ARCHIVED');
+  const archivedPlans = matchingPlans.filter(plan => plan.status === 'ARCHIVED');
 
   return (
     <StaffPage>
       <div className="space-y-5">
-        <Card><CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">{profile?.user?.fullName || currentUser?.fullName || 'Quản lý Coach'}</h1>
+        <Card className="gap-0 py-0"><CardContent className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary" aria-hidden="true">{(profile?.user?.fullName || currentUser?.fullName || 'PT').trim().split(/\s+/).map(word => word[0]).slice(-2).join('')}</span>
+            <div className="min-w-0"><h1 className="truncate text-base font-semibold text-foreground">{profile?.user?.fullName || currentUser?.fullName || 'Quản lý Coach'}</h1>
             <p className="text-sm text-muted-foreground">
-              {profile ? `${profile.specialization || 'Chưa cập nhật chuyên môn'} · ${profile.status === 'ACTIVE' ? 'Đang nhận lịch' : 'Hồ sơ chưa hoạt động'}` : profileError || 'Đang tải hồ sơ Coach...'}
+              {profile ? <span className="inline-flex items-center gap-1.5 text-xs"><span className={`size-1.5 rounded-full ${profile.status === 'ACTIVE' ? 'bg-success' : 'bg-muted-foreground'}`} />{profile.status === 'ACTIVE' ? 'Đang nhận lịch' : 'Hồ sơ chưa hoạt động'}</span> : profileError || 'Đang tải hồ sơ Coach...'}
             </p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             {profile && <Badge variant="outline">{Number(profile.hourlyRate).toLocaleString('vi-VN')} đ / buổi</Badge>}
-            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading || busy}><RefreshCw className="size-4" /> Tải lại</Button>
+            <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading || busy}><RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} /> Tải lại</Button>
           </div>
         </CardContent></Card>
 
@@ -346,16 +383,16 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
           </CardContent>
         </Card>}
 
-        {activeTab === 'trainees' && <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
+        {activeTab === 'trainees' && <div className="space-y-5"><CoachSharedExerciseAnalyses /><div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
           <Card><CardHeader><CardTitle className="flex items-center gap-2"><UserRound className="size-5" /> Học viên PT phụ trách</CardTitle></CardHeader><CardContent className="space-y-2">
             {trainees.length === 0 && <p className="text-sm text-muted-foreground">Chưa có học viên nào được phân gói PT.</p>}
             {trainees.map(row => <button key={row.id} type="button" onClick={() => setSelectedMemberId(row.userId)} className={`w-full rounded-lg border p-3 text-left text-sm hover:border-primary ${selectedMemberId === row.userId ? 'border-primary bg-primary/5' : ''}`}>
-              <strong>{row.user.fullName}</strong><p className="text-muted-foreground">{row.package.name} · Còn {row.remainingSessions ?? '—'} buổi · {row.status}</p>
+              <strong>{row.user.fullName}</strong><p className="text-muted-foreground">{row.package.name} · {row.level === 'BEGINNER' ? 'Cơ bản' : row.level === 'INTERMEDIATE' ? 'Trung cấp' : row.level === 'ADVANCED' ? 'Nâng cao' : row.level || 'Chưa rõ cấp'} · Còn {row.remainingSessions ?? '—'} buổi · {row.status}</p>
               <p className="text-xs text-muted-foreground">{row.user.phone || row.user.email}</p>
             </button>)}
           </CardContent></Card>
           <Card><CardHeader><CardTitle>{selectedTrainee ? `Tiến độ: ${selectedTrainee.user.fullName}` : 'Chọn học viên để xem tiến độ'}</CardTitle></CardHeader><CardContent className="space-y-4">
-            {selectedTrainee && <><div className="space-y-2"><h3 className="text-sm font-semibold">Chỉ số InBody gần đây</h3>
+            {selectedTrainee && <>{bookings.find(booking => booking.memberId === selectedTrainee.userId && ['PACKAGE_PURCHASE', 'SINGLE_PURCHASE'].includes(booking.ptCreditAllocation?.batch.source ?? '')) && <Button variant="outline" onClick={() => { const booking = bookings.find(item => item.memberId === selectedTrainee.userId && ['PACKAGE_PURCHASE', 'SINGLE_PURCHASE'].includes(item.ptCreditAllocation?.batch.source ?? '')); if (booking) void openChat(booking); }}><MessageSquare className="size-4" /> Chat hỗ trợ học viên Paid</Button>}<CoachPtAssessments trainee={selectedTrainee} assessments={progress?.assessments ?? []} workoutLogs={progress?.workoutLogs ?? []} reviewEverySessions={selectedTrainee.level === 'BEGINNER' || selectedTrainee.level === 'INTERMEDIATE' || selectedTrainee.level === 'ADVANCED' ? progress?.trainingPolicy?.[selectedTrainee.level]?.reviewEverySessions : undefined} busy={busy || !progress} onSave={saveAssessment} /><div className="space-y-2"><h3 className="text-sm font-semibold">Chỉ số InBody gần đây</h3>
               {!progress && <p className="text-sm text-muted-foreground">Đang tải tiến độ...</p>}
               {progress?.inbodyLogs.length === 0 && <p className="text-sm text-muted-foreground">Chưa có chỉ số InBody.</p>}
               {progress?.inbodyLogs.map(log => <div key={log.id} className="rounded-lg border p-2 text-sm">{gymDay(log.loggedAt)} · {log.weight} kg · Mỡ {log.bodyFat ?? '—'}% · Cơ {log.muscleMass ?? '—'} kg</div>)}
@@ -363,15 +400,30 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
               <div className="space-y-2 border-t pt-4"><h3 className="text-sm font-semibold">Buổi PT hoàn thành</h3>{progress?.workoutLogs.length === 0 && <p className="text-sm text-muted-foreground">Chưa có nhật ký buổi tập.</p>}{progress?.workoutLogs.map(row => <div key={row.id} className="rounded-lg border p-2 text-sm">{gymDay(row.startTime)} · {row.sessionResult?.notes || 'Chưa ghi nhật ký'}</div>)}</div>
             </>}
           </CardContent></Card>
-        </div>}
+        </div></div>}
 
-        {activeTab === 'ai-workout' && <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-          <Card><CardHeader><CardTitle>Giáo án & Dinh dưỡng</CardTitle><CardDescription>Soạn giáo án mẫu trước; gán và gửi cho học viên sau khi chốt lịch.</CardDescription></CardHeader><CardContent>
-            <CoachPlanEditor busy={busy} onSave={savePlan} onGenerate={generatePlan} />
+        {activeTab === 'ai-workout' && <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <Card className="min-w-0 gap-0 overflow-hidden py-0"><CardHeader className="border-b px-4 py-4 sm:px-5 [.border-b]:pb-4"><CardTitle className="flex items-center gap-2 text-base"><FileText className="size-4 text-primary" />Soạn giáo án</CardTitle></CardHeader><CardContent className="p-4 sm:p-5">
+            <CoachPlanEditor busy={busy} onSave={savePlan} onGenerate={generatePlan} trainees={[...new Map(trainees.map(row => [row.userId, { id: row.userId, fullName: row.user.fullName, level: row.level }])).values()]} />
           </CardContent></Card>
-          <Card><CardHeader><CardTitle>Giáo án đã lưu</CardTitle></CardHeader><CardContent className="max-h-[48rem] space-y-2 overflow-y-auto">
-            {plans.length === 0 && <p className="text-sm text-muted-foreground">Chưa có giáo án nào.</p>}
-            {plans.map(plan => <CoachSavedPlan key={plan.id} plan={plan} trainees={assignableTrainees} busy={busy} onAssign={assignPlan} />)}
+          <Card className="min-w-0 gap-4 py-5"><CardHeader className="gap-4 px-4 sm:px-5">
+            <div className="flex items-center justify-between gap-2"><CardTitle className="text-base">Giáo án đã lưu</CardTitle><Badge variant="secondary" className="tabular-nums">{plans.length}</Badge></div>
+            <Button type="button" variant="outline" className="h-11 w-full justify-start gap-2.5 bg-primary/5 px-3 text-left shadow-none" aria-expanded={showUnassignedPlans} aria-controls="coach-unassigned-plans" onClick={() => setShowUnassignedPlans(open => !open)}>
+              <FileText className="size-4 text-primary" /><span className="min-w-0 flex-1 truncate">Giáo án chưa gán</span><Badge variant="secondary" className="tabular-nums">{unassignedPlans.length}</Badge><ChevronDown className={`size-4 text-muted-foreground transition-transform ${showUnassignedPlans ? 'rotate-180' : ''}`} />
+            </Button>
+          </CardHeader><CardContent className="max-h-[42rem] space-y-4 overflow-y-auto px-4 sm:px-5">
+            <div id="coach-unassigned-plans" hidden={!showUnassignedPlans} className="space-y-2 border-b pb-4">
+              {unassignedPlans.length === 0 && <p className="py-3 text-center text-sm text-muted-foreground">Không có giáo án chưa gán.</p>}
+              {unassignedPlans.map(plan => <CoachSavedPlan key={`template-${plan.id}`} plan={plan} trainees={assignableTrainees} busy={busy} {...savedPlanActions} />)}
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-medium">Đang áp dụng</h3><span className="text-xs text-muted-foreground tabular-nums">{assignedPlans.filter(plan => plan.status !== 'ARCHIVED').length}</span></div>
+              <div className="relative"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="h-9 pl-9" placeholder="Tìm giáo án đã gán, học viên..." aria-label="Tìm giáo án đã gán" value={planSearch} onChange={event => setPlanSearch(event.target.value)} /></div>
+              {filteredAssignedPlans.length === 0 && <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">{!planSearch.trim() ? 'Chưa có giáo án đang áp dụng.' : 'Không tìm thấy giáo án phù hợp.'}</p>}
+              {filteredAssignedPlans.map(plan => <CoachSavedPlan key={`assigned-${plan.id}`} plan={plan} trainees={assignableTrainees} busy={busy} {...savedPlanActions} />)}
+              <Button type="button" variant="ghost" className="w-full justify-between text-muted-foreground" aria-expanded={showArchivedPlans} aria-controls="coach-archived-plans" onClick={() => setShowArchivedPlans(value => !value)}>Giáo án cũ ({archivedPlans.length})<ChevronDown className={`size-4 transition-transform ${showArchivedPlans ? 'rotate-180' : ''}`} /></Button>
+              <div id="coach-archived-plans" hidden={!showArchivedPlans} className="space-y-2">{archivedPlans.map(plan => <CoachSavedPlan key={`archived-${plan.id}`} plan={plan} trainees={assignableTrainees} busy={busy} {...savedPlanActions} />)}{archivedPlans.length === 0 && <p className="py-2 text-center text-xs text-muted-foreground">Chưa có giáo án cũ phù hợp.</p>}</div>
+            </div>
           </CardContent></Card>
         </div>}
 

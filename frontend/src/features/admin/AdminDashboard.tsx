@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Member, Coach, PackagePlan, AuditLog, Invoice, SupportTicket } from '../../types';
-import { api, ApiPackage, ApiUser, ApiCoachProfile, ApiSubscription, ApiRoom, ApiEquipment, ApiGroupClass, ApiGroupClassSchedule, ApiMemberProfile360 } from '../../services/api';
+import { api, ApiPackage, ApiUser, ApiCoachProfile, ApiSubscription, ApiRoom, ApiEquipment, ApiGroupClass, ApiGroupClassSchedule, ApiMemberProfile360, ApiAdminAnalytics } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import {
   BarChart3,
@@ -75,6 +75,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<ApiAdminAnalytics | null>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
 
   // Member 360 Modal State (Luồng 8)
   const [inspectingMember, setInspectingMember] = useState<Member | null>(null);
@@ -277,34 +279,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       console.warn('Lỗi tải danh sách HLV admin:', e);
     }
 
-    // 4. Fetch Subscriptions / Invoices from backend
+    // 4. Fetch Live Payments & Analytics from backend
     try {
-      const subsRes = await api.subscriptions.getAllSubscriptions({ limit: 50 });
-      if (subsRes.data) {
-        const mappedInvoices: Invoice[] = subsRes.data.map((s) => ({
-          id: 'inv-' + s.id,
-          code: `INV-${1000 + s.id}`,
-          memberId: String(s.userId),
-          memberName: s.user?.fullName || `Hội viên #${s.userId}`,
-          memberPhone: '0900000000',
-          items: [{
-            name: s.package?.name || 'Gói tập',
-            quantity: 1,
-            unitPriceVND: Number(s.package?.price || 500000),
-            amountVND: Number(s.package?.price || 500000)
-          }],
-          subtotalVND: Number(s.package?.price || 500000),
-          discountVND: 0,
-          totalVND: Number(s.package?.price || 500000),
-          paymentMethod: 'vietqr',
-          status: 'paid',
-          staffName: 'Admin Hệ Thống',
-          createdAt: s.createdAt || new Date().toISOString()
-        }));
-        setInvoices(mappedInvoices);
+      const analyticsRes = await api.admin.getAnalytics(timeFilter);
+      if (analyticsRes) {
+        setAnalyticsData(analyticsRes);
+        if (Array.isArray(analyticsRes.recentPayments) && analyticsRes.recentPayments.length > 0) {
+          setInvoices(analyticsRes.recentPayments as Invoice[]);
+        }
       }
     } catch (e) {
-      console.warn('Lỗi tải hóa đơn admin:', e);
+      console.warn('Lỗi tải thống kê analytics admin:', e);
     }
 
     // 5. Fetch Support Tickets from backend
@@ -362,98 +347,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, [activeTab]);
 
-  // Total Revenue Calculation
-  const totalRevenue = invoices.reduce((sum, inv) => sum + inv.totalVND, 0);
-
   // Global Time Range Filter State
   const [timeFilter, setTimeFilter] = useState<'today' | '7days' | 'month' | 'quarter' | 'year'>('month');
 
-  // Dynamic metrics & trend series based on timeFilter
-  const timeFilteredData = React.useMemo(() => {
-    const baseRev = totalRevenue > 0 ? totalRevenue : 11250000;
-    switch (timeFilter) {
-      case 'today':
-        return {
-          label: 'Hôm Nay',
-          subLabel: 'Số liệu 24 giờ qua',
-          revenue: Math.round(baseRev * 0.12),
-          growth: '+8.4%',
-          membersCount: members.length,
-          activeCheckIns: 142,
-          chartData: [
-            { label: '06:00', rev: 1.2, checkins: 28 },
-            { label: '09:00', rev: 0.8, checkins: 14 },
-            { label: '12:00', rev: 1.5, checkins: 32 },
-            { label: '15:00', rev: 0.9, checkins: 18 },
-            { label: '18:00', rev: 3.4, checkins: 76 },
-            { label: '21:00', rev: 0.8, checkins: 22 },
-          ]
-        };
-      case '7days':
-        return {
-          label: '7 Ngày Qua',
-          subLabel: 'Tuần vận hành hiện tại',
-          revenue: Math.round(baseRev * 0.42),
-          growth: '+14.6%',
-          membersCount: members.length,
-          activeCheckIns: 840,
-          chartData: [
-            { label: 'Thứ 2', rev: 5.4, checkins: 110 },
-            { label: 'Thứ 3', rev: 6.8, checkins: 125 },
-            { label: 'Thứ 4', rev: 5.9, checkins: 118 },
-            { label: 'Thứ 5', rev: 7.2, checkins: 134 },
-            { label: 'Thứ 6', rev: 8.5, checkins: 146 },
-            { label: 'Thứ 7', rev: 9.6, checkins: 162 },
-            { label: 'Chủ Nhật', rev: 8.2, checkins: 145 },
-          ]
-        };
-      case 'quarter':
-        return {
-          label: 'Quý Này (Q4)',
-          subLabel: 'Tháng 10 - Tháng 12/2026',
-          revenue: Math.round(baseRev * 2.8),
-          growth: '+22.5%',
-          membersCount: members.length,
-          activeCheckIns: 3250,
-          chartData: [
-            { label: 'Tháng 10', rev: 38.5, checkins: 980 },
-            { label: 'Tháng 11', rev: 44.2, checkins: 1120 },
-            { label: 'Tháng 12', rev: 52.8, checkins: 1290 },
-          ]
-        };
-      case 'year':
-        return {
-          label: 'Năm 2026',
-          subLabel: 'Lũy kế cả năm tài chính',
-          revenue: Math.round(baseRev * 9.5),
-          growth: '+31.2%',
-          membersCount: members.length,
-          activeCheckIns: 12800,
-          chartData: [
-            { label: 'Quý 1', rev: 95.0, checkins: 2800 },
-            { label: 'Quý 2', rev: 112.5, checkins: 3100 },
-            { label: 'Quý 3', rev: 128.0, checkins: 3450 },
-            { label: 'Quý 4 (Dự kiến)', rev: 145.2, checkins: 3890 },
-          ]
-        };
-      case 'month':
-      default:
-        return {
-          label: 'Tháng Này',
-          subLabel: 'Tháng 10/2026',
-          revenue: baseRev,
-          growth: '+18.4%',
-          membersCount: members.length,
-          activeCheckIns: 1250,
-          chartData: [
-            { label: 'Tuần 1', rev: 2.4, checkins: 280 },
-            { label: 'Tuần 2', rev: 3.1, checkins: 315 },
-            { label: 'Tuần 3', rev: 3.6, checkins: 340 },
-            { label: 'Tuần 4', rev: 4.2, checkins: 395 },
-          ]
-        };
+  // Load analytics when timeFilter changes
+  const loadAnalytics = async (filter: string) => {
+    setIsLoadingAnalytics(true);
+    try {
+      const data = await api.admin.getAnalytics(filter);
+      if (data) {
+        setAnalyticsData(data);
+        if (Array.isArray(data.recentPayments) && data.recentPayments.length > 0) {
+          setInvoices(data.recentPayments as Invoice[]);
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi tải thống kê analytics admin:', e);
+    } finally {
+      setIsLoadingAnalytics(false);
     }
-  }, [timeFilter, totalRevenue, members.length]);
+  };
+
+  useEffect(() => {
+    void loadAnalytics(timeFilter);
+  }, [timeFilter]);
+
+  // Total Revenue Calculation from live payments
+  const totalRevenue = analyticsData ? analyticsData.revenue : invoices.reduce((sum, inv) => sum + inv.totalVND, 0);
+
+  // Dynamic metrics & trend series based on timeFilter and real API data
+  const timeFilteredData = React.useMemo(() => {
+    if (analyticsData) {
+      return {
+        label: analyticsData.label,
+        subLabel: analyticsData.subLabel,
+        revenue: analyticsData.revenue,
+        growth: analyticsData.growth,
+        membersCount: analyticsData.totalMembers,
+        activeCheckIns: analyticsData.activeCheckIns,
+        chartData: analyticsData.chartData && analyticsData.chartData.length > 0
+          ? analyticsData.chartData
+          : [
+            { label: '06:00', rev: 0, checkins: 0 },
+            { label: '12:00', rev: 0, checkins: 0 },
+            { label: '18:00', rev: 0, checkins: 0 },
+          ],
+      };
+    }
+
+    return {
+      label: timeFilter === 'today' ? 'Hôm Nay' : timeFilter === '7days' ? '7 Ngày Qua' : timeFilter === 'quarter' ? 'Quý Này' : timeFilter === 'year' ? 'Năm Nay' : 'Tháng Này',
+      subLabel: 'Đang tải dữ liệu thời gian thực...',
+      revenue: 0,
+      growth: '+0.0%',
+      membersCount: members.length,
+      activeCheckIns: 0,
+      chartData: [
+        { label: 'Bắt đầu', rev: 0, checkins: 0 },
+        { label: 'Hiện tại', rev: 0, checkins: 0 },
+      ]
+    };
+  }, [analyticsData, timeFilter, members.length]);
 
   // Filtered members for Member 360
   const filteredMembers = members.filter(m =>
@@ -931,14 +885,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <StatCard
             icon={DollarSign}
             tone="primary"
-            label={`Tổng Doanh Thu (${timeFilteredData.label})`}
+            label="Tổng Doanh Thu"
             value={`${timeFilteredData.revenue.toLocaleString('vi-VN')} đ`}
             hint={
-              <span className="text-success font-semibold flex items-center justify-between gap-1 text-xs">
-                <span className="flex items-center gap-1">
-                  <TrendingUp className="size-3.5" /> {timeFilteredData.growth}
-                </span>
-                <span className="text-primary font-semibold group-hover:underline">Chi tiết BI →</span>
+              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
+                <TrendingUp className="size-3.5 shrink-0" /> {timeFilteredData.growth} ({timeFilteredData.label})
               </span>
             }
             className={`transition-all duration-200 group-hover:shadow-md group-hover:border-primary/60 h-full ${activeTab === 'analytics' ? 'ring-2 ring-primary/40 border-primary shadow-xs' : ''
@@ -958,11 +909,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             icon={Users}
             tone="success"
             label="Tổng Số Hội Viên"
-            value={`${members.length} hội viên`}
+            value={`${analyticsData?.totalMembers ?? members.length} hội viên`}
             hint={
-              <span className="flex items-center justify-between text-xs">
-                <span>Tái ký: <strong className="text-success font-bold">86.5%</strong></span>
-                <span className="text-success font-semibold group-hover:underline ml-1">Xem danh sách →</span>
+              <span className="text-xs text-muted-foreground">
+                Đang hoạt động: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{analyticsData?.renewalRate ?? '100%'}</strong>
               </span>
             }
             className={`transition-all duration-200 group-hover:shadow-md group-hover:border-success/60 h-full ${activeTab === 'members-360' ? 'ring-2 ring-success/40 border-success shadow-xs' : ''
@@ -982,11 +932,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             icon={Dumbbell}
             tone="info"
             label="Đội Ngũ HLV"
-            value={`${coaches.length} HLV active`}
+            value={`${analyticsData?.totalCoaches ?? coaches.length} HLV`}
             hint={
-              <span className="flex items-center justify-between text-xs">
-                <span>8.5 hv / Coach</span>
-                <span className="text-sky-600 dark:text-sky-400 font-semibold group-hover:underline ml-1">Quản lý HLV →</span>
+              <span className="text-xs text-muted-foreground">
+                Bình quân: <strong className="text-sky-600 dark:text-sky-400 font-bold">{analyticsData?.avgMembersPerCoach ?? '—'}</strong> hv / HLV
               </span>
             }
             className={`transition-all duration-200 group-hover:shadow-md group-hover:border-sky-500/60 h-full ${activeTab === 'coaches-config' ? 'ring-2 ring-sky-500/40 border-sky-500 shadow-xs' : ''
@@ -1006,11 +955,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             icon={Layers}
             tone="warning"
             label="Gói Gym & PT"
-            value={`${catalogCount} gói`}
+            value={`${analyticsData?.catalogCount ?? catalogCount} gói`}
             hint={
-              <span className="flex items-center justify-between text-xs">
-                <span>42% doanh thu</span>
-                <span className="text-amber-600 dark:text-amber-400 font-semibold group-hover:underline ml-1">Cấu hình gói →</span>
+              <span className="text-xs text-muted-foreground">
+                Tỷ trọng PT: <strong className="text-amber-600 dark:text-amber-400 font-bold">{analyticsData?.ptRevenueShare ?? '0%'}</strong>
               </span>
             }
             className={`transition-all duration-200 group-hover:shadow-md group-hover:border-amber-500/60 h-full ${activeTab === 'packages-engine' ? 'ring-2 ring-amber-500/40 border-amber-500 shadow-xs' : ''
@@ -1036,12 +984,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <StatCard
             icon={LifeBuoy}
             tone={openTicketsCount > 0 ? 'danger' : 'primary'}
-            label="Báo Cáo / Sự Cố Chờ Duyệt"
-            value={`${openTicketsCount} chờ BQL`}
+            label="Sự Cố & Báo Cáo"
+            value={`${openTicketsCount} chờ xử lý`}
             hint={
-              <span className={openTicketsCount > 0 ? 'text-destructive font-bold flex items-center justify-between text-xs' : 'text-primary font-medium flex items-center justify-between text-xs'}>
-                <span>{openTicketsCount > 0 ? `${openTicketsCount} sự cố khẩn cấp` : `${inProgressTicketsCount} đang xử lý`}</span>
-                <span className="font-semibold group-hover:underline ml-1">Xem ngay →</span>
+              <span className="text-xs text-muted-foreground">
+                {openTicketsCount > 0 ? (
+                  <strong className="text-destructive font-bold">{openTicketsCount} sự cố khẩn cấp</strong>
+                ) : (
+                  <span>{inProgressTicketsCount} đang xử lý</span>
+                )}
               </span>
             }
             className={`transition-all duration-200 group-hover:shadow-md h-full ${openTicketsCount > 0
@@ -1140,7 +1091,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <g key={i}>
                               <circle cx={p.x} cy={p.y} r="5" fill="var(--bg-card)" stroke="var(--color-primary)" strokeWidth="2.5" />
                               <text x={p.x} y={p.y - 10} textAnchor="middle" className="text-[10px] font-bold fill-primary">
-                                {p.rev}M
+                                {p.rev >= 1 ? `${p.rev}M` : p.rev > 0 ? `${Math.round(p.rev * 1000)}k` : '0đ'}
                               </text>
                               {/* Bottom X-axis label */}
                               <text x={p.x} y="190" textAnchor="middle" className="text-[11px] font-semibold fill-foreground/80">
@@ -1166,27 +1117,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </CardHeader>
               <CardContent className="grid gap-6">
                 <div className="grid gap-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-1.5 font-semibold text-foreground">
-                      <span>Gói VIP Hybrid (Gym + PT Quota)</span>
-                      <span className="text-primary font-bold">52% (5.800.000 đ)</span>
+                  {(analyticsData?.serviceMix ?? [
+                    { name: 'Gói Hội Viên Gym Tiêu Chuẩn', amount: 0, percentage: 0 },
+                    { name: 'Gói Tập PT 1:1 & Gia Hạn Buổi PT', amount: 0, percentage: 0 },
+                    { name: 'Khóa Học & Dịch Vụ Khác', amount: 0, percentage: 0 }
+                  ]).map((item, idx) => (
+                    <div key={idx}>
+                      <div className="flex justify-between text-sm mb-1.5 font-semibold text-foreground">
+                        <span>{item.name}</span>
+                        <span className={idx === 0 ? "text-primary font-bold" : idx === 1 ? "text-sky-600 dark:text-sky-400 font-bold" : "text-success font-bold"}>
+                          {item.percentage}% ({item.amount.toLocaleString('vi-VN')} đ)
+                        </span>
+                      </div>
+                      <Progress value={item.percentage} className="h-2.5" />
                     </div>
-                    <Progress value={52} className="h-2.5" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1.5 font-semibold text-foreground">
-                      <span>Khóa Học Chuyên Biệt (Yoga, Boxing Bootcamp)</span>
-                      <span className="text-sky-600 dark:text-sky-400 font-bold">34% (3.800.000 đ)</span>
-                    </div>
-                    <Progress value={34} className="h-2.5" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1.5 font-semibold text-foreground">
-                      <span>Thẻ Standard Gym Tự Do</span>
-                      <span className="text-success font-bold">14% (1.550.000 đ)</span>
-                    </div>
-                    <Progress value={14} className="h-2.5" />
-                  </div>
+                  ))}
                 </div>
 
                 <Separator />
@@ -1194,14 +1139,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div>
                   <h4 className="text-sm font-bold text-foreground mb-3">Mật Độ Hội Viên Theo Khung Giờ (Peak Hours)</h4>
                   <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 text-center">
-                    {[
-                      { time: '06:00 - 08:00', density: '65%', label: 'Vừa' },
-                      { time: '08:00 - 11:00', density: '35%', label: 'Thấp' },
-                      { time: '11:30 - 13:30', density: '50%', label: 'Vừa' },
-                      { time: '14:00 - 17:00', density: '40%', label: 'Thấp' },
-                      { time: '17:30 - 20:30', density: '95%', label: 'Rất Cao', peak: true },
-                      { time: '20:30 - 22:00', density: '60%', label: 'Vừa' }
-                    ].map((slot, i) => (
+                    {(analyticsData?.peakHours ?? [
+                      { time: '06:00 - 08:00', count: 0, density: '0%', label: 'Thấp', peak: false },
+                      { time: '08:00 - 11:00', count: 0, density: '0%', label: 'Thấp', peak: false },
+                      { time: '11:30 - 13:30', count: 0, density: '0%', label: 'Thấp', peak: false },
+                      { time: '14:00 - 17:00', count: 0, density: '0%', label: 'Thấp', peak: false },
+                      { time: '17:30 - 20:30', count: 0, density: '0%', label: 'Thấp', peak: false },
+                      { time: '20:30 - 22:00', count: 0, density: '0%', label: 'Thấp', peak: false }
+                    ]).map((slot, i) => (
                       <div
                         key={i}
                         className={`p-3 rounded-lg border text-xs transition-all ${slot.peak
@@ -1216,6 +1161,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <Badge variant={slot.peak ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0 font-bold">
                           {slot.label}
                         </Badge>
+                        {slot.count !== undefined && (
+                          <div className="text-[10px] text-muted-foreground mt-1">{slot.count} lượt</div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1229,19 +1177,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <CardDescription className="text-foreground/75 font-medium">Nhật ký hóa đơn vừa thanh toán</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 max-h-[500px] overflow-y-auto pr-1">
-                {invoices.map(inv => (
-                  <div key={inv.id} className="p-3.5 rounded-lg border bg-card/90 hover:border-primary/50 transition-all text-xs shadow-xs">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="font-bold text-sm text-foreground">{inv.memberName}</span>
-                      <span className="font-extrabold text-sm text-primary">+{inv.totalVND.toLocaleString('vi-VN')} đ</span>
+                {invoices.length === 0 ? (
+                  <div className="text-center py-8 text-sm text-muted-foreground">Chưa có giao dịch thanh toán nào được ghi nhận.</div>
+                ) : (
+                  invoices.map(inv => (
+                    <div key={inv.id} className="p-3.5 rounded-lg border bg-card/90 hover:border-primary/50 transition-all text-xs shadow-xs">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-bold text-sm text-foreground">{inv.memberName}</span>
+                        <span className="font-extrabold text-sm text-primary">+{inv.totalVND.toLocaleString('vi-VN')} đ</span>
+                      </div>
+                      <div className="text-foreground/80 font-medium line-clamp-1">{inv.items[0]?.name || 'Dịch vụ'}</div>
+                      <div className="flex justify-between items-center text-foreground/75 mt-2.5 text-[11px] font-medium">
+                        <Badge variant="outline" className="text-[10px] uppercase font-bold border-border/80">{inv.paymentMethod}</Badge>
+                        <span>{new Date(inv.createdAt).toLocaleString('vi-VN')}</span>
+                      </div>
                     </div>
-                    <div className="text-foreground/80 font-medium line-clamp-1">{inv.items[0]?.name}</div>
-                    <div className="flex justify-between items-center text-foreground/75 mt-2.5 text-[11px] font-medium">
-                      <Badge variant="outline" className="text-[10px] uppercase font-bold border-border/80">{inv.paymentMethod}</Badge>
-                      <span>{new Date(inv.createdAt).toLocaleString('vi-VN')}</span>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </CardContent>
             </Card>
           </div>
@@ -2127,10 +2079,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </Dialog>
 
       <Dialog open={isPtCreditOpen} onOpenChange={setIsPtCreditOpen}>
-        <DialogContent className="max-h-[90vh] min-w-0 overflow-y-auto sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>Quản lý buổi tập PT</DialogTitle>
-            <DialogDescription>Tạo gói buổi tập theo cấp độ huấn luyện viên và xem số buổi của từng hội viên.</DialogDescription>
+        <DialogContent className="max-h-[92vh] min-w-0 overflow-y-auto sm:max-w-5xl">
+          <DialogHeader className="pb-2 border-b">
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Dumbbell className="size-5 text-primary" />
+              Quản Lý Buổi Tập PT & Ví Hội Viên
+            </DialogTitle>
+            <DialogDescription>
+              Thiết lập danh mục gói buổi tập, cấu hình bảng giá gia hạn và tra cứu, kiểm soát ví số buổi của hội viên.
+            </DialogDescription>
           </DialogHeader>
           {isPtCreditOpen && <PtCreditAdmin onProductsChanged={loadPtProducts} />}
         </DialogContent>

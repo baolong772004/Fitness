@@ -10,8 +10,9 @@ type Wallet = Awaited<ReturnType<typeof api.ptWallet>>;
 type RenewalOptions = Awaited<ReturnType<typeof api.ptRenewalOptions>>;
 const names: Record<string, string> = { TRIAL: 'Trải nghiệm', BEGINNER: 'Cơ bản', INTERMEDIATE: 'Trung cấp', ADVANCED: 'Nâng cao' };
 
-export function PtWalletCard({ wallet, renewalOptions }: { wallet: Wallet; renewalOptions: RenewalOptions }) {
+export function PtWalletCard({ wallet, renewalOptions, onChangeCoach, pendingCoachBatchIds = [], usedCoachBatchIds = [] }: { wallet: Wallet; renewalOptions: RenewalOptions; onChangeCoach?: (source: Wallet['sources'][number]) => void; pendingCoachBatchIds?: number[]; usedCoachBatchIds?: number[] }) {
   const [expanded, setExpanded] = useState(false);
+  const [expandedSourceId, setExpandedSourceId] = useState<number | null>(null);
   const owned = wallet.levels.filter(level => level.total > 0 || level.available > 0 || level.held > 0);
   const levels = expanded || owned.length === 0 ? wallet.levels : owned;
   const canExpand = owned.length > 0 && owned.length < wallet.levels.length;
@@ -46,19 +47,29 @@ export function PtWalletCard({ wallet, renewalOptions }: { wallet: Wallet; renew
       {canExpand && <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)} style={styles.expand}>
         <Text style={styles.expandText}>{expanded ? 'Thu gọn cấp độ' : 'Xem tất cả cấp độ'}</Text><Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={aura.muted} />
       </Pressable>}
-      {sources.length > 0 && <Text style={styles.sectionTitle}>Thời hạn từng lần mua</Text>}
-      {sources.filter(source => source.remainingSessions > 0).map(source => {
+      {sources.length > 0 && <Text style={styles.sectionTitle}>Quyền PT theo từng nguồn</Text>}
+      {sources.filter(source => source.quantity > source.usedSessions).map(source => {
         const daysLeft = source.endAt ? Math.ceil((new Date(source.endAt).getTime() - Date.now()) / 86400000) : null;
         const hasRenewalPrice = renewalOptions.some(option => option.level === source.level &&
+          (!option.purchaseMode || (option.purchaseMode === 'SINGLE' ? source.source === 'SINGLE_PURCHASE' : source.source === 'PACKAGE_PURCHASE')) &&
           (option.ptProductId === null || option.ptProductId === source.ptProductId));
         return <View key={source.id} style={styles.sourceRow}>
-          <Text style={styles.levelTitle}>{names[source.level] || source.level} · {source.remainingSessions} buổi còn lại</Text>
-          <Text style={styles.levelMeta}>Có thể đặt {source.availableSessions} · {source.endAt ? `Hết hạn ${new Date(source.endAt).toLocaleDateString('vi-VN')}` : 'Quyền cũ không giới hạn thời hạn'}</Text>
+          <Text style={styles.levelTitle}>{source.source === 'MEMBERSHIP_GIFT' ? 'PT Trial' : source.source === 'SINGLE_PURCHASE' ? 'PT buổi lẻ' : source.source === 'PACKAGE_PURCHASE' ? 'PT theo gói' : 'PT Credit điều chỉnh'} · {names[source.level] || source.level}</Text>
+          <Text style={styles.levelMeta}>{source.quantity - source.usedSessions} buổi chưa dùng · Đặt được {source.availableSessions}{source.endAt ? ` · Hạn ${new Date(source.endAt).toLocaleDateString('vi-VN')}` : ''}</Text>
           {source.status === 'EXPIRED' && <Text style={styles.locked}>Đã hết hạn; số buổi còn lại không thể đặt.</Text>}
           {daysLeft !== null && daysLeft > 0 && daysLeft <= 7 && source.availableSessions > 0 && <Text style={styles.locked}>Sắp hết hạn trong {daysLeft} ngày.</Text>}
-          {source.renewable && hasRenewalPrice && <Button compact secondary title="Gia hạn thời gian" onPress={() => router.push({ pathname: '/pt-renew', params: { batchId: String(source.id) } })} />}
-          {source.renewable && !hasRenewalPrice && <Text style={styles.locked}>Chưa có giá gia hạn cho gói PT này.</Text>}
-          {source.status === 'EXPIRED' && !source.renewable && source.renewalDeadline && <Text style={styles.locked}>Đã quá 30 ngày; cần mua gói mới.</Text>}
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: expandedSourceId === source.id }}
+            onPress={() => setExpandedSourceId(current => current === source.id ? null : source.id)} style={styles.sourceDetailsToggle}>
+            <Text style={styles.expandText}>{expandedSourceId === source.id ? 'Ẩn quyền lợi và thao tác' : 'Quyền lợi và thao tác'}</Text>
+            <Ionicons name={expandedSourceId === source.id ? 'chevron-up' : 'chevron-down'} size={15} color={aura.muted} />
+          </Pressable>
+          {expandedSourceId === source.id && <View style={styles.sourceDetails}>
+            {!!source.benefits && <Text style={styles.levelMeta}>{source.benefits}</Text>}
+            {['MEMBERSHIP_GIFT', 'PACKAGE_PURCHASE', 'SINGLE_PURCHASE'].includes(source.source) && <Text style={styles.levelMeta}>{source.source === 'MEMBERSHIP_GIFT' ? 'Báo vắng sớm: bảo lưu tối đa 1 lần. Không gia hạn.' : source.source === 'SINGLE_PURCHASE' ? 'Báo vắng sớm: bảo lưu 1 lần. Có thể gia hạn trong 30 ngày nếu còn buổi.' : 'Báo vắng sớm: bảo lưu tối đa 3 lần. Có thể yêu cầu đổi HLV 1 lần và gia hạn trong 30 ngày nếu còn buổi.'}</Text>}
+            {source.renewable && hasRenewalPrice && <Button compact secondary title="Gia hạn thời gian" onPress={() => router.push({ pathname: '/pt-renew', params: { batchId: String(source.id) } })} />}
+            {source.renewable && !hasRenewalPrice && <Text style={styles.locked}>Chưa có giá gia hạn cho gói PT này.</Text>}
+            {source.source === 'PACKAGE_PURCHASE' && source.quantity > 1 && source.status === 'ACTIVE' && source.coachId && (pendingCoachBatchIds.includes(source.id) ? <Text style={styles.locked}>Yêu cầu đổi HLV đang chờ Admin xử lý.</Text> : usedCoachBatchIds.includes(source.id) ? <Text style={styles.locked}>Đã dùng quyền đổi HLV.</Text> : <Button compact secondary title="Yêu cầu đổi HLV" onPress={() => onChangeCoach?.(source)} />)}
+          </View>}
         </View>;
       })}
       <Button secondary title="Mua thêm buổi PT" icon="add-outline" onPress={() => router.push('/packages')} />
@@ -90,6 +101,8 @@ const styles = StyleSheet.create({
   levelMeta: { color: aura.muted, fontSize: 11, marginTop: 4 },
   locked: { color: aura.caramel, fontSize: 10, marginTop: 3 },
   sourceRow: { paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: aura.border },
+  sourceDetailsToggle: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingRight: 8, marginTop: 2 },
+  sourceDetails: { gap: 7, paddingBottom: 5 },
   expand: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: 44 },
   expandText: { fontSize: 12, color: aura.muted, fontWeight: '600' },
 });

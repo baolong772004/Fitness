@@ -22,17 +22,22 @@ interface StatCardProps {
   className?: string
 }
 
+import { ArrowUpRight } from 'lucide-react'
+
 export function StatCard({ icon: Icon, label, value, hint, tone = 'primary', className }: StatCardProps) {
   return (
-    <Card className={cn('gap-0 py-0', className)}>
-      <CardContent className="flex items-center gap-4 p-5">
-        <div className={cn('flex size-11 shrink-0 items-center justify-center rounded-lg', toneStyles[tone])}>
+    <Card className={cn('gap-0 py-0 overflow-hidden relative group/stat transition-all duration-200', className)}>
+      <CardContent className="flex items-center gap-3.5 p-4">
+        <div className={cn('flex size-10 shrink-0 items-center justify-center rounded-lg', toneStyles[tone])}>
           <Icon className="size-5" />
         </div>
-        <div className="min-w-0">
-          <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
-          <p className="text-2xl font-bold leading-tight tracking-tight text-foreground">{value}</p>
-          {hint && <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p>}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-1">
+            <p className="truncate text-xs font-semibold text-muted-foreground">{label}</p>
+            <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground/40 group-hover/stat:text-primary transition-colors" />
+          </div>
+          <p className="text-xl sm:text-2xl font-bold leading-tight tracking-tight text-foreground truncate mt-0.5">{value}</p>
+          {hint && <div className="mt-1 text-xs text-muted-foreground truncate">{hint}</div>}
         </div>
       </CardContent>
     </Card>

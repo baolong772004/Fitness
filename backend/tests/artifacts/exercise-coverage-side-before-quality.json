@@ -1,0 +1,914 @@
+{
+  "auditedAt": "2026-10-31T17:39:37.468Z",
+  "health": {
+    "ruleVersion": "squat-observation-6",
+    "techniqueEngineVersion": "technique-evaluation-2",
+    "experimentalEvaluationEnabled": true
+  },
+  "cases": [
+    {
+      "caseName": "squat_pexels_6525519_depth",
+      "exercise": "SQUAT",
+      "variant": "BODYWEIGHT",
+      "requestedView": "SIDE",
+      "depthTarget": "HIP_AT_KNEE",
+      "detectedView": "SIDE",
+      "videoSha256": "c1b4ce7b4605580c73ecf80dfbde1fffe8b825d04557d125b4b202b0ee760e59",
+      "status": "COMPLETED",
+      "poseFrames": 63,
+      "repetitions": 2,
+      "repQuality": [
+        {
+          "repNumber": 1,
+          "trackingCoverage": 1,
+          "techniqueTrackingSufficient": false,
+          "qualityEvidence": {
+            "ankleDriftRatio": 0.139,
+            "footReferenceScaleChange": 0.17
+          }
+        },
+        {
+          "repNumber": 2,
+          "trackingCoverage": 1,
+          "techniqueTrackingSufficient": false,
+          "qualityEvidence": {
+            "ankleDriftRatio": 0.129,
+            "footReferenceScaleChange": 0.156
+          }
+        }
+      ],
+      "official": {
+        "passed": 0,
+        "improved": 0,
+        "measured": 6,
+        "criteria": [
+          {
+            "id": "SQUAT-01",
+            "status": "MEASURED",
+            "reasonCode": "NOT_COACH_VALIDATED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 3.7,
+                "observedValue": {
+                  "descentSeconds": 1,
+                  "ascentSeconds": 1.1,
+                  "totalSeconds": 2.1,
+                  "completedCycleObserved": true
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 6.1,
+                "observedValue": {
+                  "descentSeconds": 0.7,
+                  "ascentSeconds": 0.9,
+                  "totalSeconds": 1.6,
+                  "completedCycleObserved": true
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-02",
+            "status": "MEASURED",
+            "reasonCode": "NOT_COACH_VALIDATED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 2.6,
+                "observedValue": {
+                  "hipAboveKneeRatio": 0.1644,
+                  "minimumProjectedKneeDegrees": 75.208,
+                  "projectedKneeRangeDegrees": {
+                    "count": 22,
+                    "min": 75.208,
+                    "max": 161.621,
+                    "range": 86.414
+                  },
+                  "projectedHipRangeDegrees": {
+                    "count": 22,
+                    "min": 53.558,
+                    "max": 168.201,
+                    "range": 114.643
+                  }
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 5.2,
+                "observedValue": {
+                  "hipAboveKneeRatio": 0.365,
+                  "minimumProjectedKneeDegrees": 81.468,
+                  "projectedKneeRangeDegrees": {
+                    "count": 17,
+                    "min": 81.468,
+                    "max": 162.838,
+                    "range": 81.37
+                  },
+                  "projectedHipRangeDegrees": {
+                    "count": 17,
+                    "min": 65.853,
+                    "max": 164.453,
+                    "range": 98.6
+                  }
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-03",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "measurementPreview": []
+          },
+          {
+            "id": "SQUAT-04",
+            "status": "MEASURED",
+            "reasonCode": "NOT_COACH_VALIDATED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 2.7,
+                "observedValue": {
+                  "maximumProjectedLeanDegrees": 45.597,
+                  "bottomProjectedLeanDegrees": 43.29,
+                  "earlyAscentLeanChangeDegrees": 0.098,
+                  "hipShoulderRiseDifferenceRatio": 0.0065
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 4
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 5.2,
+                "observedValue": {
+                  "maximumProjectedLeanDegrees": 41.194,
+                  "bottomProjectedLeanDegrees": 41.194,
+                  "earlyAscentLeanChangeDegrees": 0,
+                  "hipShoulderRiseDifferenceRatio": 0
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-05",
+            "status": "MEASURED",
+            "reasonCode": "NOT_COACH_VALIDATED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 2.6,
+                "observedValue": {
+                  "descentSeconds": 1,
+                  "ascentSeconds": 1.1,
+                  "totalSeconds": 2.1,
+                  "completedCycleObserved": true,
+                  "descentDifferenceFromClipMedianSeconds": 0.15,
+                  "ascentDifferenceFromClipMedianSeconds": 0.1
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 5.2,
+                "observedValue": {
+                  "descentSeconds": 0.7,
+                  "ascentSeconds": 0.9,
+                  "totalSeconds": 1.6,
+                  "completedCycleObserved": true,
+                  "descentDifferenceFromClipMedianSeconds": -0.15,
+                  "ascentDifferenceFromClipMedianSeconds": -0.1
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-06",
+            "status": "NOT_SUPPORTED",
+            "reasonCode": "NOT_SUPPORTED",
+            "measurementPreview": []
+          },
+          {
+            "id": "SQUAT-07",
+            "status": "NOT_SUPPORTED",
+            "reasonCode": "NOT_SUPPORTED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 2.2,
+                "observedValue": {
+                  "heelToeProjectedAngleChangeDegrees": -11.083,
+                  "heelToeProjectedAngleRangeDegrees": {
+                    "count": 22,
+                    "min": -24.786,
+                    "max": -10.092,
+                    "range": 14.694
+                  }
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 4
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 5.4,
+                "observedValue": {
+                  "heelToeProjectedAngleChangeDegrees": -21.14,
+                  "heelToeProjectedAngleRangeDegrees": {
+                    "count": 17,
+                    "min": -32.948,
+                    "max": -11.139,
+                    "range": 21.809
+                  }
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 4
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-08",
+            "status": "MEASURED",
+            "reasonCode": "NOT_COACH_VALIDATED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 2.6,
+                "observedValue": {
+                  "descentSeconds": 1,
+                  "ascentSeconds": 1.1,
+                  "totalSeconds": 2.1,
+                  "completedCycleObserved": true,
+                  "hipAboveKneeRatio": 0.1644
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 5.2,
+                "observedValue": {
+                  "descentSeconds": 0.7,
+                  "ascentSeconds": 0.9,
+                  "totalSeconds": 1.6,
+                  "completedCycleObserved": true,
+                  "hipAboveKneeRatio": 0.365
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.1,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              }
+            ]
+          }
+        ]
+      },
+      "experimental": {
+        "passed": 0,
+        "improved": 0,
+        "predictionCount": 10,
+        "criteria": [
+          {
+            "id": "SQUAT-01",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "missingRequirements": [
+              "TRACKING_OR_REFERENCE_UNVERIFIED"
+            ],
+            "measurementAvailable": true,
+            "predictions": 2
+          },
+          {
+            "id": "SQUAT-02",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "missingRequirements": [
+              "TRACKING_OR_REFERENCE_UNVERIFIED"
+            ],
+            "measurementAvailable": true,
+            "predictions": 2
+          },
+          {
+            "id": "SQUAT-03",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "missingRequirements": [
+              "VIEW_NOT_SUITABLE"
+            ],
+            "measurementAvailable": false,
+            "predictions": 0
+          },
+          {
+            "id": "SQUAT-04",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "missingRequirements": [
+              "TRACKING_OR_REFERENCE_UNVERIFIED"
+            ],
+            "measurementAvailable": true,
+            "predictions": 2
+          },
+          {
+            "id": "SQUAT-05",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "missingRequirements": [
+              "TRACKING_OR_REFERENCE_UNVERIFIED"
+            ],
+            "measurementAvailable": true,
+            "predictions": 2
+          },
+          {
+            "id": "SQUAT-06",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NOT_SUPPORTED",
+            "missingRequirements": [
+              "NOT_SUPPORTED"
+            ],
+            "measurementAvailable": false,
+            "predictions": 0
+          },
+          {
+            "id": "SQUAT-07",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NO_FLOOR_CALIBRATION",
+            "missingRequirements": [
+              "NO_FLOOR_CALIBRATION"
+            ],
+            "measurementAvailable": true,
+            "predictions": 0
+          },
+          {
+            "id": "SQUAT-08",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "missingRequirements": [
+              "TRACKING_OR_REFERENCE_UNVERIFIED"
+            ],
+            "measurementAvailable": true,
+            "predictions": 2
+          }
+        ]
+      }
+    },
+    {
+      "caseName": "squat_side_explicit_depth",
+      "exercise": "SQUAT",
+      "variant": "BODYWEIGHT",
+      "requestedView": "SIDE",
+      "depthTarget": "HIP_AT_KNEE",
+      "detectedView": "SIDE",
+      "videoSha256": "0a1b6dc35f6df231de33525c1f40ab1d4b98906b3523a1de39cd4e6f32316541",
+      "status": "COMPLETED",
+      "poseFrames": 205,
+      "repetitions": 2,
+      "repQuality": [
+        {
+          "repNumber": 1,
+          "trackingCoverage": 0.926,
+          "techniqueTrackingSufficient": false,
+          "qualityEvidence": {
+            "ankleDriftRatio": 0.083,
+            "footReferenceScaleChange": 0.253
+          }
+        },
+        {
+          "repNumber": 2,
+          "trackingCoverage": 0.997,
+          "techniqueTrackingSufficient": false,
+          "qualityEvidence": {
+            "ankleDriftRatio": 0.079,
+            "footReferenceScaleChange": 0.262
+          }
+        }
+      ],
+      "official": {
+        "passed": 0,
+        "improved": 0,
+        "measured": 6,
+        "criteria": [
+          {
+            "id": "SQUAT-01",
+            "status": "MEASURED",
+            "reasonCode": "NOT_COACH_VALIDATED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 11.31,
+                "observedValue": {
+                  "descentSeconds": 1.9,
+                  "ascentSeconds": 0.7,
+                  "totalSeconds": 2.6,
+                  "completedCycleObserved": true
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 18.12,
+                "observedValue": {
+                  "descentSeconds": 2.01,
+                  "ascentSeconds": 0.9,
+                  "totalSeconds": 2.91,
+                  "completedCycleObserved": true
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-02",
+            "status": "MEASURED",
+            "reasonCode": "NOT_COACH_VALIDATED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 10.611,
+                "observedValue": {
+                  "hipAboveKneeRatio": 0.2722,
+                  "minimumProjectedKneeDegrees": 71.847,
+                  "projectedKneeRangeDegrees": {
+                    "count": 25,
+                    "min": 71.847,
+                    "max": 152.155,
+                    "range": 80.307
+                  },
+                  "projectedHipRangeDegrees": {
+                    "count": 25,
+                    "min": 67.746,
+                    "max": 146.483,
+                    "range": 78.737
+                  }
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 17.217,
+                "observedValue": {
+                  "hipAboveKneeRatio": 0.2556,
+                  "minimumProjectedKneeDegrees": 73.47,
+                  "projectedKneeRangeDegrees": {
+                    "count": 30,
+                    "min": 73.47,
+                    "max": 166.082,
+                    "range": 92.612
+                  },
+                  "projectedHipRangeDegrees": {
+                    "count": 30,
+                    "min": 74.736,
+                    "max": 160.571,
+                    "range": 85.835
+                  }
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-03",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "measurementPreview": []
+          },
+          {
+            "id": "SQUAT-04",
+            "status": "MEASURED",
+            "reasonCode": "NOT_COACH_VALIDATED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 10.711,
+                "observedValue": {
+                  "maximumProjectedLeanDegrees": 34.156,
+                  "bottomProjectedLeanDegrees": 32.785,
+                  "earlyAscentLeanChangeDegrees": 1.102,
+                  "hipShoulderRiseDifferenceRatio": -0.0284
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 4
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 17.618,
+                "observedValue": {
+                  "maximumProjectedLeanDegrees": 34.101,
+                  "bottomProjectedLeanDegrees": 28.458,
+                  "earlyAscentLeanChangeDegrees": 5.157,
+                  "hipShoulderRiseDifferenceRatio": 0.0331
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 4
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-05",
+            "status": "MEASURED",
+            "reasonCode": "NOT_COACH_VALIDATED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 10.61,
+                "observedValue": {
+                  "descentSeconds": 1.9,
+                  "ascentSeconds": 0.7,
+                  "totalSeconds": 2.6,
+                  "completedCycleObserved": true,
+                  "descentDifferenceFromClipMedianSeconds": -0.055,
+                  "ascentDifferenceFromClipMedianSeconds": -0.1
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 17.22,
+                "observedValue": {
+                  "descentSeconds": 2.01,
+                  "ascentSeconds": 0.9,
+                  "totalSeconds": 2.91,
+                  "completedCycleObserved": true,
+                  "descentDifferenceFromClipMedianSeconds": 0.055,
+                  "ascentDifferenceFromClipMedianSeconds": 0.1
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-06",
+            "status": "NOT_SUPPORTED",
+            "reasonCode": "NOT_SUPPORTED",
+            "measurementPreview": []
+          },
+          {
+            "id": "SQUAT-07",
+            "status": "NOT_SUPPORTED",
+            "reasonCode": "NOT_SUPPORTED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 10.811,
+                "observedValue": {
+                  "heelToeProjectedAngleChangeDegrees": -14.82,
+                  "heelToeProjectedAngleRangeDegrees": {
+                    "count": 25,
+                    "min": -33.228,
+                    "max": -16.889,
+                    "range": 16.339
+                  }
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 4
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 17.117,
+                "observedValue": {
+                  "heelToeProjectedAngleChangeDegrees": -28.79,
+                  "heelToeProjectedAngleRangeDegrees": {
+                    "count": 30,
+                    "min": -44.779,
+                    "max": -14.866,
+                    "range": 29.913
+                  }
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 4
+              }
+            ]
+          },
+          {
+            "id": "SQUAT-08",
+            "status": "MEASURED",
+            "reasonCode": "NOT_COACH_VALIDATED",
+            "measurementPreview": [
+              {
+                "repNumber": 1,
+                "timestampSeconds": 10.61,
+                "observedValue": {
+                  "descentSeconds": 1.9,
+                  "ascentSeconds": 0.7,
+                  "totalSeconds": 2.6,
+                  "completedCycleObserved": true,
+                  "hipAboveKneeRatio": 0.2722
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              },
+              {
+                "repNumber": 2,
+                "timestampSeconds": 17.22,
+                "observedValue": {
+                  "descentSeconds": 2.01,
+                  "ascentSeconds": 0.9,
+                  "totalSeconds": 2.91,
+                  "completedCycleObserved": true,
+                  "hipAboveKneeRatio": 0.2556
+                },
+                "measurementQuality": {
+                  "continuousTracking": true,
+                  "stableReference": false,
+                  "sufficientForExperimentalComparison": false,
+                  "maximumGapSeconds": 0.101,
+                  "coverageThreshold": 0.8,
+                  "maximumGapThresholdSeconds": 0.31,
+                  "reasonCode": "TRACKING_OR_REFERENCE_UNVERIFIED"
+                },
+                "evidenceFrames": 3
+              }
+            ]
+          }
+        ]
+      },
+      "experimental": {
+        "passed": 0,
+        "improved": 0,
+        "predictionCount": 10,
+        "criteria": [
+          {
+            "id": "SQUAT-01",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "missingRequirements": [
+              "TRACKING_OR_REFERENCE_UNVERIFIED"
+            ],
+            "measurementAvailable": true,
+            "predictions": 2
+          },
+          {
+            "id": "SQUAT-02",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "missingRequirements": [
+              "TRACKING_OR_REFERENCE_UNVERIFIED"
+            ],
+            "measurementAvailable": true,
+            "predictions": 2
+          },
+          {
+            "id": "SQUAT-03",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "VIEW_NOT_SUITABLE",
+            "missingRequirements": [
+              "VIEW_NOT_SUITABLE"
+            ],
+            "measurementAvailable": false,
+            "predictions": 0
+          },
+          {
+            "id": "SQUAT-04",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "missingRequirements": [
+              "TRACKING_OR_REFERENCE_UNVERIFIED"
+            ],
+            "measurementAvailable": true,
+            "predictions": 2
+          },
+          {
+            "id": "SQUAT-05",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "missingRequirements": [
+              "TRACKING_OR_REFERENCE_UNVERIFIED"
+            ],
+            "measurementAvailable": true,
+            "predictions": 2
+          },
+          {
+            "id": "SQUAT-06",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NOT_SUPPORTED",
+            "missingRequirements": [
+              "NOT_SUPPORTED"
+            ],
+            "measurementAvailable": false,
+            "predictions": 0
+          },
+          {
+            "id": "SQUAT-07",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": "NO_FLOOR_CALIBRATION",
+            "missingRequirements": [
+              "NO_FLOOR_CALIBRATION"
+            ],
+            "measurementAvailable": true,
+            "predictions": 0
+          },
+          {
+            "id": "SQUAT-08",
+            "status": "UNABLE_TO_ASSESS",
+            "reasonCode": null,
+            "missingRequirements": [
+              "TRACKING_OR_REFERENCE_UNVERIFIED"
+            ],
+            "measurementAvailable": true,
+            "predictions": 2
+          }
+        ]
+      }
+    }
+  ]
+}

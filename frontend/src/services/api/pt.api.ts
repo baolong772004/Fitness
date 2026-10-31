@@ -4,6 +4,7 @@ import { ApiBooking, ApiCoachProfile, ApiCoachSchedule, ApiCoachTrainee, ApiSubs
 export interface CoachTraineeMembership {
   id: number;
   userId: number;
+  level?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'TRIAL' | null;
   startDate: string;
   endDate: string;
   remainingSessions: number | null;
@@ -24,6 +25,13 @@ export interface CoachTraineeMembership {
 
 export interface CoachWorkoutPlan {
   id: number;
+  kind?: 'TEMPLATE' | 'ASSIGNED';
+  workoutPlanId?: number | null;
+  coachId?: number;
+  programName?: string;
+  status?: 'ACTIVE' | 'ARCHIVED';
+  version?: number;
+  updatedAt?: string;
   memberId: number | null;
   title: string;
   description: string | null;
@@ -31,6 +39,19 @@ export interface CoachWorkoutPlan {
   mealDays: CoachMealDay[];
   createdAt: string;
   member: { id: number; fullName: string } | null;
+}
+
+export interface WorkoutPlanRevision {
+  id: number;
+  studentPlanId: number;
+  version: number;
+  title: string;
+  description: string | null;
+  sessions: CoachPlanSession[];
+  mealDays: CoachMealDay[];
+  reason: string;
+  changedBy: { id: number; fullName: string };
+  createdAt: string;
 }
 
 export interface CoachPlanExercise {
@@ -69,6 +90,7 @@ export interface CoachPlanDraft {
   description: string;
   sessions: CoachPlanSession[];
   mealDays: CoachMealDay[];
+  changeReason?: string;
 }
 
 export type GeneratedCoachPlan = Omit<CoachPlanDraft, 'memberId'>;
@@ -135,6 +157,26 @@ export const ptApi = {
       body: JSON.stringify({ ...(memberId ? { memberId } : {}), request: aiRequest })
     });
     return res.data;
+  },
+
+  async assignCoachPlan(planId: number, memberId: number, programName: string) {
+    return request<{ success: boolean; data: CoachWorkoutPlan }>(`/pt/coach/plans/${planId}/assign`, {
+      method: 'POST', body: JSON.stringify({ memberId, programName }),
+    });
+  },
+  async updateStudentPlan(planId: number, draft: CoachPlanDraft, expectedVersion: number) {
+    return request<{ success: boolean; data: CoachWorkoutPlan }>(`/pt/coach/assigned-plans/${planId}`, {
+      method: 'PUT', body: JSON.stringify({ ...draft, expectedVersion }),
+    });
+  },
+  async getStudentPlanRevisions(planId: number) {
+    const result = await request<{ success: boolean; data: WorkoutPlanRevision[] }>(`/pt/coach/assigned-plans/${planId}/revisions`);
+    return result.data;
+  },
+  async restoreStudentPlan(planId: number, revisionId: number, expectedVersion: number, changeReason: string) {
+    return request<{ success: boolean; data: CoachWorkoutPlan }>(`/pt/coach/assigned-plans/${planId}/restore`, {
+      method: 'POST', body: JSON.stringify({ revisionId, expectedVersion, changeReason }),
+    });
   },
   async getAvailableTrainers() {
     return request<{

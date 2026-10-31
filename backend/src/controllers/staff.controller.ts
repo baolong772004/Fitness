@@ -200,6 +200,19 @@ export class StaffController {
   // GIAI ĐOẠN 3: HỖ TRỢ THANH TOÁN TẠI QUẦY (Offline POS Fallback)
   // =========================================================================
 
+  static async createMemberAccount(req: StaffShiftRequest, res: Response) {
+    try {
+      const { fullName, phone, email } = req.body;
+      if (typeof fullName !== 'string' || typeof phone !== 'string' || (email !== undefined && typeof email !== 'string')) {
+        return res.status(400).json({ success: false, message: 'Vui lòng nhập họ tên, số điện thoại và email hợp lệ.' });
+      }
+      const result = await StaffService.createMemberAccount({ fullName, phone, email, staffId: req.user!.userId });
+      return res.status(201).json(result);
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message || 'Không thể tạo tài khoản hội viên.' });
+    }
+  }
+
   /**
    * Khách Walk-in (khách mới chưa tải app): Tạo nhanh, chọn gói, thu tiền, gửi SMS
    */
@@ -219,7 +232,7 @@ export class StaffController {
       const staffId = req.user!.userId;
       const shiftId = req.shift!.id;
 
-      if (!fullName || !phone || !packageId || !paymentMethod) {
+      if (typeof fullName !== 'string' || typeof phone !== 'string' || (email !== undefined && typeof email !== 'string') || !packageId || !paymentMethod) {
         return res.status(400).json({
           success: false,
           message: 'Thiếu thông tin bắt buộc: fullName, phone, packageId, paymentMethod (CASH hoặc POS).'

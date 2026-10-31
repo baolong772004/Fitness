@@ -20,12 +20,16 @@ const { cancelUncoveredWalletBooking, markPtNoShow } = await import('../src/serv
 const { backfillPtWallet } = await import('../scripts/backfillPtWallet.js');
 const { createWalletPtMakeup } = await import('../src/services/ptBooking.service.js');
 const { PtController } = await import('../src/controllers/pt.controller.js');
+const { requestCoachChange, resolveCoachChange } = await import('../src/controllers/ptCoachChange.controller.js');
 const { PaymentController } = await import('../src/controllers/payment.controller.js');
 const { putCoachDates } = await import('../src/controllers/ptAvailability.controller.js');
 const { adjustPtWallet, createPtProduct, updatePtProduct, createPtRenewalOption, setCoachSpecializations } = await import('../src/controllers/ptWallet.controller.js');
 const { updateTrainerPricing } = await import('../src/controllers/adminTrainer.controller.js');
 const { getMembersList, getMemberDetailProfile } = await import('../src/controllers/admin.controller.js');
 const { getPtChatAccess } = await import('../src/services/ptChat.service.js');
+const { getMemberProgress } = await import('../src/controllers/workoutLog.controller.js');
+const { getCoachTrainees } = await import('../src/controllers/coachWorkspace.controller.js');
+const { reviseStudentPlan } = await import('../src/services/studentWorkoutPlan.service.js');
 const prisma = new PrismaClient();
 
 let sequence = 0;
@@ -46,6 +50,10 @@ async function memberFixture(t: { after: (fn: () => Promise<void>) => void }) {
     const batchIds = (await prisma.ptCreditBatch.findMany({ where: { wallet: { memberId: user.id } }, select: { id: true } })).map(row => row.id);
     const bookingIds = (await prisma.booking.findMany({ where: { memberId: user.id }, select: { id: true } })).map(row => row.id);
     await prisma.ptRenewalEvent.deleteMany({ where: { batchId: { in: batchIds } } });
+    await prisma.ptCoachChangeRequest.deleteMany({ where: { batchId: { in: batchIds } } });
+    const studentPlanIds = (await prisma.studentWorkoutPlan.findMany({ where: { memberId: user.id }, select: { id: true } })).map(row => row.id);
+    await prisma.workoutPlanRevision.deleteMany({ where: { studentPlanId: { in: studentPlanIds } } });
+    await prisma.studentWorkoutPlan.deleteMany({ where: { memberId: user.id } });
     await prisma.payment.deleteMany({ where: { userId: user.id, ptRenewalBatchId: { not: null } } });
     await prisma.ptCreditTransaction.deleteMany({ where: { batchId: { in: batchIds } } });
     await prisma.ptBookingCreditAllocation.deleteMany({ where: { bookingId: { in: bookingIds } } });
@@ -54,6 +62,7 @@ async function memberFixture(t: { after: (fn: () => Promise<void>) => void }) {
     await prisma.ptCreditBatch.deleteMany({ where: { id: { in: batchIds } } });
     await prisma.ptWallet.deleteMany({ where: { memberId: user.id } });
     await prisma.checkIn.deleteMany({ where: { memberId: user.id } });
+    await prisma.ptPurchaseItem.deleteMany({ where: { payment: { userId: user.id } } });
     await prisma.payment.deleteMany({ where: { userId: user.id } });
     await prisma.membership.deleteMany({ where: { userId: user.id } });
     await prisma.ptRenewalOption.deleteMany({ where: { id: { in: renewalOptions } } });
@@ -76,17 +85,23 @@ async function memberFixture(t: { after: (fn: () => Promise<void>) => void }) {
     assert.equal((await markPaymentPaid(payment.orderCode!, 100000)).result, 'PAID');
     return { gym, payment };
   };
-  const buy = async (level: string, sessionCount: number, quantity = 1, durationDays?: number) => {
+  const buy = async (level: string, sessionCount: number, quantity = 1, durationDays?: number, purchaseMode?: 'PACKAGE' | 'SINGLE') => {
     const product = await prisma.ptProduct.create({ data: { name: `${level} ${randomUUID()}`,
       level, sessionCount, price: 100000, durationDays } });
     products.push(product.id);
     const code = orderCode();
     const payment = await prisma.payment.create({ data: { userId: user.id, amount: 100000 * quantity,
       method: 'PAYOS', status: 'PENDING', orderCode: code, transactionNo: `TEST-${code}`,
-      ptProductId: product.id, ptQuantity: quantity,
+      ptProductId: product.id, ptQuantity: quantity, ptPurchaseMode: purchaseMode,
       ptLevelSnapshot: level, ptSessionsSnapshot: sessionCount, ptDurationDays: durationDays } });
     assert.equal((await markPaymentPaid(payment.orderCode!, 100000 * quantity)).result, 'PAID');
     return payment;
+  };
+  const createProduct = async (level: string, sessionCount: number, durationDays: number, price: number) => {
+    const product = await prisma.ptProduct.create({ data: { name: `${level} ${sessionCount} ${randomUUID()}`,
+      level, sessionCount, durationDays, price } });
+    products.push(product.id);
+    return product;
   };
   const renewalOrder = async (batchId: number, durationDays: number, amount = 50000) => {
     const batch = await prisma.ptCreditBatch.findUniqueOrThrow({ where: { id: batchId },
@@ -102,7 +117,7 @@ async function memberFixture(t: { after: (fn: () => Promise<void>) => void }) {
       ptRenewalDays: durationDays, ptLevelSnapshot: batch.level } });
     return { option, payment };
   };
-  return { user, makeGym, buy, renewalOrder, renewalOptions };
+  return { user, makeGym, buy, createProduct, renewalOrder, renewalOptions };
 }
 
 async function coachFixture(t: { after: (fn: () => Promise<void>) => void }, date: string) {
@@ -129,6 +144,38 @@ test('paid Gym gift grants exactly two Trial credits despite callback replay', a
   const wallet = await walletSummary(prisma, user.id);
   assert.equal(wallet.levels.find(row => row.level === 'TRIAL')?.total, 2);
   assert.equal(await prisma.ptCreditBatch.count({ where: { membershipId: payment.membershipId } }), 1);
+});
+
+test('mixed PT order uses snapshots, grants separate lots and ignores callback replay', async t => {
+  const { user, makeGym, createProduct } = await memberFixture(t);
+  await makeGym();
+  const five = await createProduct('BEGINNER', 5, 30, 150000);
+  const ten = await createProduct('BEGINNER', 10, 60, 270000);
+  const twenty = await createProduct('ADVANCED', 20, 120, 500000);
+  const amount = 150000 + 270000 + 500000 + 3 * 40000;
+  const code = orderCode();
+  const payment = await prisma.payment.create({ data: { userId: user.id, amount,
+    method: 'PAYOS', status: 'PENDING', orderCode: code, transactionNo: `TEST-${code}`,
+    ptPurchaseItems: { create: [
+      { productId: five.id, mode: 'PACKAGE', nameSnapshot: five.name, levelSnapshot: five.level,
+        sessionsSnapshot: 5, durationDays: 30, unitPrice: 150000, quantity: 1, unitStartIndex: 0 },
+      { productId: ten.id, mode: 'PACKAGE', nameSnapshot: ten.name, levelSnapshot: ten.level,
+        sessionsSnapshot: 10, durationDays: 60, unitPrice: 270000, quantity: 1, unitStartIndex: 1 },
+      { productId: twenty.id, mode: 'PACKAGE', nameSnapshot: twenty.name, levelSnapshot: twenty.level,
+        sessionsSnapshot: 20, durationDays: 120, unitPrice: 500000, quantity: 1, unitStartIndex: 2 },
+      { mode: 'SINGLE', nameSnapshot: 'Advanced single', levelSnapshot: 'ADVANCED',
+        sessionsSnapshot: 1, durationDays: 14, unitPrice: 40000, quantity: 3, unitStartIndex: 3 },
+    ] } } });
+  await prisma.ptProduct.update({ where: { id: five.id }, data: { price: 999000, durationDays: 1, isActive: false } });
+  assert.equal((await markPaymentPaid(code, amount)).result, 'PAID');
+  assert.equal((await markPaymentPaid(code, amount)).result, 'ALREADY_PAID');
+  const batches = await prisma.ptCreditBatch.findMany({ where: { paymentId: payment.id },
+    orderBy: { purchaseUnitIndex: 'asc' } });
+  assert.deepEqual(batches.map(row => row.initialCount), [5, 10, 20, 3]);
+  assert.deepEqual(batches.map(row => row.source), ['PACKAGE_PURCHASE', 'PACKAGE_PURCHASE', 'PACKAGE_PURCHASE', 'SINGLE_PURCHASE']);
+  assert.deepEqual(batches.map(row => row.ptProductIdSnapshot), [five.id, ten.id, twenty.id, null]);
+  assert.deepEqual(batches.map(row => Math.round((row.endAt!.getTime() - row.startAt!.getTime()) / 86400000)), [30, 60, 120, 14]);
+  assert.equal(await prisma.ptCreditTransaction.count({ where: { batchId: { in: batches.map(row => row.id) }, kind: 'GRANT' } }), 4);
 });
 
 test('admin member list and profile report each member real Gym, PT credit and check-in data', async t => {
@@ -175,6 +222,30 @@ test('single Beginner and three Advanced accumulate independently and survive Gy
   const wallet = await walletSummary(prisma, user.id);
   assert.equal(wallet.levels.find(row => row.level === 'BEGINNER')?.available, 1);
   assert.equal(wallet.levels.find(row => row.level === 'ADVANCED')?.available, 3);
+});
+
+test('buying two Paid packages creates two quota-bearing credit batches', async t => {
+  const { user, makeGym, buy } = await memberFixture(t);
+  await makeGym();
+  const payment = await buy('BEGINNER', 4, 2, 30, 'PACKAGE');
+  const batches = await prisma.ptCreditBatch.findMany({ where: { paymentId: payment.id } });
+  assert.equal(batches.length, 2);
+  assert.ok(batches.every(batch => batch.source === 'PACKAGE_PURCHASE' && batch.initialCount === 4));
+  assert.deepEqual(batches.map(batch => batch.purchaseUnitIndex).sort(), [0, 1]);
+  assert.equal((await markPaymentPaid(payment.orderCode!, 200000)).result, 'ALREADY_PAID');
+  assert.equal(await prisma.ptCreditBatch.count({ where: { paymentId: payment.id } }), 2);
+  assert.equal((await walletSummary(prisma, user.id)).levels.find(row => row.level === 'BEGINNER')?.available, 8);
+});
+
+test('explicit single-session purchase grants one SINGLE_PURCHASE credit', async t => {
+  const { user, makeGym, buy } = await memberFixture(t);
+  await makeGym();
+  const payment = await buy('BEGINNER', 1, 1, 30, 'SINGLE');
+  const batches = await prisma.ptCreditBatch.findMany({ where: { paymentId: payment.id } });
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].source, 'SINGLE_PURCHASE');
+  assert.equal(batches[0].initialCount, 1);
+  assert.equal((await walletSummary(prisma, user.id)).levels.find(row => row.level === 'BEGINNER')?.available, 1);
 });
 
 test('batch booking holds credit, blocks wrong level, then settles and refunds once', async t => {
@@ -288,31 +359,28 @@ test('legacy PT balances and confirmed bookings backfill without duplicate grant
   assert.equal((await walletSummary(prisma, user.id)).levels.find(row => row.level === 'ADVANCED')?.available, 1);
 });
 
-test('early member absence transfers the held credit to a makeup session within seven days', async t => {
+test('early member absence releases the original Paid credit without creating makeup', async t => {
   const { user, makeGym, buy } = await memberFixture(t);
   await makeGym(); await buy('BEGINNER', 1);
   const date = vietnamDate(addDays(new Date(), 3));
   const coach = await coachFixture(t, date);
   const [original] = await createWalletPtBookings({ memberId: user.id, coachId: coach.id,
     level: 'BEGINNER', starts: [localInstant(date, 9 * 60)] });
-  const makeupDate = vietnamDate(addDays(localInstant(date, 9 * 60), 1));
-  const profile = await prisma.coachProfile.findUniqueOrThrow({ where: { userId: coach.id } });
-  await prisma.coachSchedule.create({ data: { coachProfileId: profile.id,
-    dayOfWeek: dayOfWeek(makeupDate), startTime: '09:00', endTime: '11:00' } });
   const absence = fakeResponse();
   await PtController.markAbsent({ user: { userId: user.id, role: 'MEMBER' },
     params: { id: String(original.id) }, body: { reason: 'Bận công tác' } } as any, absence.response);
   assert.equal(absence.output.code, 200);
-  assert.equal(absence.output.body.data.status, 'ABSENT_ELIGIBLE');
-  const makeup = await createWalletPtMakeup({ memberId: user.id, originalBookingId: original.id,
-    start: localInstant(makeupDate, 9 * 60) });
-  assert.equal(makeup.status, 'CONFIRMED');
-  assert.equal(makeup.isMakeup, true);
-  assert.equal(await prisma.ptBookingCreditAllocation.findUnique({ where: { bookingId: original.id } }), null);
-  assert.ok(await prisma.ptBookingCreditAllocation.findUnique({ where: { bookingId: makeup.id } }));
-  assert.equal((await walletSummary(prisma, user.id)).levels.find(row => row.level === 'BEGINNER')?.held, 1);
+  assert.equal(absence.output.body.data.status, 'CANCELLED');
+  assert.equal((await prisma.ptBookingCreditAllocation.findUnique({ where: { bookingId: original.id } }))?.status, 'RELEASED');
+  assert.equal(await prisma.makeUpRequest.count({ where: { originalBookingId: original.id } }), 0);
+  assert.equal((await walletSummary(prisma, user.id)).levels.find(row => row.level === 'BEGINNER')?.available, 1);
+  const replay = fakeResponse();
+  await PtController.markAbsent({ user: { userId: user.id, role: 'MEMBER' },
+    params: { id: String(original.id) }, body: { reason: 'Gọi lại' } } as any, replay.response);
+  assert.equal(replay.output.code, 409);
+  assert.equal(await prisma.ptCreditTransaction.count({ where: { bookingId: original.id, kind: 'PROTECTED_CANCEL' } }), 1);
   await assert.rejects(createWalletPtMakeup({ memberId: user.id, originalBookingId: original.id,
-    start: localInstant(makeupDate, 10 * 60) }));
+    start: localInstant(date, 10 * 60) }));
 });
 
 test('late member absence consumes one credit and cannot create a makeup right', async t => {
@@ -399,7 +467,8 @@ test('cancelling Gym before a confirmed session releases its held paid credit', 
 });
 
 test('two paid purchases of the same level create separate batches and one pooled balance', async t => {
-  const { user, buy } = await memberFixture(t);
+  const { user, buy, makeGym } = await memberFixture(t);
+  await makeGym();
   await buy('INTERMEDIATE', 2);
   await buy('INTERMEDIATE', 3);
   const balance = (await walletSummary(prisma, user.id)).levels.find(row => row.level === 'INTERMEDIATE');
@@ -549,6 +618,32 @@ test('PT chat access is restricted to the booked member and coach', async t => {
   await assert.rejects(getPtChatAccess(booking.id, outsider.user.id));
 });
 
+test('chat remains available through another active Paid batch with the same Coach, then becomes read-only at expiry', async t => {
+  const { user, makeGym, buy } = await memberFixture(t);
+  await makeGym();
+  const firstPayment = await buy('BEGINNER', 1, 1, 30, 'SINGLE');
+  const secondPayment = await buy('BEGINNER', 2, 1, 30, 'PACKAGE');
+  const date = vietnamDate(addDays(new Date(), 3));
+  const coach = await coachFixture(t, date);
+  const [first] = await createWalletPtBookings({ memberId: user.id, coachId: coach.id,
+    level: 'BEGINNER', starts: [localInstant(date, 9 * 60)] });
+  assert.equal((await prisma.ptBookingCreditAllocation.findUniqueOrThrow({ where: { bookingId: first.id } })).batchId,
+    (await prisma.ptCreditBatch.findFirstOrThrow({ where: { paymentId: firstPayment.id } })).id);
+  await prisma.$transaction(async tx => { await settlePtCredit(tx, first.id);
+    await tx.booking.update({ where: { id: first.id }, data: { status: 'COMPLETED' } }); });
+  const [second] = await createWalletPtBookings({ memberId: user.id, coachId: coach.id,
+    level: 'BEGINNER', starts: [localInstant(date, 10 * 60)] });
+  assert.equal((await prisma.ptBookingCreditAllocation.findUniqueOrThrow({ where: { bookingId: second.id } })).batchId,
+    (await prisma.ptCreditBatch.findFirstOrThrow({ where: { paymentId: secondPayment.id } })).id);
+  await prisma.$transaction(async tx => { await settlePtCredit(tx, second.id);
+    await tx.booking.update({ where: { id: second.id }, data: { status: 'COMPLETED' } }); });
+  assert.equal((await getPtChatAccess(first.id, user.id)).canSend, true);
+  assert.equal((await getPtChatAccess(first.id, coach.id)).canSend, true);
+  const secondBatch = await prisma.ptCreditBatch.findFirstOrThrow({ where: { paymentId: secondPayment.id } });
+  await prisma.ptCreditBatch.update({ where: { id: secondBatch.id }, data: { endAt: addDays(new Date(), -1) } });
+  assert.equal((await getPtChatAccess(first.id, user.id)).canSend, false);
+});
+
 test('mismatched PayOS amount requires review and grants no PT credit', async t => {
   const { user } = await memberFixture(t);
   const product = await prisma.ptProduct.create({ data: { name: `PT ${randomUUID()}`,
@@ -563,9 +658,12 @@ test('mismatched PayOS amount requires review and grants no PT credit', async t 
   assert.equal((await walletSummary(prisma, user.id)).total, 0);
 });
 
-test('paid PT credit without any Gym entitlement cannot book', async t => {
-  const { user, buy } = await memberFixture(t);
+test('paid PT credit without active Gym entitlement cannot book', async t => {
+  const { user, buy, makeGym } = await memberFixture(t);
+  const { gym } = await makeGym();
   await buy('BEGINNER', 1);
+  await prisma.membership.update({ where: { id: gym.id }, data: {
+    status: 'EXPIRED', endDate: addDays(new Date(), -1) } });
   const date = vietnamDate(addDays(new Date(), 3));
   const coach = await coachFixture(t, date);
   await assert.rejects(createWalletPtBookings({ memberId: user.id, coachId: coach.id,
@@ -638,26 +736,30 @@ test('member absence makeup quota is limited to three per paid credit batch', as
     await PtController.markAbsent({ user: { userId: user.id, role: 'MEMBER' },
       params: { id: String(booking.id) }, body: { reason: 'Cannot attend' } } as any, response.response);
     assert.equal(response.output.code, 200);
-    assert.equal(response.output.body.data.status, index < 3 ? 'ABSENT_ELIGIBLE' : 'ABSENT_NO_REFUND');
+    assert.equal(response.output.body.data.status, index < 3 ? 'CANCELLED' : 'ABSENT_NO_REFUND');
   }
   assert.equal((await walletSummary(prisma, user.id)).levels.find(row => row.level === 'BEGINNER')?.used, 1);
-  assert.equal(await prisma.ptCreditTransaction.count({ where: { kind: 'MEMBER_MAKEUP',
+  assert.equal(await prisma.ptCreditTransaction.count({ where: { kind: 'PROTECTED_CANCEL',
     batch: { wallet: { memberId: user.id } } } }), 3);
 });
 
-test('member absence on gifted Trial does not create repeatable makeup credit', async t => {
+test('gifted Trial allows one early preserved cancellation then debits', async t => {
   const { user, makeGym } = await memberFixture(t);
   await makeGym(2);
   const date = vietnamDate(addDays(new Date(), 3));
   const coach = await coachFixture(t, date);
-  const [booking] = await createWalletPtBookings({ memberId: user.id, coachId: coach.id,
-    level: 'TRIAL', starts: [localInstant(date, 9 * 60)] });
+  const bookings = await createWalletPtBookings({ memberId: user.id, coachId: coach.id,
+    level: 'TRIAL', starts: [localInstant(date, 9 * 60), localInstant(date, 10 * 60)] });
   const response = fakeResponse();
   await PtController.markAbsent({ user: { userId: user.id, role: 'MEMBER' },
-    params: { id: String(booking.id) }, body: { reason: 'Cannot attend' } } as any, response.response);
+    params: { id: String(bookings[0].id) }, body: { reason: 'Cannot attend' } } as any, response.response);
   assert.equal(response.output.code, 200);
-  assert.equal(response.output.body.data.status, 'ABSENT_NO_REFUND');
-  assert.equal(await prisma.makeUpRequest.count({ where: { originalBookingId: booking.id } }), 0);
+  assert.equal(response.output.body.data.status, 'CANCELLED');
+  const second = fakeResponse();
+  await PtController.markAbsent({ user: { userId: user.id, role: 'MEMBER' },
+    params: { id: String(bookings[1].id) }, body: { reason: 'Cannot attend' } } as any, second.response);
+  assert.equal(second.output.body.data.status, 'ABSENT_NO_REFUND');
+  assert.equal(await prisma.makeUpRequest.count({ where: { originalBookingId: { in: bookings.map(row => row.id) } } }), 0);
   assert.equal((await walletSummary(prisma, user.id)).levels.find(row => row.level === 'TRIAL')?.used, 1);
 });
 
@@ -737,7 +839,8 @@ test('unverified Gym payment does not authorize a PT booking', async t => {
 });
 
 test('paid PT duration starts at first confirmation and replay does not extend it', async t => {
-  const { user, buy } = await memberFixture(t);
+  const { user, buy, makeGym } = await memberFixture(t);
+  await makeGym();
   const payment = await buy('BEGINNER', 2, 1, 5);
   const batch = await prisma.ptCreditBatch.findFirstOrThrow({ where: { paymentId: payment.id } });
   assert.ok(batch.startAt && batch.endAt && batch.activatedAt);
@@ -768,7 +871,8 @@ test('Admin must configure duration and can update PT product without changing o
 });
 
 test('concurrent PT payment confirmations grant one batch', async t => {
-  const { user } = await memberFixture(t);
+  const { user, makeGym } = await memberFixture(t);
+  await makeGym();
   const product = await prisma.ptProduct.create({ data: { name: `PT ${randomUUID()}`,
     level: 'ADVANCED', sessionCount: 3, price: 100000, durationDays: 10 } });
   t.after(() => prisma.ptProduct.delete({ where: { id: product.id } }).then(() => undefined));
@@ -839,7 +943,8 @@ test('coach absence makeup can use its recorded hold after paid batch expiry wit
 });
 
 test('active PT renewal extends only its own batch from current end without adding sessions', async t => {
-  const { user, buy, renewalOrder } = await memberFixture(t);
+  const { user, buy, renewalOrder, makeGym } = await memberFixture(t);
+  await makeGym();
   const targetPayment = await buy('BEGINNER', 2, 1, 5);
   const otherPayment = await buy('BEGINNER', 1, 1, 10);
   const target = await prisma.ptCreditBatch.findFirstOrThrow({ where: { paymentId: targetPayment.id } });
@@ -857,7 +962,8 @@ test('active PT renewal extends only its own batch from current end without addi
 });
 
 test('Admin renewal option uses selected product and independently configured duration', async t => {
-  const { user, buy, renewalOptions } = await memberFixture(t);
+  const { user, buy, renewalOptions, makeGym } = await memberFixture(t);
+  await makeGym();
   const purchase = await buy('BEGINNER', 2, 1, 30);
   const productId = (await prisma.payment.findUniqueOrThrow({ where: { id: purchase.id } })).ptProductId!;
   const response = fakeResponse();
@@ -873,7 +979,8 @@ test('Admin renewal option uses selected product and independently configured du
 });
 
 test('renewal price for one PT product cannot renew another product of the same level', async t => {
-  const { user, buy, renewalOrder } = await memberFixture(t);
+  const { user, buy, renewalOrder, makeGym } = await memberFixture(t);
+  await makeGym();
   const firstPurchase = await buy('BEGINNER', 2, 1, 30);
   const secondPurchase = await buy('BEGINNER', 5, 1, 30);
   const first = await prisma.ptCreditBatch.findFirstOrThrow({ where: { paymentId: firstPurchase.id } });
@@ -893,7 +1000,8 @@ test('renewal price for one PT product cannot renew another product of the same 
 });
 
 test('expired PT renewed within 30 days restores only unused credit from confirmation time', async t => {
-  const { user, buy, renewalOrder } = await memberFixture(t);
+  const { user, buy, renewalOrder, makeGym } = await memberFixture(t);
+  await makeGym();
   const purchase = await buy('ADVANCED', 2, 1, 5);
   const batch = await prisma.ptCreditBatch.findFirstOrThrow({ where: { paymentId: purchase.id } });
   const previousEndAt = addDays(new Date(), -2);
@@ -910,7 +1018,8 @@ test('expired PT renewed within 30 days restores only unused credit from confirm
 });
 
 test('renewal paid after 30-day grace requires review and cannot revive the batch', async t => {
-  const { user, buy, renewalOrder } = await memberFixture(t);
+  const { user, buy, renewalOrder, makeGym } = await memberFixture(t);
+  await makeGym();
   const purchase = await buy('BEGINNER', 2, 1, 5);
   const batch = await prisma.ptCreditBatch.findFirstOrThrow({ where: { paymentId: purchase.id } });
   const oldEndAt = addDays(new Date(), -31);
@@ -928,7 +1037,8 @@ test('renewal paid after 30-day grace requires review and cannot revive the batc
 });
 
 test('concurrent renewal callbacks extend a PT batch exactly once', async t => {
-  const { buy, renewalOrder } = await memberFixture(t);
+  const { buy, renewalOrder, makeGym } = await memberFixture(t);
+  await makeGym();
   const purchase = await buy('INTERMEDIATE', 2, 1, 5);
   const batch = await prisma.ptCreditBatch.findFirstOrThrow({ where: { paymentId: purchase.id } });
   const { payment } = await renewalOrder(batch.id, 3);
@@ -940,10 +1050,110 @@ test('concurrent renewal callbacks extend a PT batch exactly once', async t => {
 
 test('30-day renewal grace includes the boundary and excludes the next millisecond', () => {
   const now = new Date('2026-10-20T00:00:00.000Z');
-  const batch = { level: 'BEGINNER', initialCount: 2, usedCount: 1,
+  const batch = { level: 'BEGINNER', source: 'PACKAGE_PURCHASE', initialCount: 2, usedCount: 1,
     endAt: new Date(now.getTime() - 30 * 86400000) };
   assert.equal(ptRenewalError(batch, now), null);
   assert.ok(ptRenewalError(batch, new Date(now.getTime() + 1)));
+});
+
+test('Paid package Coach change waits for Admin when future booking exists and restores its held Credit', async t => {
+  const { user, makeGym, buy } = await memberFixture(t);
+  await makeGym(); await buy('BEGINNER', 3);
+  const date = vietnamDate(addDays(new Date(), 3));
+  const oldCoach = await coachFixture(t, date);
+  const newCoach = await coachFixture(t, date);
+  const [booking] = await createWalletPtBookings({ memberId: user.id, coachId: oldCoach.id,
+    level: 'BEGINNER', starts: [localInstant(date, 9 * 60)] });
+  const oldPlan = await prisma.studentWorkoutPlan.create({ data: { memberId: user.id,
+    coachId: oldCoach.id, programName: 'PT', title: 'Giáo án sức mạnh',
+    sessionsJson: '[]', mealsJson: '[]' } });
+  const batchId = (await prisma.ptBookingCreditAllocation.findUniqueOrThrow({ where: { bookingId: booking.id } })).batchId;
+  const request = fakeResponse();
+  await requestCoachChange({ user: { userId: user.id, role: 'MEMBER' }, body: {
+    batchId, newCoachId: newCoach.id, reason: 'Muốn thay đổi phương pháp tập',
+  } } as any, request.response);
+  assert.equal(request.output.code, 201);
+  assert.equal(request.output.body.data.status, 'PENDING_ADMIN');
+  assert.equal((await prisma.ptCreditBatch.findUniqueOrThrow({ where: { id: batchId } })).coachId, oldCoach.id);
+  const admin = await prisma.user.create({ data: { email: `admin-${randomUUID()}@example.invalid`,
+    fullName: 'PT test admin', password: 'unused', role: 'ADMIN', status: 'ACTIVE' } });
+  t.after(async () => { await prisma.actionLog.deleteMany({ where: { userId: admin.id } });
+    await prisma.notification.deleteMany({ where: { userId: admin.id } });
+    await prisma.user.delete({ where: { id: admin.id } }); });
+  const approval = fakeResponse();
+  await resolveCoachChange({ user: { userId: admin.id, role: 'ADMIN' },
+    params: { id: String(request.output.body.data.id) }, body: { decision: 'APPROVED', adminNote: 'Đã hủy lịch cũ' } } as any, approval.response);
+  assert.equal(approval.output.code, 200);
+  assert.equal((await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } })).status, 'CANCELLED');
+  assert.equal((await prisma.ptCreditBatch.findUniqueOrThrow({ where: { id: batchId } })).coachId, newCoach.id);
+  assert.equal((await prisma.studentWorkoutPlan.findUniqueOrThrow({ where: { id: oldPlan.id } })).status, 'ARCHIVED');
+  assert.equal((await prisma.studentWorkoutPlan.findFirstOrThrow({ where: { memberId: user.id,
+    coachId: newCoach.id, status: 'ACTIVE' } })).title, oldPlan.title);
+  const transferred = await prisma.studentWorkoutPlan.findFirstOrThrow({ where: { memberId: user.id,
+    coachId: newCoach.id, status: 'ACTIVE' } });
+  const revisedDraft = { title: 'Giáo án sau chuyển Coach', sessions: [{ dayOfWeek: 1,
+    title: 'Tập toàn thân', notes: '', exercises: [{ exerciseName: 'Squat', sets: 3, reps: 8,
+      weightKg: 20, notes: '' }] }], mealDays: [] };
+  await assert.rejects(prisma.$transaction(tx => reviseStudentPlan(tx, { id: oldPlan.id,
+    actor: { userId: oldCoach.id, role: 'COACH' }, expectedVersion: 1, reason: 'Sửa sau chuyển Coach',
+    draft: revisedDraft })));
+  const revised = await prisma.$transaction(tx => reviseStudentPlan(tx, { id: transferred.id,
+    actor: { userId: newCoach.id, role: 'COACH' }, expectedVersion: 1, reason: 'Tiếp nhận giáo án',
+    draft: revisedDraft }));
+  assert.equal(revised.plan.version, 2);
+  assert.equal((await prisma.ptBookingCreditAllocation.findUniqueOrThrow({ where: { bookingId: booking.id } })).status, 'RELEASED');
+  assert.equal((await walletSummary(prisma, user.id)).levels.find(row => row.level === 'BEGINNER')?.available, 3);
+  const repeatedApproval = fakeResponse();
+  await resolveCoachChange({ user: { userId: admin.id, role: 'ADMIN' },
+    params: { id: String(request.output.body.data.id) }, body: { decision: 'APPROVED' } } as any, repeatedApproval.response);
+  assert.equal(repeatedApproval.output.code, 409);
+  assert.equal(await prisma.ptCreditTransaction.count({ where: { bookingId: booking.id, kind: 'RELEASE' } }), 1);
+  const formerAccess = fakeResponse();
+  await getMemberProgress({ user: { userId: oldCoach.id, role: 'COACH' },
+    params: { memberId: String(user.id) } } as any, formerAccess.response);
+  assert.equal(formerAccess.output.code, 403);
+  const newAccess = fakeResponse();
+  await getMemberProgress({ user: { userId: newCoach.id, role: 'COACH' },
+    params: { memberId: String(user.id) } } as any, newAccess.response);
+  assert.equal(newAccess.output.code, 200);
+  const trainees = fakeResponse();
+  await getCoachTrainees({ user: { userId: newCoach.id, role: 'COACH' } } as any, trainees.response);
+  assert.ok(trainees.output.body.data.some((row: any) => row.userId === user.id));
+  const duplicate = fakeResponse();
+  await requestCoachChange({ user: { userId: user.id, role: 'MEMBER' }, body: {
+    batchId, newCoachId: oldCoach.id, reason: 'Đổi lại',
+  } } as any, duplicate.response);
+  assert.equal(duplicate.output.code, 409);
+});
+
+test('concurrent Coach change requests approve only one transfer and preserve Credit', async t => {
+  const { user, makeGym, buy } = await memberFixture(t);
+  await makeGym(); await buy('BEGINNER', 3, 1, 30, 'PACKAGE');
+  const date = vietnamDate(addDays(new Date(), 3));
+  const oldCoach = await coachFixture(t, date);
+  const firstCandidate = await coachFixture(t, date);
+  const secondCandidate = await coachFixture(t, date);
+  const [booking] = await createWalletPtBookings({ memberId: user.id, coachId: oldCoach.id,
+    level: 'BEGINNER', starts: [localInstant(date, 9 * 60)] });
+  const batchId = (await prisma.ptBookingCreditAllocation.findUniqueOrThrow({ where: { bookingId: booking.id } })).batchId;
+  const absence = fakeResponse();
+  await PtController.markAbsent({ user: { userId: user.id, role: 'MEMBER' },
+    params: { id: String(booking.id) }, body: { reason: 'Đổi lịch' } } as any, absence.response);
+  assert.equal(absence.output.code, 200);
+  const a = fakeResponse(), b = fakeResponse();
+  await Promise.all([
+    requestCoachChange({ user: { userId: user.id, role: 'MEMBER' }, body: {
+      batchId, newCoachId: firstCandidate.id, reason: 'Đổi phương pháp' } } as any, a.response),
+    requestCoachChange({ user: { userId: user.id, role: 'MEMBER' }, body: {
+      batchId, newCoachId: secondCandidate.id, reason: 'Đổi phương pháp' } } as any, b.response),
+  ]);
+  assert.deepEqual([a.output.code, b.output.code].sort(), [201, 409]);
+  assert.equal(await prisma.ptCoachChangeRequest.count({ where: { batchId, status: 'APPROVED' } }), 1);
+  const batch = await prisma.ptCreditBatch.findUniqueOrThrow({ where: { id: batchId } });
+  assert.ok([firstCandidate.id, secondCandidate.id].includes(batch.coachId!));
+  assert.equal(batch.usedCount, 0);
+  assert.equal(batch.heldCount, 0);
+  assert.equal((await walletSummary(prisma, user.id)).levels.find(row => row.level === 'BEGINNER')?.available, 3);
 });
 
 test.after(async () => { await prisma.$disconnect(); });

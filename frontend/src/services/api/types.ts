@@ -15,6 +15,7 @@ export interface ApiUser {
   weight?: number | null;
   role: 'ADMIN' | 'STAFF' | 'COACH' | 'MEMBER' | string;
   status: string;
+  mustChangePassword?: boolean;
   memberships?: Array<{
     id: number;
     packageId: number;
@@ -327,4 +328,57 @@ export interface Pagination {
   page: number;
   totalPages: number;
   limit: number;
+}
+
+export interface ApiAdminAnalytics {
+  timeFilter: string;
+  label: string;
+  subLabel: string;
+  revenue: number;
+  growth: string;
+  activeCheckIns: number;
+  totalMembers: number;
+  activeMembers: number;
+  renewalRate: string;
+  totalCoaches: number;
+  avgMembersPerCoach: string;
+  catalogCount: number;
+  ptRevenueShare: string;
+  chartData: Array<{
+    label: string;
+    rev: number;
+    checkins: number;
+  }>;
+  serviceMix: Array<{
+    name: string;
+    amount: number;
+    percentage: number;
+  }>;
+  peakHours: Array<{
+    time: string;
+    count: number;
+    density: string;
+    label: string;
+    peak: boolean;
+  }>;
+  recentPayments: Array<{
+    id: string;
+    code: string;
+    memberId: string;
+    memberName: string;
+    memberPhone: string;
+    items: Array<{
+      name: string;
+      quantity: number;
+      unitPriceVND: number;
+      amountVND: number;
+    }>;
+    subtotalVND: number;
+    discountVND: number;
+    totalVND: number;
+    paymentMethod: string;
+    status: string;
+    staffName: string;
+    createdAt: string;
+  }>;
 }
