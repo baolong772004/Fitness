@@ -120,14 +120,22 @@ export class CheckInController {
       const [history, total] = await Promise.all([
         prisma.checkIn.findMany({
           where: { memberId: userId },
+          select: {
+            id: true,
+            membershipId: true,
+            checkInTime: true,
+            method: true,
+            status: true,
+            rejectReason: true,
+            membership: {
+              select: {
+                package: { select: { name: true } },
+              },
+            },
+          },
           skip,
           take: limit,
           orderBy: { checkInTime: 'desc' },
-          include: {
-            membership: {
-              include: { package: true }
-            }
-          }
         }),
         prisma.checkIn.count({ where: { memberId: userId } })
       ]);

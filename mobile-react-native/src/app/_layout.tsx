@@ -87,5 +87,11 @@ function RootNavigation() {
     <Stack.Screen name="change-password" options={{ title: 'Đổi mật khẩu', headerBackVisible: !user?.mustChangePassword, gestureEnabled: !user?.mustChangePassword }} />
     <Stack.Screen name="article" options={{ headerShown: false }} />
     <Stack.Screen name="articles" options={{ title: 'Tin tức & hướng dẫn' }} />
+    <Stack.Screen name="payment-history" options={{ title: 'Lịch sử thanh toán' }} />
+    <Stack.Screen name="booking-history" options={{ title: 'Lịch sử đặt lịch' }} />
+    <Stack.Screen name="rate-session" options={{ title: 'Đánh giá buổi tập' }} />
+    <Stack.Screen name="support" options={{ title: 'Hỗ trợ & Liên hệ' }} />
+    <Stack.Screen name="settings" options={{ title: 'Cài đặt' }} />
+    <Stack.Screen name="profile-edit" options={{ title: 'Chỉnh sửa hồ sơ' }} />
   </Stack>{!ready && <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: aura.cream, alignItems: 'center', justifyContent: 'center' }}><AuraLoader size={68} /></View>}</View>;
 }
