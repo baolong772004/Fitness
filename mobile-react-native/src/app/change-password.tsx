@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { aura } from '../lib/theme';
 import { Button, Card, Page } from '../components/ui';
 import { AuraLoadingOverlay } from '../components/AuraLoader';
@@ -12,6 +14,7 @@ function PasswordField({ label, value, onChangeText }: { label: string; value: s
 }
 
 export default function ChangePassword() {
+  const { user, completePasswordChange, signOut } = useAuth();
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -25,6 +28,12 @@ export default function ChangePassword() {
     setBusy(true); setError(null);
     try {
       await api.changePassword(oldPassword, newPassword);
+      if (user?.mustChangePassword) {
+        await completePasswordChange();
+        setOldPassword(''); setNewPassword(''); setConfirm('');
+        Alert.alert('Thành công', 'Mật khẩu mới đã được cập nhật.', [{ text: 'Tiếp tục', onPress: () => router.replace('/(tabs)') }]);
+        return;
+      }
       setOldPassword(''); setNewPassword(''); setConfirm('');
       Alert.alert('Thành công', 'Mật khẩu đã được cập nhật.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể đổi mật khẩu.'); }
@@ -33,10 +42,11 @@ export default function ChangePassword() {
   return <View style={{ flex: 1 }}><Page><Card style={{ padding: 22, borderRadius: 24, marginTop: 14 }}>
     <View style={{ width: 54, height: 54, borderRadius: 17, backgroundColor: aura.latte, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="lock-open-outline" size={29} color={aura.caramel} /></View>
     <Text style={{ color: aura.espresso, fontSize: 22, fontWeight: '900', marginTop: 17 }}>Bảo vệ tài khoản</Text>
-    <Text style={{ color: aura.muted, fontSize: 13, lineHeight: 19, marginTop: 7 }}>Nhập mật khẩu hiện tại, sau đó tạo mật khẩu mới cho tài khoản Aura của bạn.</Text>
+    <Text style={{ color: aura.muted, fontSize: 13, lineHeight: 19, marginTop: 7 }}>{user?.mustChangePassword ? 'Tài khoản do lễ tân tạo đang dùng mật khẩu tạm. Bạn cần đổi mật khẩu trước khi sử dụng ứng dụng.' : 'Nhập mật khẩu hiện tại, sau đó tạo mật khẩu mới cho tài khoản Aura của bạn.'}</Text>
     <View style={{ marginTop: 9 }}><PasswordField label="Mật khẩu hiện tại" value={oldPassword} onChangeText={setOldPassword} /><PasswordField label="Mật khẩu mới" value={newPassword} onChangeText={setNewPassword} /><PasswordField label="Nhập lại mật khẩu mới" value={confirm} onChangeText={setConfirm} /></View>
     <View style={{ flexDirection: 'row', gap: 6, marginTop: 10, alignItems: 'center' }}><Ionicons name="information-circle-outline" size={16} color={aura.muted} /><Text style={{ color: aura.muted, fontSize: 11 }}>Tối thiểu 6 ký tự, gồm chữ cái và chữ số.</Text></View>
     {error && <View style={{ marginTop: 15, padding: 12, borderRadius: 12, backgroundColor: '#FCEEE8' }}><Text style={{ color: '#B3261E', fontSize: 12 }}>{error}</Text></View>}
     <View style={{ marginTop: 20 }}><Button title={busy ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'} disabled={busy} onPress={() => void submit()} /></View>
+    {user?.mustChangePassword && <View style={{ marginTop: 10 }}><Button secondary title="Đăng xuất" disabled={busy} onPress={() => void signOut().then(() => router.replace('/auth'))} /></View>}
   </Card></Page><AuraLoadingOverlay visible={busy} message="Đang cập nhật mật khẩu..." /></View>;
 }

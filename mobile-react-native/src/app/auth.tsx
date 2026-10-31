@@ -42,12 +42,32 @@ export default function AuthScreen() {
     if (creating && password !== confirmPassword) return Alert.alert('Mật khẩu chưa khớp', 'Hãy nhập lại mật khẩu xác nhận.');
     if (creating && phone.trim() && (!/^\+?[0-9 ()-]+$/.test(phone.trim()) || phone.replace(/\D/g, '').length < 8 || phone.replace(/\D/g, '').length > 15)) return Alert.alert('Số điện thoại không hợp lệ', 'Số điện thoại cần từ 8 đến 15 chữ số.');
     setBusy(true);
-    try { if (creating) await signUp(name, email, password, phone); else await signIn(email, password); router.back(); }
+    try {
+      if (creating) {
+        await signUp(name, email, password, phone);
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)');
+      } else {
+        const loggedInUser = await signIn(email, password);
+        if (!loggedInUser.mustChangePassword) {
+          if (router.canGoBack()) router.back();
+          else router.replace('/(tabs)');
+        }
+      }
+    }
     catch (error) { showError(error); } finally { setBusy(false); }
   };
   const submitGoogle = async () => {
     setBusy(true);
-    try { const idToken = await getGoogleIdToken(); if (!idToken) return; await signInWithGoogle(idToken); router.back(); }
+    try {
+      const idToken = await getGoogleIdToken();
+      if (!idToken) return;
+      const loggedInUser = await signInWithGoogle(idToken);
+      if (!loggedInUser.mustChangePassword) {
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)');
+      }
+    }
     catch (error) { showError(error); } finally { setBusy(false); }
   };
   return <View style={{ flex: 1 }}><Page>

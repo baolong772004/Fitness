@@ -16,10 +16,10 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   useEffect(() => { if (!user) return; const timer = setInterval(() => void refreshUnreadCount(), 30000); return () => clearInterval(timer); }, [user, refreshUnreadCount]);
-  return <View style={{ flex: 1 }}><Tabs screenOptions={{ headerShown: false }} tabBar={({ state, navigation }) => {
+  return <View style={{ flex: 1 }}><Tabs backBehavior="initialRoute" screenOptions={{ headerShown: false }} tabBar={({ state, emitter, navigateToTab }) => {
     const open = (route: typeof state.routes[number]) => {
-      const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-      if (!event.defaultPrevented) navigation.navigate(route.name);
+      const event = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+      if (!event.defaultPrevented && state.routes[state.index]?.key !== route.key) navigateToTab(route.key);
       if (route.name === 'notifications') void refreshUnreadCount();
     };
     const qrRoute = state.routes.find(route => route.name === 'qr');

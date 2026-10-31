@@ -15,6 +15,7 @@ model User {
   id          Int        @id @default(autoincrement())
   email       String     @unique
   password    String
+  mustChangePassword Boolean @default(false)
   fullName    String
   phone       String?
   avatar      String?
@@ -31,11 +32,17 @@ model User {
   checkIns          CheckIn[]          @relation("MemberCheckIns")
   memberBookings    Booking[]          @relation("MemberBookings")
   workoutPlans      WorkoutPlan[]      @relation("MemberWorkoutPlans")
+  studentWorkoutPlans StudentWorkoutPlan[] @relation("StudentWorkoutPlanMember")
+  assignedWorkoutPlans StudentWorkoutPlan[] @relation("StudentWorkoutPlanCoach")
+  workoutPlanRevisions WorkoutPlanRevision[] @relation("WorkoutPlanRevisionEditor")
   progressLogs      ProgressLog[]
+  ptAssessmentsAsMember PtTrainingAssessment[] @relation("PtAssessmentMember")
+  ptAssessmentsAsCoach PtTrainingAssessment[] @relation("PtAssessmentCoach")
   payments          Payment[]
   givenReviews      Review[]           @relation("MemberReviews")
   supportRequests   SupportRequest[]   @relation("MemberSupport")
   sentPtChatMessages PtChatMessage[]    @relation("PtChatSender")
+  ptWallet          PtWallet?
 
   coachProfile      CoachProfile?
   coachBookings     Booking[]          @relation("CoachBookings")
@@ -51,6 +58,128 @@ model User {
   staffOperationalNotes OperationalNote[] @relation("StaffOperationalNotes")
   consultantPayments Payment[]         @relation("ConsultantPayments")
   staffPayments     Payment[]          @relation("StaffProcessedPayments")
+  exerciseAnalyses   ExerciseAnalysis[]
+  exerciseAnalysisShares ExerciseAnalysisSharing[] @relation("ExerciseShareCoach")
+  exerciseAnalysisFeedback ExerciseAnalysisFeedback[] @relation("ExerciseFeedbackCoach")
+  exerciseTechniqueLabels ExerciseTechniqueCoachLabel[] @relation("ExerciseTechniqueLabelCoach")
+  exerciseCriterionReviews ExerciseTechniqueCriterionReview[] @relation("ExerciseCriterionReviewer")
+}
+
+model ExerciseAnalysis {
+  id              Int       @id @default(autoincrement())
+  memberId        Int
+  member          User      @relation(fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  exerciseType    String    @db.VarChar(30)
+  mediaStorageKey String?   @db.VarChar(100)
+  mediaDeletedAt  DateTime?
+  studentPlanId   Int?
+  studentPlan     StudentWorkoutPlan? @relation(fields: [studentPlanId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status          String    @default("PENDING") @db.VarChar(30)
+  evaluationMode  String    @default("OFFICIAL") @db.VarChar(20)
+  videoOrigin     String    @default("UNVERIFIED_LEGACY") @db.VarChar(20)
+  captureMethodDeclared String @default("UNKNOWN") @db.VarChar(20)
+  performerDeclaration String @default("UNKNOWN") @db.VarChar(20)
+  videoSha256     String?   @db.VarChar(64)
+  sourceReference String?   @db.VarChar(100)
+  sessionGroupId  String?   @db.VarChar(36)
+  samePersonSessionConfirmed Boolean @default(false)
+  resultJson      String?   @db.NVarChar(Max)
+  modelVersion    String?   @db.VarChar(100)
+  ruleVersion     String?   @db.VarChar(30)
+  resultVersion   String?   @db.VarChar(30)
+  errorCode       String?   @db.VarChar(60)
+  attempts        Int       @default(0)
+  startedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+  shares          ExerciseAnalysisSharing[]
+  feedback        ExerciseAnalysisFeedback[]
+  techniqueLabels ExerciseTechniqueCoachLabel[]
+
+  @@index([memberId, createdAt])
+  @@index([status, createdAt])
+  @@index([memberId, sessionGroupId])
+}
+
+model ExerciseAnalysisSharing {
+  id         Int       @id @default(autoincrement())
+  analysisId Int
+  analysis   ExerciseAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  coachId    Int
+  coach      User      @relation("ExerciseShareCoach", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sharedAt   DateTime  @default(now())
+  revokedAt  DateTime?
+  includeVideo Boolean @default(false)
+
+  @@unique([analysisId, coachId])
+  @@index([coachId, revokedAt, sharedAt])
+}
+
+model ExerciseAnalysisFeedback {
+  id         Int       @id @default(autoincrement())
+  analysisId Int
+  analysis   ExerciseAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  coachId    Int
+  coach      User      @relation("ExerciseFeedbackCoach", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  comment    String    @db.NVarChar(1000)
+  createdAt  DateTime  @default(now())
+
+  @@index([analysisId, createdAt])
+}
+
+model ExerciseTechniqueCoachLabel {
+  id                Int      @id @default(autoincrement())
+  analysisId        Int
+  analysis          ExerciseAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  coachId           Int
+  coach             User     @relation("ExerciseTechniqueLabelCoach", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  videoSha256       String   @db.VarChar(64)
+  exerciseVariant   String   @db.VarChar(40)
+  standardVersion   String   @db.VarChar(100)
+  criterionId       String   @db.VarChar(40)
+  outcome           String   @db.VarChar(30)
+  repNumber         Int?
+  startSeconds      Float
+  endSeconds        Float
+  timestampSeconds Float?
+  evidenceJson      String   @db.NVarChar(Max)
+  reviewerNotes     String   @db.NVarChar(2000)
+  createdAt         DateTime @default(now())
+
+  @@index([analysisId, criterionId, startSeconds])
+  @@index([coachId, createdAt])
+}
+
+model ExerciseTechniqueCriterionReview {
+  id                 Int      @id @default(autoincrement())
+  coachId            Int
+  coach              User     @relation("ExerciseCriterionReviewer", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  exerciseType       String   @db.VarChar(30)
+  exerciseVariant    String   @db.VarChar(40)
+  standardVersion    String   @db.VarChar(100)
+  standardDigest     String   @db.VarChar(64)
+  criterionId        String   @db.VarChar(40)
+  decision           String   @db.VarChar(50)
+  qualification      String   @db.NVarChar(300)
+  reviewRecordId     String   @db.VarChar(100)
+  reviewScope        String   @db.NVarChar(1000)
+  approvedConditions String   @db.NVarChar(Max)
+  measurementFormula String   @db.NVarChar(2000)
+  thresholdsJson     String   @db.NVarChar(Max)
+  cameraViewsJson    String   @db.NVarChar(Max)
+  limitationsJson    String   @db.NVarChar(Max)
+  correctionAdvice   String   @db.NVarChar(Max)
+  status             String   @default("COACH_REVIEWED_PENDING_VIDEO_VALIDATION") @db.VarChar(60)
+  validationReportSha256 String? @db.VarChar(64)
+  validationReportPath String? @db.NVarChar(500)
+  approvalSignatureSha256 String? @db.VarChar(64)
+  approvalScopeJson String? @db.NVarChar(Max)
+  releasedStandardDigest String? @db.VarChar(64)
+  approvedAt         DateTime?
+  reviewedAt         DateTime @default(now())
+
+  @@index([exerciseType, exerciseVariant, standardVersion, criterionId, status])
+  @@index([coachId, reviewedAt])
 }
 
 model CoachProfile {
@@ -63,10 +192,13 @@ model CoachProfile {
   certifications String?
   rating         Float    @default(5.0)
   hourlyRate     Decimal  @default(0) @db.Decimal(18, 2)
+  rank           String   @default("senior")
+  commissionPercent Int   @default(45)
   status         String   @default("ACTIVE") // ACTIVE | BLOCKED | INACTIVE
   createdAt      DateTime @default(now())
 
   pricing        CoachPricing[]
+  specializations CoachSpecialization[]
   schedules      CoachSchedule[]
   dateAvailability CoachDateAvailability[]
   reviews        Review[]
@@ -79,6 +211,14 @@ model CoachPricing {
   sessionCount   Int          
   price          Decimal      @db.Decimal(18, 2)
   createdAt      DateTime     @default(now())
+}
+
+model CoachSpecialization {
+  coachProfileId Int
+  level          String       @db.VarChar(20)
+  coachProfile   CoachProfile @relation(fields: [coachProfileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([coachProfileId, level])
 }
 
 model CoachSchedule {
@@ -150,11 +290,176 @@ model Package {
   durationDays    Int          // Số ngày sử dụng (ví dụ 30 ngày)
   trialPtSessions Int          @default(0) // Số buổi tập PT tặng kèm (Dành cho gói MEMBERSHIP)
   totalPtSessions Int?         // Tổng số buổi PT mua riêng (Dành cho gói PT)
+  ptLevel         String?      @db.VarChar(20) // BEGINNER | INTERMEDIATE | ADVANCED; legacy rows require mapping
   isActive        Boolean      @default(true)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
   memberships  Membership[]
+  ptProducts   PtProduct[]
+}
+
+model PtProduct {
+  id           Int      @id @default(autoincrement())
+  name         String   @db.NVarChar(100)
+  level        String   @db.VarChar(20)
+  sessionCount Int
+  durationDays Int?
+  price        Decimal  @db.Decimal(18, 2)
+  singleSessionPrice Decimal? @db.Decimal(18, 2)
+  benefits     String?  @db.NVarChar(1000)
+  isActive     Boolean  @default(true)
+  packageId    Int?
+  package      Package? @relation(fields: [packageId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payments     Payment[]
+  purchaseItems PtPurchaseItem[]
+  renewalOptions PtRenewalOption[]
+  renewalPayments Payment[] @relation("PtRenewalProduct")
+}
+
+model PtSingleOffer {
+  id           Int     @id @default(autoincrement())
+  level        String  @unique @db.VarChar(20)
+  price        Decimal @db.Decimal(18, 2)
+  durationDays Int
+  maxQuantity  Int     @default(20)
+  benefits     String? @db.NVarChar(1000)
+  isActive     Boolean @default(true)
+}
+
+model PtPurchaseItem {
+  id               Int     @id @default(autoincrement())
+  paymentId        Int
+  payment          Payment @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  productId        Int?
+  product          PtProduct? @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  mode             String  @db.VarChar(20)
+  nameSnapshot     String  @db.NVarChar(100)
+  levelSnapshot    String  @db.VarChar(20)
+  sessionsSnapshot Int
+  durationDays     Int
+  unitPrice        Decimal @db.Decimal(18, 2)
+  quantity         Int
+  benefitsSnapshot String? @db.NVarChar(1000)
+  unitStartIndex   Int
+
+  @@unique([paymentId, unitStartIndex])
+}
+
+model PtRenewalOption {
+  id           Int      @id @default(autoincrement())
+  name         String   @db.NVarChar(100)
+  level        String   @db.VarChar(20)
+  durationDays Int
+  price        Decimal  @db.Decimal(18, 2)
+  isActive     Boolean  @default(true)
+  ptProductId  Int?
+  purchaseMode String? @db.VarChar(20)
+  ptProduct    PtProduct? @relation(fields: [ptProductId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payments     Payment[]
+
+  @@index([ptProductId])
+}
+
+model PtWallet {
+  id        Int       @id @default(autoincrement())
+  memberId  Int       @unique
+  member    User      @relation(fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt DateTime  @default(now())
+  batches   PtCreditBatch[]
+}
+
+model PtCreditBatch {
+  id           Int       @id @default(autoincrement())
+  walletId     Int
+  wallet       PtWallet  @relation(fields: [walletId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  level        String    @db.VarChar(20)
+  source       String    @db.VarChar(30)
+  initialCount Int
+  usedCount    Int       @default(0)
+  heldCount    Int       @default(0)
+  paymentId    Int?
+  payment      Payment?  @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  purchaseUnitIndex Int @default(0)
+  ptProductIdSnapshot Int?
+  benefitsSnapshot String? @db.NVarChar(1000)
+  membershipId Int?
+  membership   Membership? @relation(fields: [membershipId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  coachId      Int?
+  grantedAt    DateTime  @default(now())
+  startAt      DateTime?
+  endAt        DateTime?
+  activatedAt  DateTime?
+  allocations  PtBookingCreditAllocation[]
+  transactions PtCreditTransaction[]
+  renewalPayments Payment[] @relation("PtBatchRenewals")
+  renewalEvents PtRenewalEvent[]
+  coachChangeRequests PtCoachChangeRequest[]
+
+  @@index([walletId, level, grantedAt])
+  @@index([walletId, level, endAt])
+}
+
+model PtCoachChangeRequest {
+  id            Int      @id @default(autoincrement())
+  batchId       Int
+  batch         PtCreditBatch @relation(fields: [batchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  memberId      Int
+  oldCoachId    Int
+  newCoachId    Int
+  reason        String   @db.NVarChar(500)
+  status        String   @default("PENDING_ADMIN") @db.VarChar(20)
+  quotaExempt   Boolean  @default(false)
+  handledById   Int?
+  adminNote     String?  @db.NVarChar(500)
+  requestedAt   DateTime @default(now())
+  handledAt     DateTime?
+
+  @@index([memberId, requestedAt])
+  @@index([status, requestedAt])
+  @@index([batchId, status])
+}
+
+model PtBookingCreditAllocation {
+  bookingId Int @id
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  batchId   Int
+  batch     PtCreditBatch @relation(fields: [batchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status    String @default("HELD") @db.VarChar(20)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([batchId, status])
+}
+
+model PtCreditTransaction {
+  id        Int @id @default(autoincrement())
+  batchId   Int
+  batch     PtCreditBatch @relation(fields: [batchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bookingId Int?
+  kind      String @db.VarChar(30)
+  quantity  Int
+  actorId   Int?
+  note      String? @db.NVarChar(500)
+  createdAt DateTime @default(now())
+
+  @@index([batchId, createdAt])
+  @@index([bookingId])
+}
+
+model PtRenewalEvent {
+  id             Int           @id @default(autoincrement())
+  batchId        Int
+  batch          PtCreditBatch @relation(fields: [batchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paymentId      Int           @unique
+  payment        Payment       @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  previousEndAt  DateTime
+  startAt        DateTime
+  endAt          DateTime
+  durationDays   Int
+  createdAt      DateTime      @default(now())
+
+  @@index([batchId, createdAt])
 }
 
 model Membership {
@@ -180,6 +485,7 @@ model Membership {
   payments          Payment[]
   bookings          Booking[]
   checkIns          CheckIn[]
+  ptCreditBatches   PtCreditBatch[]
 }
 
 // ==========================================
@@ -291,6 +597,7 @@ model Booking {
   sessionResult      SessionResult?
   review             Review?
   ptChatMessages     PtChatMessage[]
+  ptCreditAllocation PtBookingCreditAllocation?
 }
 
 model PtChatMessage {
@@ -380,6 +687,23 @@ model Payment {
   orderCode           BigInt?       @unique
   transactionNo       String?       @unique
   renewalDurationDays Int?
+  ptProductId         Int?
+  ptProduct           PtProduct?    @relation(fields: [ptProductId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ptQuantity          Int?
+  ptPurchaseMode      String?       @db.VarChar(20)
+  ptLevelSnapshot     String?       @db.VarChar(20)
+  ptSessionsSnapshot  Int?
+  ptDurationDays      Int?
+  ptRenewalOptionId   Int?
+  ptRenewalOption     PtRenewalOption? @relation(fields: [ptRenewalOptionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ptRenewalProductId  Int?
+  ptRenewalProduct    PtProduct? @relation("PtRenewalProduct", fields: [ptRenewalProductId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ptRenewalBatchId    Int?
+  ptRenewalBatch      PtCreditBatch? @relation("PtBatchRenewals", fields: [ptRenewalBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ptRenewalDays       Int?
+  ptRenewalEvent      PtRenewalEvent?
+  ptCreditBatches     PtCreditBatch[]
+  ptPurchaseItems     PtPurchaseItem[]
   
   staffId             Int?
   staff               User?         @relation("StaffProcessedPayments", fields: [staffId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -394,6 +718,8 @@ model Payment {
   
   createdAt           DateTime      @default(now())
   paidAt              DateTime?
+
+  @@index([ptRenewalBatchId])
 }
 
 // ==========================================
@@ -411,6 +737,50 @@ model WorkoutPlan {
   sessionsJson String?  @db.NVarChar(Max)
   mealsJson    String?  @db.NVarChar(Max)
   createdAt   DateTime @default(now())
+  studentPlans StudentWorkoutPlan[]
+}
+
+model StudentWorkoutPlan {
+  id           Int      @id @default(autoincrement())
+  workoutPlanId Int?
+  workoutPlan  WorkoutPlan? @relation(fields: [workoutPlanId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  memberId     Int
+  member       User     @relation("StudentWorkoutPlanMember", fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  coachId      Int
+  coach        User     @relation("StudentWorkoutPlanCoach", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  programName  String   @default("PT") @db.NVarChar(120)
+  status       String   @default("ACTIVE") @db.NVarChar(20)
+  version      Int      @default(1)
+  title        String   @db.NVarChar(200)
+  description  String?  @db.NVarChar(Max)
+  sessionsJson String   @db.NVarChar(Max)
+  mealsJson    String   @db.NVarChar(Max)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+  revisions    WorkoutPlanRevision[]
+  exerciseAnalyses ExerciseAnalysis[]
+
+  // The migration adds a filtered UNIQUE index for the ACTIVE row of each
+  // (memberId, coachId, programName); Prisma does not model filtered indexes.
+  @@index([memberId, coachId, programName, status])
+  @@index([coachId, updatedAt])
+}
+
+model WorkoutPlanRevision {
+  id            Int      @id @default(autoincrement())
+  studentPlanId Int
+  studentPlan   StudentWorkoutPlan @relation(fields: [studentPlanId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  version       Int
+  title         String   @db.NVarChar(200)
+  description   String?  @db.NVarChar(Max)
+  sessionsJson  String   @db.NVarChar(Max)
+  mealsJson     String   @db.NVarChar(Max)
+  changedById   Int
+  changedBy     User     @relation("WorkoutPlanRevisionEditor", fields: [changedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reason        String   @db.NVarChar(1000)
+  createdAt     DateTime @default(now())
+
+  @@unique([studentPlanId, version])
 }
 
 model ProgressLog {
@@ -421,6 +791,25 @@ model ProgressLog {
   bodyFat     Float?
   muscleMass  Float?
   loggedAt    DateTime @default(now())
+}
+
+model PtTrainingAssessment {
+  id            Int      @id @default(autoincrement())
+  memberId      Int
+  member        User     @relation("PtAssessmentMember", fields: [memberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  coachId       Int
+  coach        User     @relation("PtAssessmentCoach", fields: [coachId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  level         String   @db.VarChar(20)
+  kind          String   @db.VarChar(20) // BASELINE | REVIEW
+  goal          String?  @db.NVarChar(500)
+  movementNotes String?  @db.NVarChar(2000)
+  metricName    String?  @db.NVarChar(100)
+  metricValue   Float?
+  phaseName     String?  @db.NVarChar(100)
+  nextSteps     String   @db.NVarChar(2000)
+  createdAt     DateTime @default(now())
+
+  @@index([memberId, coachId, level, createdAt])
 }
 
 // ==========================================

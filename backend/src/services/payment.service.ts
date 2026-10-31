@@ -3,6 +3,9 @@ import PayOS from '@payos/node';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { lockGymMember } from './gymMembershipLock.service.js';
 import { reconcileGymMembershipStates } from './membership.service.js';
+import { grantPtCredit, isPtLevel } from './ptWallet.service.js';
+import { ptRenewalError, ptRenewalOptionMatchesBatch, renewedPtPeriod } from './ptRenewal.service.js';
+import { activePaidGymMembershipWhere } from './gymEntitlement.service.js';
 
 const prisma = new PrismaClient();
 
@@ -10,6 +13,10 @@ function addDays(date: Date, days: number) {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
+}
+
+function addPtDurationDays(date: Date, days: number) {
+  return new Date(date.getTime() + days * 86400000);
 }
 
 function laterDate(first: Date, second: Date) {
@@ -74,33 +81,98 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
     const purchaseTarget = payment.membershipId !== null && payment.renewalDurationDays === null
       ? await tx.membership.findUnique({ where: { id: payment.membershipId }, include: { package: true } })
       : null;
-    let ptPurchaseUnavailable = false;
-    if (purchaseTarget?.package.type === 'PT') {
-      const [gym, coach] = await Promise.all([
-        tx.membership.findFirst({ where: {
-          userId: purchaseTarget.userId, status: 'ACTIVE',
-          startDate: { lte: new Date() }, endDate: { gte: new Date() },
-          package: { type: 'MEMBERSHIP' },
-        }, select: { id: true } }),
-        tx.coachProfile.findFirst({ where: {
-          userId: purchaseTarget.coachId ?? -1, status: 'ACTIVE', user: { status: 'ACTIVE' },
-        }, select: { id: true } }),
-      ]);
-      ptPurchaseUnavailable = !gym || !coach;
-    }
+    const ptProduct = payment.ptProductId !== null
+      ? await tx.ptProduct.findUnique({ where: { id: payment.ptProductId } }) : null;
+    const ptPurchaseItems = await tx.ptPurchaseItem.findMany({ where: { paymentId: payment.id },
+      orderBy: { unitStartIndex: 'asc' } });
+    const ptRenewalBatch = payment.ptRenewalBatchId !== null
+      ? await tx.ptCreditBatch.findUnique({ where: { id: payment.ptRenewalBatchId },
+          include: { wallet: true, payment: { select: { ptProductId: true } } } }) : null;
+    const ptRenewalOption = payment.ptRenewalOptionId !== null
+      ? await tx.ptRenewalOption.findUnique({ where: { id: payment.ptRenewalOptionId } }) : null;
+    const paidAt = new Date();
+    const isPtPayment = ptPurchaseItems.length > 0 || payment.ptProductId !== null || payment.ptRenewalBatchId !== null ||
+      purchaseTarget?.package.type === 'PT';
+    const activeGymMembership = isPtPayment ? await tx.membership.findFirst({
+      where: activePaidGymMembershipWhere(payment.userId, paidAt), select: { id: true },
+    }) : null;
+    const invalidPurchaseItems = ptPurchaseItems.some(item =>
+      !['PACKAGE', 'SINGLE'].includes(item.mode) || !isPtLevel(item.levelSnapshot) ||
+      item.levelSnapshot === 'TRIAL' || item.quantity < 1 || item.sessionsSnapshot < 1 ||
+      item.durationDays < 1 || Number(item.unitPrice) < 1);
+    const ptPurchaseUnavailable = invalidPurchaseItems || Boolean(purchaseTarget?.package.type === 'PT' &&
+      !isPtLevel(purchaseTarget.package.ptLevel)) ||
+      Boolean(payment.ptProductId !== null && (!ptProduct || !payment.ptQuantity ||
+        !['BEGINNER', 'INTERMEDIATE', 'ADVANCED'].includes(payment.ptLevelSnapshot ?? ptProduct.level) ||
+        !(payment.ptSessionsSnapshot ?? ptProduct.sessionCount)));
+    const ptRenewalUnavailable = (payment.ptRenewalBatchId !== null ||
+      payment.ptRenewalOptionId !== null || payment.ptRenewalProductId !== null || payment.ptRenewalDays !== null) && (
+      !ptRenewalBatch || !ptRenewalOption || ptRenewalBatch.wallet.memberId !== payment.userId ||
+      !ptRenewalOptionMatchesBatch({ level: payment.ptLevelSnapshot ?? '',
+        ptProductId: payment.ptRenewalProductId, purchaseMode: ptRenewalOption?.purchaseMode }, {
+        level: ptRenewalBatch.level, ptProductId: ptRenewalBatch.ptProductIdSnapshot ?? ptRenewalBatch.payment?.ptProductId ?? null, source: ptRenewalBatch.source,
+      }) ||
+      !payment.ptRenewalDays || payment.ptRenewalDays < 1 ||
+      Boolean(ptRenewalBatch && ptRenewalError(ptRenewalBatch, paidAt)));
     const requiresReview = (payment.membershipId !== null && !renewalTarget && !purchaseTarget) ||
       renewalTarget?.package.type === 'PT' ||
       (renewalTarget?.package.type === 'MEMBERSHIP' && !['ACTIVE', 'EXPIRED'].includes(renewalTarget.status)) ||
       (purchaseTarget !== null && purchaseTarget.status !== 'PENDING') ||
-      ptPurchaseUnavailable;
+      ptPurchaseUnavailable || ptRenewalUnavailable || (isPtPayment && !activeGymMembership);
 
-    const paidAt = new Date();
     const updated = await tx.payment.updateMany({
       where: { id: payment.id, status: { in: ['PENDING', 'FAILED', 'CANCELLED'] } },
       data: { status: requiresReview ? 'PAID_REVIEW' : 'PAID', paidAt },
     });
     if (updated.count === 0) return { result: 'NOT_PENDING' as const };
     if (requiresReview) return { result: 'PAID_REVIEW' as const };
+
+    for (const item of ptPurchaseItems) {
+      const startAt = paidAt;
+      const endAt = addPtDurationDays(startAt, item.durationDays);
+      const batchCount = item.mode === 'PACKAGE' ? item.quantity : 1;
+      for (let index = 0; index < batchCount; index += 1) {
+        await grantPtCredit(tx, { memberId: payment.userId,
+          level: item.levelSnapshot as 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED',
+          source: item.mode === 'PACKAGE' ? 'PACKAGE_PURCHASE' : 'SINGLE_PURCHASE',
+          count: item.mode === 'PACKAGE' ? item.sessionsSnapshot : item.quantity,
+          paymentId: payment.id, purchaseBatchOrdinal: item.unitStartIndex + index,
+          ptProductIdSnapshot: item.productId,
+          benefitsSnapshot: item.benefitsSnapshot,
+          startAt, endAt, activatedAt: paidAt });
+      }
+    }
+
+    if (ptPurchaseItems.length === 0 && ptProduct && payment.ptQuantity) {
+      const sessions = payment.ptSessionsSnapshot ?? ptProduct.sessionCount;
+      const startAt = paidAt;
+      const endAt = payment.ptDurationDays ? addPtDurationDays(startAt, payment.ptDurationDays) : null;
+      const source = payment.ptPurchaseMode === 'SINGLE' || (!payment.ptPurchaseMode && sessions === 1)
+        ? 'SINGLE_PURCHASE' : 'PACKAGE_PURCHASE';
+      const batchCount = payment.ptPurchaseMode === 'PACKAGE' ? payment.ptQuantity : 1;
+      for (let index = 0; index < batchCount; index += 1) {
+        await grantPtCredit(tx, { memberId: payment.userId,
+          level: (payment.ptLevelSnapshot ?? ptProduct.level) as 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED',
+          source, count: payment.ptPurchaseMode === 'PACKAGE' ? sessions : sessions * payment.ptQuantity,
+          paymentId: payment.id,
+          ptProductIdSnapshot: ptProduct.id,
+          purchaseBatchOrdinal: payment.ptPurchaseMode === 'PACKAGE' ? index : undefined,
+          startAt, endAt, activatedAt: paidAt });
+      }
+    }
+
+    if (ptRenewalBatch?.endAt && payment.ptRenewalDays) {
+      const period = renewedPtPeriod(ptRenewalBatch.endAt, payment.ptRenewalDays, paidAt);
+      const extended = await tx.ptCreditBatch.updateMany({ where: {
+        id: ptRenewalBatch.id, endAt: ptRenewalBatch.endAt,
+      }, data: { endAt: period.endAt } });
+      if (extended.count !== 1) throw new Error('PT renewal target changed during payment confirmation');
+      await tx.ptRenewalEvent.create({ data: {
+        batchId: ptRenewalBatch.id, paymentId: payment.id,
+        previousEndAt: ptRenewalBatch.endAt, startAt: period.startAt,
+        endAt: period.endAt, durationDays: payment.ptRenewalDays,
+      } });
+    }
 
     if (payment.membershipId !== null) {
       if (payment.renewalDurationDays !== null) {
@@ -215,6 +287,19 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
             activatedAt: membership.package.type === 'MEMBERSHIP' && status === 'PENDING_ACTIVATION' ? null : now,
           },
         });
+        if (membership.package.type === 'MEMBERSHIP' && membership.package.trialPtSessions > 0) {
+          await grantPtCredit(tx, { memberId: membership.userId, level: 'TRIAL',
+            source: 'MEMBERSHIP_GIFT', count: membership.package.trialPtSessions,
+            membershipId: membership.id, startAt: startDate, endAt: endDate,
+            activatedAt: status === 'ACTIVE' ? now : null });
+        }
+        if (membership.package.type === 'PT' && isPtLevel(membership.package.ptLevel) &&
+          membership.package.ptLevel !== 'TRIAL') {
+          await grantPtCredit(tx, { memberId: membership.userId, level: membership.package.ptLevel,
+            source: 'PACKAGE_PURCHASE', count: membership.package.totalPtSessions ?? 0,
+            paymentId: payment.id, membershipId: membership.id, coachId: membership.coachId,
+            startAt: now, activatedAt: now });
+        }
       }
     }
 

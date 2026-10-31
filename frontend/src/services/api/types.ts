@@ -15,6 +15,7 @@ export interface ApiUser {
   weight?: number | null;
   role: 'ADMIN' | 'STAFF' | 'COACH' | 'MEMBER' | string;
   status: string;
+  mustChangePassword?: boolean;
   memberships?: Array<{
     id: number;
     packageId: number;
@@ -148,6 +149,7 @@ export interface ApiBooking {
       type: string;
     };
   };
+  ptCreditAllocation?: { status: string; batch: { level: string; source: string } } | null;
   sessionResult?: ApiSessionResult | null;
 }
 
@@ -165,7 +167,10 @@ export interface ApiCoachProfile {
   userId: number;
   bio?: string | null;
   specialization?: string | null;
+    specializations?: Array<{ level: string }>;
   hourlyRate: number;
+  rank: 'junior' | 'senior' | 'master';
+  commissionPercent: number;
   experience: number;
   rating?: number | null;
   status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | string;
@@ -303,10 +308,15 @@ export interface ApiReview {
 
 export interface ApiMemberProfile360 {
   profile: ApiUser;
+  currentGymMembership: ApiSubscription | null;
   membershipSubscriptions: any[];
   ptSubscriptions: any[];
+  ptWalletSummary: { total: number; available: number; held: number; used: number;
+    levels: Array<{ level: string; total: number; available: number; held: number; used: number }> };
+  legacyPtSessions: number;
   paymentHistory: any[];
   checkInHistory: any[];
+  checkInTotal: number;
   trainingHistory: {
     ptSessions: any[];
     groupClasses: any[];
@@ -318,4 +328,57 @@ export interface Pagination {
   page: number;
   totalPages: number;
   limit: number;
+}
+
+export interface ApiAdminAnalytics {
+  timeFilter: string;
+  label: string;
+  subLabel: string;
+  revenue: number;
+  growth: string;
+  activeCheckIns: number;
+  totalMembers: number;
+  activeMembers: number;
+  renewalRate: string;
+  totalCoaches: number;
+  avgMembersPerCoach: string;
+  catalogCount: number;
+  ptRevenueShare: string;
+  chartData: Array<{
+    label: string;
+    rev: number;
+    checkins: number;
+  }>;
+  serviceMix: Array<{
+    name: string;
+    amount: number;
+    percentage: number;
+  }>;
+  peakHours: Array<{
+    time: string;
+    count: number;
+    density: string;
+    label: string;
+    peak: boolean;
+  }>;
+  recentPayments: Array<{
+    id: string;
+    code: string;
+    memberId: string;
+    memberName: string;
+    memberPhone: string;
+    items: Array<{
+      name: string;
+      quantity: number;
+      unitPriceVND: number;
+      amountVND: number;
+    }>;
+    subtotalVND: number;
+    discountVND: number;
+    totalVND: number;
+    paymentMethod: string;
+    status: string;
+    staffName: string;
+    createdAt: string;
+  }>;
 }

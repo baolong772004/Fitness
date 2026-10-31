@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 2,
+  "exercise": "SQUAT",
+  "exerciseVariant": "BODYWEIGHT",
+  "sourceType": "REAL",
+  "videoSha256": "",
+  "durationSeconds": 16.52,
+  "coachConfirmed": false,
+  "reviewer": "",
+  "rubricVersion": "bodyweight-squat-1.0.0-draft",
+  "approvedConditions": "",
+  "reviewedAt": "",
+  "cameraView": "FRONT",
+  "expectedStatus": "ANALYZABLE",
+  "segments": [
+    {
+      "repNumber": 1,
+      "startSeconds": 0.1,
+      "bottomSeconds": 0.801,
+      "endSeconds": 1.602,
+      "criteria": {
+        "SQUAT-01": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 0.801,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-02": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 0.801,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-03": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 0.801,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-04": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 0.801,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-05": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 0.801,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-06": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 0.801,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-07": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 0.801,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-08": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 0.801,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        }
+      }
+    },
+    {
+      "repNumber": 2,
+      "startSeconds": 2.803,
+      "bottomSeconds": 3.504,
+      "endSeconds": 4.304,
+      "criteria": {
+        "SQUAT-01": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 3.504,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-02": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 3.504,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-03": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 3.504,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-04": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 3.504,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-05": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 3.504,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-06": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 3.504,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-07": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 3.504,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-08": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 3.504,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        }
+      }
+    },
+    {
+      "repNumber": 3,
+      "startSeconds": 5.606,
+      "bottomSeconds": 6.306,
+      "endSeconds": 7.207,
+      "criteria": {
+        "SQUAT-01": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 6.306,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-02": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 6.306,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-03": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 6.306,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-04": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 6.306,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-05": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 6.306,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-06": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 6.306,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-07": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 6.306,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-08": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 6.306,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        }
+      }
+    },
+    {
+      "repNumber": 4,
+      "startSeconds": 8.508,
+      "bottomSeconds": 9.309,
+      "endSeconds": 10.21,
+      "criteria": {
+        "SQUAT-01": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 9.309,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-02": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 9.309,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-03": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 9.309,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-04": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 9.309,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-05": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 9.309,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-06": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 9.309,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-07": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 9.309,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-08": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 9.309,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        }
+      }
+    },
+    {
+      "repNumber": 5,
+      "startSeconds": 11.812,
+      "bottomSeconds": 12.713,
+      "endSeconds": 13.614,
+      "criteria": {
+        "SQUAT-01": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 12.713,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-02": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 12.713,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-03": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 12.713,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-04": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 12.713,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-05": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 12.713,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-06": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 12.713,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-07": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 12.713,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        },
+        "SQUAT-08": {
+          "outcome": "UNASSESSABLE",
+          "timestampSeconds": 12.713,
+          "note": "Template awaiting Coach evaluation (change outcome to MEETS, IMPROVE, or UNASSESSABLE and set coachConfirmed=true)"
+        }
+      }
+    }
+  ]
+}

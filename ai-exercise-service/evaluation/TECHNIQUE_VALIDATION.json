@@ -1,0 +1,17 @@
+{
+  "status": "INSUFFICIENT_GROUND_TRUTH",
+  "inputManifest": {
+    "path": "evaluation\\manifest.json",
+    "sha256": "18d59ce8625b1a7819df40980a7fb2ca79e4c4a8b8cec35400687ccc6eb3f71c"
+  },
+  "includedRealHoldoutVideos": 0,
+  "excluded": [],
+  "metrics": {},
+  "clips": [],
+  "repCountMAE": null,
+  "temporalIoUThreshold": 0.5,
+  "evaluationMode": "RUNTIME",
+  "acceptanceCriteria": null,
+  "acceptanceStatus": "NOT_ASSESSED",
+  "note": "Coach expertise, source footage and split independence require human review. Missing labels yield no accuracy metrics. Acceptance targets must be fixed before holdout inference; this evaluator does not invent them."
+}

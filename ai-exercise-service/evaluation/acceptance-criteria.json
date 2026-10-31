@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "exerciseId": "SQUAT",
+  "exerciseVariant": "BODYWEIGHT",
+  "standardVersion": "bodyweight-squat-1.0.0-draft",
+  "defaultAcceptanceCriteria": {
+    "id": "SQUAT-BODYWEIGHT-V1-ACCEPTANCE",
+    "declaredAt": "2026-10-01T00:00:00Z",
+    "minimumPrecision": 0.8,
+    "minimumRecall": 0.8,
+    "maximumAbstentionRate": 0.2,
+    "minimumPositiveLabels": 5,
+    "minimumNegativeLabels": 5,
+    "minimumVideos": 3
+  },
+  "criteria": {
+    "SQUAT-01": {
+      "id": "SQUAT-01-CYCLE-ACCEPTANCE-V1",
+      "declaredAt": "2026-10-01T00:00:00Z",
+      "cameraViews": ["SIDE", "FRONT", "OBLIQUE"],
+      "minimumPrecision": 0.85,
+      "minimumRecall": 0.85,
+      "maximumAbstentionRate": 0.15,
+      "minimumPositiveLabels": 5,
+      "minimumNegativeLabels": 5,
+      "minimumVideos": 3
+    },
+    "SQUAT-02": {
+      "id": "SQUAT-02-DEPTH-ACCEPTANCE-V1",
+      "declaredAt": "2026-10-01T00:00:00Z",
+      "cameraViews": ["SIDE"],
+      "minimumPrecision": 0.8,
+      "minimumRecall": 0.8,
+      "maximumAbstentionRate": 0.2,
+      "minimumPositiveLabels": 5,
+      "minimumNegativeLabels": 5,
+      "minimumVideos": 3
+    },
+    "SQUAT-03": {
+      "id": "SQUAT-03-KNEE-ALIGNMENT-ACCEPTANCE-V1",
+      "declaredAt": "2026-10-01T00:00:00Z",
+      "cameraViews": ["FRONT"],
+      "minimumPrecision": 0.8,
+      "minimumRecall": 0.8,
+      "maximumAbstentionRate": 0.2,
+      "minimumPositiveLabels": 5,
+      "minimumNegativeLabels": 5,
+      "minimumVideos": 3
+    },
+    "SQUAT-04": {
+      "id": "SQUAT-04-TORSO-ASCENT-ACCEPTANCE-V1",
+      "declaredAt": "2026-10-01T00:00:00Z",
+      "cameraViews": ["SIDE"],
+      "minimumPrecision": 0.8,
+      "minimumRecall": 0.8,
+      "maximumAbstentionRate": 0.2,
+      "minimumPositiveLabels": 5,
+      "minimumNegativeLabels": 5,
+      "minimumVideos": 3
+    },
+    "SQUAT-05": {
+      "id": "SQUAT-05-TEMPO-CONSISTENCY-ACCEPTANCE-V1",
+      "declaredAt": "2026-10-01T00:00:00Z",
+      "cameraViews": ["SIDE", "FRONT", "OBLIQUE"],
+      "minimumPrecision": 0.8,
+      "minimumRecall": 0.8,
+      "maximumAbstentionRate": 0.2,
+      "minimumPositiveLabels": 5,
+      "minimumNegativeLabels": 5,
+      "minimumVideos": 3
+    },
+    "SQUAT-08": {
+      "id": "SQUAT-08-INDIVIDUAL-TARGET-ACCEPTANCE-V1",
+      "declaredAt": "2026-10-01T00:00:00Z",
+      "cameraViews": ["SIDE", "FRONT", "OBLIQUE"],
+      "minimumPrecision": 0.85,
+      "minimumRecall": 0.85,
+      "maximumAbstentionRate": 0.15,
+      "minimumPositiveLabels": 5,
+      "minimumNegativeLabels": 5,
+      "minimumVideos": 3
+    }
+  },
+  "unsupportedIn2DMonocular": {
+    "SQUAT-06": "NO_VALIDATED_BILATERAL_DECISION_RULE",
+    "SQUAT-07": "NO_FLOOR_CALIBRATION"
+  }
+}
+

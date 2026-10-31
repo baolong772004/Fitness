@@ -290,8 +290,11 @@ export async function resolveCoachScheduleChange(req: AuthRequest, res: Response
       if (current.status !== 'PENDING') throw new Error('Yêu cầu đã được xử lý.');
       const booking = await tx.booking.findUniqueOrThrow({ where: { id: current.bookingId } });
       if (decision === 'APPROVED') {
-        if (!booking.membershipId) throw new Error('Booking không có gói PT.');
-        await lockPtMembership(tx, booking.membershipId);
+        if (booking.membershipId) await lockPtMembership(tx, booking.membershipId);
+        else {
+          const allocation = await tx.ptBookingCreditAllocation.findUnique({ where: { bookingId: booking.id } });
+          if (allocation?.status !== 'HELD') throw new Error('Booking không có quyền PT đang giữ chỗ.');
+        }
         const refreshed = await tx.booking.findUniqueOrThrow({ where: { id: booking.id } });
         if (refreshed.status !== 'CONFIRMED' || refreshed.startTime <= new Date()) throw new Error('Booking đã bắt đầu hoặc đổi trạng thái.');
         const profile = await tx.coachProfile.findUniqueOrThrow({ where: { userId: current.coachId } });

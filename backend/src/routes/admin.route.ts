@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getMembersList, getMemberDetailProfile } from '../controllers/admin.controller.js';
+import { getMembersList, getMemberDetailProfile, getAdminAnalytics, getAdminPayments } from '../controllers/admin.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -10,6 +10,46 @@ const router = Router();
  *   name: AdminMember
  *   description: API Quản lý Hội viên dành cho Admin/Staff
  */
+
+/**
+ * @swagger
+ * /admin/analytics:
+ *   get:
+ *     summary: Thống kê tổng hợp thời gian thực cho Admin Dashboard
+ *     tags: [AdminMember]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: range
+ *         schema:
+ *           type: string
+ *           enum: [today, 7days, month, quarter, year]
+ *         description: Kỳ thống kê
+ *     responses:
+ *       200:
+ *         description: Dữ liệu phân tích và biểu đồ
+ */
+router.get('/analytics', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getAdminAnalytics);
+
+/**
+ * @swagger
+ * /admin/payments:
+ *   get:
+ *     summary: Danh sách hóa đơn / giao dịch thực tế
+ *     tags: [AdminMember]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Danh sách hóa đơn
+ */
+router.get('/payments', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getAdminPayments);
 
 /**
  * @swagger

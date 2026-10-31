@@ -13,7 +13,9 @@ import swaggerSpec from './config/swagger.js';
 import { configurePtChatSocket } from './sockets/ptChat.socket.js';
 import { startPtNoShowWorker } from './services/ptNoShow.service.js';
 import { assertGymMembershipSafetyReady, startGymMembershipWorker } from './services/membership.service.js';
+import { assertPtWalletSchemaReady } from './services/ptWallet.service.js';
 import { migrateLegacyPtChatMessages } from './services/ptChat.service.js';
+import { startExerciseAnalysisWorker } from './services/exerciseAnalysis.service.js';
 
 dotenv.config();
 
@@ -52,10 +54,12 @@ app.use(errorHandler);
 const startServer = async () => {
     await connectDB();
     await assertGymMembershipSafetyReady();
+    await assertPtWalletSchemaReady();
     const mongoReady = await connectMongoDB();
     if (mongoReady) await migrateLegacyPtChatMessages();
     startPtNoShowWorker();
     startGymMembershipWorker();
+    startExerciseAnalysisWorker();
 
     httpServer.listen(PORT, '0.0.0.0', () => {
         console.log(`Server running on http://localhost:${PORT}`);

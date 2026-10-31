@@ -1,5 +1,5 @@
 import { request } from './client';
-import { ApiMemberProfile360, Pagination } from './types';
+import { ApiMemberProfile360, ApiSubscription, Pagination } from './types';
 
 export const adminApi = {
   async getMembersList(params: { search?: string; page?: number; limit?: number } = {}) {
@@ -16,8 +16,15 @@ export const adminApi = {
         email: string;
         phone?: string | null;
         avatar?: string | null;
+        gender?: string | null;
+        dateOfBirth?: string | null;
         status: string;
         createdAt: string;
+        currentGymMembership: ApiSubscription | null;
+        currentCoachName: string | null;
+        ptCredit: { total: number; used: number; held: number; available: number };
+        legacyPtSessions: number;
+        checkInCount: number;
       }>;
       pagination: Pagination;
     }>(`/admin/members?${q.toString()}`);
@@ -28,6 +35,22 @@ export const adminApi = {
       success: boolean;
       data: ApiMemberProfile360;
     }>(`/admin/members/${id}/profile`);
+    return res.data;
+  },
+
+  async getAnalytics(range: string = 'month') {
+    const res = await request<{
+      success: boolean;
+      data: import('./types').ApiAdminAnalytics;
+    }>(`/admin/analytics?range=${encodeURIComponent(range)}`);
+    return res.data;
+  },
+
+  async getPayments(limit: number = 20) {
+    const res = await request<{
+      success: boolean;
+      data: import('./types').ApiAdminAnalytics['recentPayments'];
+    }>(`/admin/payments?limit=${limit}`);
     return res.data;
   }
 };

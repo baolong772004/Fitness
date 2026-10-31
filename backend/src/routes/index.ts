@@ -16,6 +16,8 @@ import supportRoutes from './support.route.js';
 import facilityRoutes from './facility.route.js';
 import notificationRoutes from './notification.route.js';
 import staffRoutes from './staff.route.js';
+import exerciseAnalysisRoutes from './exerciseAnalysis.route.js';
+import coachExerciseAnalysisRoutes from './coachExerciseAnalysis.route.js';
 
 const router = express.Router();
 
@@ -40,6 +42,8 @@ router.use('/support', supportRoutes);
 router.use('/facility', facilityRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/staff', staffRoutes);
+router.use('/exercise-analysis', exerciseAnalysisRoutes);
+router.use('/coach/shared-exercise-analyses', coachExerciseAnalysisRoutes);
 
 export default router;
 

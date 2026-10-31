@@ -1,0 +1,360 @@
+{
+  "exerciseId": "SQUAT",
+  "exerciseVariant": "BODYWEIGHT",
+  "standardVersion": "bodyweight-squat-1.0.0-draft",
+  "standardDigest": "126e78b2c87b4c92f5e0d399e66cbf36b2abf304384c3aa503d0674be26e30c2",
+  "validationStatus": "INSUFFICIENT_GROUND_TRUTH",
+  "includedRealHoldoutVideos": 0,
+  "criteria": [
+    {
+      "criterionId": "SQUAT-01",
+      "criterionName": "Chu kỳ Squat hoàn chỉnh",
+      "type": "A",
+      "policyStatus": "EXPERIMENTAL",
+      "readyForApprovedAndValidated": false,
+      "releaseGateBlocker": "NOT_COACH_VALIDATED",
+      "missingRequirements": [
+        "POLICY_STATUS_NOT_APPROVED_AND_VALIDATED",
+        "MISSING_COACH_APPROVAL_PROVENANCE",
+        "INSUFFICIENT_HOLDOUT_VIDEOS (0/3)",
+        "NO_HOLDOUT_METRICS_FOR_CRITERION"
+      ],
+      "candidatePolicyAvailable": true,
+      "candidatePolicy": {
+        "passCondition": {
+          "kind": "ALL_OF",
+          "conditions": [
+            {
+              "kind": "BOOLEAN_EQUALS",
+              "observedKey": "completedCycleObserved",
+              "expected": true
+            },
+            {
+              "kind": "NUMERIC_RANGE",
+              "observedKey": "totalSeconds",
+              "minimum": 0.6,
+              "maximum": 15.0
+            },
+            {
+              "kind": "NUMERIC_RANGE",
+              "observedKey": "descentSeconds",
+              "minimum": 0.2,
+              "maximum": 10.0
+            },
+            {
+              "kind": "NUMERIC_RANGE",
+              "observedKey": "ascentSeconds",
+              "minimum": 0.2,
+              "maximum": 10.0
+            }
+          ]
+        },
+        "improvementCondition": {
+          "kind": "COMPLEMENT_OF_PASS"
+        }
+      },
+      "acceptanceCriteria": {
+        "id": "SQUAT-01-CYCLE-ACCEPTANCE-V1",
+        "declaredAt": "2026-10-01T00:00:00Z",
+        "cameraViews": [
+          "SIDE",
+          "FRONT",
+          "OBLIQUE"
+        ],
+        "minimumPrecision": 0.85,
+        "minimumRecall": 0.85,
+        "maximumAbstentionRate": 0.15,
+        "minimumPositiveLabels": 5,
+        "minimumNegativeLabels": 5,
+        "minimumVideos": 3
+      },
+      "holdoutMetrics": null
+    },
+    {
+      "criterionId": "SQUAT-02",
+      "criterionName": "Độ sâu theo mục tiêu",
+      "type": "B",
+      "policyStatus": "EXPERIMENTAL",
+      "readyForApprovedAndValidated": false,
+      "releaseGateBlocker": "NOT_COACH_VALIDATED",
+      "missingRequirements": [
+        "POLICY_STATUS_NOT_APPROVED_AND_VALIDATED",
+        "MISSING_COACH_APPROVAL_PROVENANCE",
+        "INSUFFICIENT_HOLDOUT_VIDEOS (0/3)",
+        "NO_HOLDOUT_METRICS_FOR_CRITERION"
+      ],
+      "candidatePolicyAvailable": true,
+      "candidatePolicy": {
+        "passCondition": {
+          "kind": "NUMERIC_RANGE",
+          "observedKey": "hipAboveKneeRatio",
+          "minimum": -1.0,
+          "maximum": 0.0
+        },
+        "improvementCondition": {
+          "kind": "COMPLEMENT_OF_PASS"
+        }
+      },
+      "acceptanceCriteria": {
+        "id": "SQUAT-02-DEPTH-ACCEPTANCE-V1",
+        "declaredAt": "2026-10-01T00:00:00Z",
+        "cameraViews": [
+          "SIDE"
+        ],
+        "minimumPrecision": 0.8,
+        "minimumRecall": 0.8,
+        "maximumAbstentionRate": 0.2,
+        "minimumPositiveLabels": 5,
+        "minimumNegativeLabels": 5,
+        "minimumVideos": 3
+      },
+      "holdoutMetrics": null
+    },
+    {
+      "criterionId": "SQUAT-03",
+      "criterionName": "Chuyển động tương đối của gối",
+      "type": "C",
+      "policyStatus": "EXPERIMENTAL",
+      "readyForApprovedAndValidated": false,
+      "releaseGateBlocker": "NOT_COACH_VALIDATED",
+      "missingRequirements": [
+        "POLICY_STATUS_NOT_APPROVED_AND_VALIDATED",
+        "MISSING_COACH_APPROVAL_PROVENANCE",
+        "INSUFFICIENT_HOLDOUT_VIDEOS (0/3)",
+        "NO_HOLDOUT_METRICS_FOR_CRITERION"
+      ],
+      "candidatePolicyAvailable": true,
+      "candidatePolicy": {
+        "passCondition": {
+          "kind": "NUMERIC_RANGE",
+          "observedKey": "inwardChangeStanceRatio",
+          "minimum": -1.0,
+          "maximum": 0.1
+        },
+        "improvementCondition": {
+          "kind": "COMPLEMENT_OF_PASS"
+        }
+      },
+      "acceptanceCriteria": {
+        "id": "SQUAT-03-KNEE-ALIGNMENT-ACCEPTANCE-V1",
+        "declaredAt": "2026-10-01T00:00:00Z",
+        "cameraViews": [
+          "FRONT"
+        ],
+        "minimumPrecision": 0.8,
+        "minimumRecall": 0.8,
+        "maximumAbstentionRate": 0.2,
+        "minimumPositiveLabels": 5,
+        "minimumNegativeLabels": 5,
+        "minimumVideos": 3
+      },
+      "holdoutMetrics": null
+    },
+    {
+      "criterionId": "SQUAT-04",
+      "criterionName": "Phối hợp hông và thân lúc lên",
+      "type": "C",
+      "policyStatus": "EXPERIMENTAL",
+      "readyForApprovedAndValidated": false,
+      "releaseGateBlocker": "NOT_COACH_VALIDATED",
+      "missingRequirements": [
+        "POLICY_STATUS_NOT_APPROVED_AND_VALIDATED",
+        "MISSING_COACH_APPROVAL_PROVENANCE",
+        "INSUFFICIENT_HOLDOUT_VIDEOS (0/3)",
+        "NO_HOLDOUT_METRICS_FOR_CRITERION"
+      ],
+      "candidatePolicyAvailable": true,
+      "candidatePolicy": {
+        "passCondition": {
+          "kind": "ANY_OF",
+          "conditions": [
+            {
+              "kind": "NUMERIC_RANGE",
+              "observedKey": "earlyAscentLeanChangeDegrees",
+              "minimum": -90.0,
+              "maximum": 12.0
+            },
+            {
+              "kind": "NUMERIC_RANGE",
+              "observedKey": "hipShoulderRiseDifferenceRatio",
+              "minimum": -2.0,
+              "maximum": 0.12
+            }
+          ]
+        },
+        "improvementCondition": {
+          "kind": "COMPLEMENT_OF_PASS"
+        }
+      },
+      "acceptanceCriteria": {
+        "id": "SQUAT-04-TORSO-ASCENT-ACCEPTANCE-V1",
+        "declaredAt": "2026-10-01T00:00:00Z",
+        "cameraViews": [
+          "SIDE"
+        ],
+        "minimumPrecision": 0.8,
+        "minimumRecall": 0.8,
+        "maximumAbstentionRate": 0.2,
+        "minimumPositiveLabels": 5,
+        "minimumNegativeLabels": 5,
+        "minimumVideos": 3
+      },
+      "holdoutMetrics": null
+    },
+    {
+      "criterionId": "SQUAT-05",
+      "criterionName": "Nhịp và kiểm soát chuyển động",
+      "type": "A",
+      "policyStatus": "EXPERIMENTAL",
+      "readyForApprovedAndValidated": false,
+      "releaseGateBlocker": "NOT_COACH_VALIDATED",
+      "missingRequirements": [
+        "POLICY_STATUS_NOT_APPROVED_AND_VALIDATED",
+        "MISSING_COACH_APPROVAL_PROVENANCE",
+        "INSUFFICIENT_HOLDOUT_VIDEOS (0/3)",
+        "NO_HOLDOUT_METRICS_FOR_CRITERION"
+      ],
+      "candidatePolicyAvailable": true,
+      "candidatePolicy": {
+        "passCondition": {
+          "kind": "ALL_OF",
+          "conditions": [
+            {
+              "kind": "NUMERIC_RANGE",
+              "observedKey": "descentDifferenceFromClipMedianSeconds",
+              "minimum": -0.3,
+              "maximum": 0.3
+            },
+            {
+              "kind": "NUMERIC_RANGE",
+              "observedKey": "ascentDifferenceFromClipMedianSeconds",
+              "minimum": -0.3,
+              "maximum": 0.3
+            },
+            {
+              "kind": "NUMERIC_RANGE",
+              "observedKey": "descentSeconds",
+              "minimum": 0.25,
+              "maximum": 10.0
+            },
+            {
+              "kind": "NUMERIC_RANGE",
+              "observedKey": "ascentSeconds",
+              "minimum": 0.25,
+              "maximum": 10.0
+            }
+          ]
+        },
+        "improvementCondition": {
+          "kind": "COMPLEMENT_OF_PASS"
+        }
+      },
+      "acceptanceCriteria": {
+        "id": "SQUAT-05-TEMPO-CONSISTENCY-ACCEPTANCE-V1",
+        "declaredAt": "2026-10-01T00:00:00Z",
+        "cameraViews": [
+          "SIDE",
+          "FRONT",
+          "OBLIQUE"
+        ],
+        "minimumPrecision": 0.8,
+        "minimumRecall": 0.8,
+        "maximumAbstentionRate": 0.2,
+        "minimumPositiveLabels": 5,
+        "minimumNegativeLabels": 5,
+        "minimumVideos": 3
+      },
+      "holdoutMetrics": null
+    },
+    {
+      "criterionId": "SQUAT-06",
+      "criterionName": "Hai bên cơ thể trên ảnh",
+      "type": "C",
+      "policyStatus": "NOT_SUPPORTED",
+      "readyForApprovedAndValidated": false,
+      "releaseGateBlocker": "NOT_COACH_VALIDATED",
+      "missingRequirements": [
+        "NOT_SUPPORTED_IN_2D_MONOCULAR"
+      ],
+      "candidatePolicyAvailable": false,
+      "candidatePolicy": null,
+      "acceptanceCriteria": {
+        "id": "SQUAT-BODYWEIGHT-V1-ACCEPTANCE",
+        "declaredAt": "2026-10-01T00:00:00Z",
+        "minimumPrecision": 0.8,
+        "minimumRecall": 0.8,
+        "maximumAbstentionRate": 0.2,
+        "minimumPositiveLabels": 5,
+        "minimumNegativeLabels": 5,
+        "minimumVideos": 3
+      },
+      "holdoutMetrics": null
+    },
+    {
+      "criterionId": "SQUAT-07",
+      "criterionName": "Chuyển động gót và giới hạn tiếp xúc sàn",
+      "type": "D",
+      "policyStatus": "NOT_SUPPORTED",
+      "readyForApprovedAndValidated": false,
+      "releaseGateBlocker": "NOT_COACH_VALIDATED",
+      "missingRequirements": [
+        "NOT_SUPPORTED_IN_2D_MONOCULAR"
+      ],
+      "candidatePolicyAvailable": false,
+      "candidatePolicy": null,
+      "acceptanceCriteria": {
+        "id": "SQUAT-BODYWEIGHT-V1-ACCEPTANCE",
+        "declaredAt": "2026-10-01T00:00:00Z",
+        "minimumPrecision": 0.8,
+        "minimumRecall": 0.8,
+        "maximumAbstentionRate": 0.2,
+        "minimumPositiveLabels": 5,
+        "minimumNegativeLabels": 5,
+        "minimumVideos": 3
+      },
+      "holdoutMetrics": null
+    },
+    {
+      "criterionId": "SQUAT-08",
+      "criterionName": "Đối chiếu mục tiêu giáo án",
+      "type": "B",
+      "policyStatus": "EXPERIMENTAL",
+      "readyForApprovedAndValidated": false,
+      "releaseGateBlocker": "NOT_COACH_VALIDATED",
+      "missingRequirements": [
+        "POLICY_STATUS_NOT_APPROVED_AND_VALIDATED",
+        "MISSING_COACH_APPROVAL_PROVENANCE",
+        "INSUFFICIENT_HOLDOUT_VIDEOS (0/3)",
+        "NO_HOLDOUT_METRICS_FOR_CRITERION"
+      ],
+      "candidatePolicyAvailable": true,
+      "candidatePolicy": {
+        "passCondition": {
+          "kind": "NUMERIC_RANGE",
+          "observedKey": "hipAboveKneeRatio",
+          "minimum": -1.0,
+          "maximum": 0.0
+        },
+        "improvementCondition": {
+          "kind": "COMPLEMENT_OF_PASS"
+        }
+      },
+      "acceptanceCriteria": {
+        "id": "SQUAT-08-INDIVIDUAL-TARGET-ACCEPTANCE-V1",
+        "declaredAt": "2026-10-01T00:00:00Z",
+        "cameraViews": [
+          "SIDE",
+          "FRONT",
+          "OBLIQUE"
+        ],
+        "minimumPrecision": 0.85,
+        "minimumRecall": 0.85,
+        "maximumAbstentionRate": 0.15,
+        "minimumPositiveLabels": 5,
+        "minimumNegativeLabels": 5,
+        "minimumVideos": 3
+      },
+      "holdoutMetrics": null
+    }
+  ]
+}

@@ -1,0 +1,300 @@
+{
+  "SQUAT": {
+    "name": "Bodyweight Squat",
+    "phase": "REPETITIONS",
+    "standardVersion": "bodyweight-squat-1.0.0-draft",
+    "exerciseVariant": "BODYWEIGHT",
+    "criteria": [
+      {
+        "code": "SQUAT-01",
+        "title": "Chu kỳ Squat hoàn chỉnh",
+        "description": "Đo chu kỳ và mốc từng rep hoàn chỉnh.",
+        "joints": [
+          "hip",
+          "knee",
+          "ankle"
+        ],
+        "views": [
+          "SIDE",
+          "FRONT",
+          "OBLIQUE"
+        ]
+      },
+      {
+        "code": "SQUAT-02",
+        "title": "Độ sâu theo mục tiêu",
+        "description": "Lưu vị trí hông so với gối dù chưa có mục tiêu; chỉ kết luận khi mục tiêu và phương pháp được duyệt.",
+        "joints": [
+          "hip",
+          "knee",
+          "ankle"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      },
+      {
+        "code": "SQUAT-03",
+        "title": "Chuyển động tương đối của gối",
+        "description": "Mô tả hai bên gối và mốc bàn chân; một khoảng cách ngang đơn lẻ không chẩn đoán valgus.",
+        "joints": [
+          "leftHip",
+          "rightHip",
+          "leftKnee",
+          "rightKnee",
+          "leftAnkle",
+          "rightAnkle",
+          "leftHeel",
+          "rightHeel",
+          "leftToe",
+          "rightToe"
+        ],
+        "views": [
+          "FRONT"
+        ]
+      },
+      {
+        "code": "SQUAT-04",
+        "title": "Phối hợp hông và thân lúc lên",
+        "description": "Quan sát thay đổi thân qua pha lên; không đo đường cong cột sống.",
+        "joints": [
+          "shoulder",
+          "hip",
+          "knee",
+          "ankle"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      },
+      {
+        "code": "SQUAT-05",
+        "title": "Nhịp và kiểm soát chuyển động",
+        "description": "Đo nhịp xuống/lên và khác biệt giữa rep; không tự coi tốc độ khác là nguy hiểm.",
+        "joints": [
+          "hip",
+          "knee",
+          "ankle"
+        ],
+        "views": [
+          "SIDE",
+          "FRONT",
+          "OBLIQUE"
+        ]
+      },
+      {
+        "code": "SQUAT-06",
+        "title": "Hai bên cơ thể trên ảnh",
+        "description": "Chỉ quan sát hai bên khi đủ khớp và góc quay; chưa có thuật toán kết luận đối xứng kỹ thuật.",
+        "joints": [
+          "leftHip",
+          "rightHip",
+          "leftKnee",
+          "rightKnee",
+          "leftAnkle",
+          "rightAnkle"
+        ],
+        "views": [
+          "FRONT"
+        ]
+      },
+      {
+        "code": "SQUAT-07",
+        "title": "Chuyển động gót và giới hạn tiếp xúc sàn",
+        "description": "Thấy landmark gót không xác nhận chạm sàn, lực phân bổ hoặc nhấc gót thật.",
+        "joints": [
+          "heel",
+          "toe",
+          "ankle"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      },
+      {
+        "code": "SQUAT-08",
+        "title": "Đối chiếu mục tiêu giáo án",
+        "description": "Đối chiếu mục tiêu có nguồn và đơn vị; không parse ghi chú tự do thành ngưỡng tự động.",
+        "joints": [
+          "hip",
+          "knee",
+          "ankle"
+        ],
+        "views": [
+          "SIDE",
+          "FRONT"
+        ]
+      }
+    ]
+  },
+  "PUSH_UP": {
+    "name": "Push-up",
+    "phase": "REPETITIONS",
+    "standardVersion": "standard-push-up-1.0.0-draft",
+    "exerciseVariant": "STANDARD",
+    "criteria": [
+      {
+        "code": "PUSHUP-01",
+        "title": "Biên độ khuỷu",
+        "description": "Đo góc khuỷu; chưa chứng minh chạm sàn hay rep đạt.",
+        "joints": [
+          "Shoulder",
+          "Elbow",
+          "Wrist"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      },
+      {
+        "code": "PUSHUP-02",
+        "title": "Đường thân trên ảnh",
+        "description": "Quan sát thân ở từng pha, không suy ra độ cong lưng.",
+        "joints": [
+          "Shoulder",
+          "Hip",
+          "Ankle"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      }
+    ]
+  },
+  "PLANK": {
+    "name": "Front Plank",
+    "phase": "HOLD",
+    "standardVersion": "front-plank-1.0.0-draft",
+    "exerciseVariant": "FRONT",
+    "criteria": [
+      {
+        "code": "PLANK-01",
+        "title": "Đường thân trong khoảng giữ",
+        "description": "Đo đường thân qua thời gian, không chẩn đoán võng lưng.",
+        "joints": [
+          "Shoulder",
+          "Hip",
+          "Ankle"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      },
+      {
+        "code": "PLANK-02",
+        "title": "Vị trí hông trên ảnh",
+        "description": "Đo độ lệch hông trên ảnh; góc camera ảnh hưởng độ lệch.",
+        "joints": [
+          "Shoulder",
+          "Hip",
+          "Ankle"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      }
+    ]
+  },
+  "LUNGE": {
+    "name": "Forward Bodyweight Lunge",
+    "phase": "REPETITIONS",
+    "standardVersion": "forward-lunge-1.0.0-draft",
+    "exerciseVariant": "FORWARD_BODYWEIGHT",
+    "criteria": [
+      {
+        "code": "LUNGE-01",
+        "title": "Góc gối quan sát",
+        "description": "Đo bên nhìn rõ; chưa xác nhận chân trước tự động.",
+        "joints": [
+          "Hip",
+          "Knee",
+          "Ankle"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      },
+      {
+        "code": "LUNGE-02",
+        "title": "Góc thân quan sát",
+        "description": "Đo thay đổi thân; chưa kết luận mất thăng bằng.",
+        "joints": [
+          "Shoulder",
+          "Hip",
+          "Knee"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      }
+    ]
+  },
+  "BICEPS_CURL": {
+    "name": "Standing Dumbbell Curl",
+    "phase": "REPETITIONS",
+    "standardVersion": "standing-dumbbell-curl-1.0.0-draft",
+    "exerciseVariant": "DUMBBELL_STANDING",
+    "criteria": [
+      {
+        "code": "CURL-01",
+        "title": "Biên độ gập khuỷu",
+        "description": "Góc hình chiếu không chứng minh cách cầm tạ.",
+        "joints": [
+          "Shoulder",
+          "Elbow",
+          "Wrist"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      },
+      {
+        "code": "CURL-02",
+        "title": "Cánh tay trên so với thân",
+        "description": "Đo vị trí cánh tay trên; không áp mốc cố định cho mọi biến thể curl.",
+        "joints": [
+          "Elbow",
+          "Shoulder",
+          "Hip"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      }
+    ]
+  },
+  "SHOULDER_PRESS": {
+    "name": "Seated Dumbbell Shoulder Press",
+    "phase": "REPETITIONS",
+    "standardVersion": "seated-dumbbell-press-1.0.0-draft",
+    "exerciseVariant": "DUMBBELL_SEATED",
+    "criteria": [
+      {
+        "code": "PRESS-01",
+        "title": "Góc duỗi khuỷu",
+        "description": "Đo khuỷu trên ảnh; chưa xác nhận đường tạ hoặc tải.",
+        "joints": [
+          "Shoulder",
+          "Elbow",
+          "Wrist"
+        ],
+        "views": [
+          "SIDE"
+        ]
+      },
+      {
+        "code": "PRESS-02",
+        "title": "Độ cao cổ tay so với vai",
+        "description": "Số đo chiều cao 2D không xác nhận độ linh hoạt vai hay an toàn.",
+        "joints": [
+          "Shoulder",
+          "Hip",
+          "Wrist"
+        ],
+        "views": [
+          "FRONT"
+        ]
+      }
+    ]
+  }
+}

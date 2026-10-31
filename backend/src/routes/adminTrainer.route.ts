@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTrainersList, setupTrainerProfile, toggleTrainerStatus } from '../controllers/adminTrainer.controller.js';
+import { getTrainersList, setupTrainerProfile, toggleTrainerStatus, updateTrainerPricing } from '../controllers/adminTrainer.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 import { getMasterCalendar, putMasterCalendar, addClosure, removeClosure, getCoachCalendarOverview, getCalendarAudit, listCoachChangeRequests, resolveCoachScheduleChange } from '../controllers/ptAvailability.controller.js';
 
@@ -90,6 +90,41 @@ router.get('/', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getTrainers
  *         description: Cấu hình thành công
  */
 router.post('/setup', authenticateToken, authorizeRoles('ADMIN'), setupTrainerProfile);
+
+/**
+ * @swagger
+ * /admin-trainers/{id}/pricing:
+ *   patch:
+ *     summary: Cập nhật đơn giá, cấp bậc và hoa hồng theo ID hồ sơ HLV
+ *     tags: [AdminTrainer]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [hourlyRate, commissionPercent, rank]
+ *             properties:
+ *               hourlyRate:
+ *                 type: number
+ *               commissionPercent:
+ *                 type: integer
+ *               rank:
+ *                 type: string
+ *                 enum: [junior, senior, master]
+ *     responses:
+ *       200:
+ *         description: Đã lưu cấu hình giá HLV
+ */
+router.patch('/:id/pricing', authenticateToken, authorizeRoles('ADMIN'), updateTrainerPricing);
 
 /**
  * @swagger

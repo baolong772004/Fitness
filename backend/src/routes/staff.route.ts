@@ -204,6 +204,20 @@ router.post(
 
 /**
  * @swagger
+ * /staff/members:
+ *   post:
+ *     summary: Staff tạo tài khoản hội viên mới, mật khẩu tạm 123456 và buộc đổi khi đăng nhập
+ *     tags: [Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Tạo tài khoản mới thành công
+ */
+router.post('/members', authenticateToken, authorizeRoles('STAFF', 'ADMIN'), requireStaffShift, StaffController.createMemberAccount);
+
+/**
+ * @swagger
  * /staff/pos/walk-in:
  *   post:
  *     summary: Giai đoạn 3.1 - Đăng ký khách Walk-in mới chưa tải App (Tạo nhanh, chọn gói, gán tư vấn, thu tiền, gửi SMS)

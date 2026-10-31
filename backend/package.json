@@ -4,16 +4,17 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "predev": "prisma generate",
     "dev": "tsx watch src/server.js",
-    "prestart": "prisma generate",
+    "prisma:generate": "prisma generate",
     "db:push": "prisma db push --skip-generate",
+    "db:migrate": "prisma migrate deploy",
     "start": "tsx src/server.js"
   },
   "dependencies": {
     "@payos/node": "^1.0.10",
     "@prisma/client": "6.19.3",
     "@types/morgan": "^1.9.10",
+    "@types/multer": "^2.3.0",
     "@types/qrcode": "^1.5.6",
     "bcrypt": "^6.0.0",
     "cors": "latest",
@@ -23,6 +24,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^6.21.0",
     "morgan": "^1.12.1",
+    "multer": "^2.5.0",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.1",
     "swagger-jsdoc": "^6.3.0",

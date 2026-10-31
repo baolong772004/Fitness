@@ -1,0 +1,116 @@
+[
+  {
+    "exercise": "SQUAT",
+    "path": "samples/front-facing-squat-pexels-5034577.mp4",
+    "source": "https://www.pexels.com/video/woman-doing-squat-exercise-5034577/",
+    "sourceType": "REAL",
+    "split": "development",
+    "exerciseVariant": "BODYWEIGHT",
+    "variantSource": "DEVELOPMENT_SELECTION_NOT_COACH_LABEL",
+    "referenceStandardVersion": "bodyweight-squat-1.0.0-draft",
+    "criterionIds": [
+      "SQUAT-01",
+      "SQUAT-02",
+      "SQUAT-03",
+      "SQUAT-04",
+      "SQUAT-05",
+      "SQUAT-06",
+      "SQUAT-07",
+      "SQUAT-08"
+    ],
+    "resultPath": "evaluation/private/technique-smoke/squat.json",
+    "coachLabels": null,
+    "coachGroundTruth": null,
+    "sha256": "5d27d9b378af0d323237fa48fa2fe32befec20a72e4f24988f7979f7fef9c7a8"
+  },
+  {
+    "exercise": "PUSH_UP",
+    "path": "samples/push-up-pexels-4964649.mp4",
+    "source": "https://www.pexels.com/video/man-doing-push-ups-4964649/",
+    "sourceType": "REAL",
+    "split": "development",
+    "exerciseVariant": "STANDARD",
+    "variantSource": "DEVELOPMENT_SELECTION_NOT_COACH_LABEL",
+    "referenceStandardVersion": "standard-push-up-1.0.0-draft",
+    "criterionIds": [
+      "PUSHUP-01",
+      "PUSHUP-02"
+    ],
+    "resultPath": "evaluation/private/technique-smoke/push_up.json",
+    "coachLabels": null,
+    "coachGroundTruth": null,
+    "sha256": "ae8c7f1df9f5727bdd26d22b204ba63f21a48b1d3dc2ff13d1eb81d028cd5251"
+  },
+  {
+    "exercise": "PLANK",
+    "path": "samples/plank-pexels-6525496.mp4",
+    "source": "https://www.pexels.com/video/young-woman-doing-planks-6525496/",
+    "sourceType": "REAL",
+    "split": "development",
+    "exerciseVariant": "FRONT",
+    "variantSource": "DEVELOPMENT_SELECTION_NOT_COACH_LABEL",
+    "referenceStandardVersion": "front-plank-1.0.0-draft",
+    "criterionIds": [
+      "PLANK-01",
+      "PLANK-02"
+    ],
+    "resultPath": "evaluation/private/technique-smoke/plank.json",
+    "coachLabels": null,
+    "coachGroundTruth": null,
+    "sha256": "27a73cc4668d8225690510a7242a152aaa1bebb0fd85b456a2873c428318aa7e"
+  },
+  {
+    "exercise": "LUNGE",
+    "path": "samples/lunge-pexels-6525491.mp4",
+    "source": "https://www.pexels.com/video/side-view-of-woman-exercising-legs-6525491/",
+    "sourceType": "REAL",
+    "split": "development",
+    "exerciseVariant": "FORWARD_BODYWEIGHT",
+    "variantSource": "DEVELOPMENT_SELECTION_NOT_COACH_LABEL",
+    "referenceStandardVersion": "forward-lunge-1.0.0-draft",
+    "criterionIds": [
+      "LUNGE-01",
+      "LUNGE-02"
+    ],
+    "resultPath": "evaluation/private/technique-smoke/lunge.json",
+    "coachLabels": null,
+    "coachGroundTruth": null,
+    "sha256": "de2e555ca261eedbc5a6a0c382c7138f80f928c637532c4bc70fb6511f5126b1"
+  },
+  {
+    "exercise": "BICEPS_CURL",
+    "path": "samples/hammer-curls-ymove.mp4",
+    "source": "https://ymove.app/free-exercise-videos",
+    "sourceType": "REAL",
+    "split": "development",
+    "exerciseVariant": "DUMBBELL_STANDING",
+    "variantSource": "DEVELOPMENT_SELECTION_NOT_COACH_LABEL",
+    "referenceStandardVersion": "standing-dumbbell-curl-1.0.0-draft",
+    "criterionIds": [
+      "CURL-01",
+      "CURL-02"
+    ],
+    "resultPath": "evaluation/private/technique-smoke/biceps_curl.json",
+    "coachLabels": null,
+    "coachGroundTruth": null,
+    "sha256": "f75af638089352a4de0cfd3ad39de36350b894f8555d4f16404655a769ab12b9"
+  },
+  {
+    "exercise": "SHOULDER_PRESS",
+    "path": "samples/shoulder-press-pexels-5837705.mp4",
+    "source": "https://www.pexels.com/video/man-lifting-weights-5837705/",
+    "sourceType": "REAL",
+    "split": "development",
+    "exerciseVariant": "DUMBBELL_SEATED",
+    "variantSource": "DEVELOPMENT_SELECTION_NOT_COACH_LABEL",
+    "referenceStandardVersion": "seated-dumbbell-press-1.0.0-draft",
+    "criterionIds": [
+      "PRESS-01",
+      "PRESS-02"
+    ],
+    "resultPath": "evaluation/private/technique-smoke/shoulder_press.json",
+    "coachLabels": null,
+    "coachGroundTruth": null,
+    "sha256": "cfa4fd92731b994508d88f4a56062e65fdf6901ca7fde1bf1dbc7d6d28140488"
+  }
+]

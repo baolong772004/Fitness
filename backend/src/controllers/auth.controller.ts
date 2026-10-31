@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { AuthService } from '../services/auth.service';
+import { AuthService } from '../services/auth.service.js';
 import { z } from 'zod';
-import { AuthRequest } from '../middlewares/auth.middleware';
+import { AuthRequest } from '../middlewares/auth.middleware.js';
 
 // Validation Schemas
 const registerSchema = z.object({
@@ -24,7 +24,7 @@ export class AuthController {
       });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, message: 'Validation failed', errors: error.errors });
+        return res.status(400).json({ success: false, message: 'Validation failed', errors: error.issues });
       }
       if (error.message === 'Email already exists') {
         return res.status(400).json({ success: false, message: error.message });
@@ -64,14 +64,14 @@ export class AuthController {
         return res.status(400).json({ success: false, message: 'Missing required fields' });
       }
       if (newPassword.length < 6) {
-        return res.status(400).json({ success: false, message: 'New password must be at least 6 characters' });
+        return res.status(400).json({ success: false, message: 'Mật khẩu mới cần ít nhất 6 ký tự.' });
       }
 
       await AuthService.changePassword(userId, oldPassword, newPassword);
       
       res.status(200).json({ success: true, message: 'Password changed successfully' });
     } catch (error: any) {
-      if (error.message === 'Incorrect old password') {
+      if (error.message === 'Incorrect old password' || error.message === 'New password must differ from old password' || error.message === 'New password must contain letters and numbers') {
         return res.status(400).json({ success: false, message: error.message });
       }
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });

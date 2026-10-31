@@ -8,7 +8,7 @@ export const SOCKET_URL = API_URL.replace(/\/api$/, '');
 const TOKEN_KEY = 'aura_access_token';
 const USER_KEY = 'aura_user';
 
-export type User = { id: number; fullName: string; email: string; role: string; phone?: string | null; balance?: number };
+export type User = { id: number; fullName: string; email: string; role: string; phone?: string | null; balance?: number; mustChangePassword?: boolean };
 export type Session = { token: string; user: User };
 
 let accessToken: string | null = null;
@@ -105,17 +105,33 @@ export const api = {
   cancelClass: (bookingId: number) => post(`/group-classes/cancel/${bookingId}`),
   checkInClass: (bookingId: number, qrToken: string) => post(`/group-classes/check-in/${bookingId}`, { qrToken }),
   ptBookings: async () => list<any>((await get('/pt/my-bookings')).data),
-  ptTrainers: async () => list<any>((await get('/pt/trainers')).data),
+  ptWallet: async () => (await get('/pt/wallet')).data as { total: number; used: number; held: number; available: number; expired: number; levels: { level: string; total: number; used: number; held: number; available: number; expired: number; retained: number }[]; sources: { id: number; level: string; ptProductId: number | null; benefits: string | null; source: string; coachId: number | null; quantity: number; usedSessions: number; remainingSessions: number; availableSessions: number; startAt: string | null; endAt: string | null; activatedAt: string | null; status: string; renewable: boolean; renewalDeadline: string | null }[] },
+  ptCreditHistory: async () => list<any>((await get('/pt/wallet/history')).data),
+  ptRenewalHistory: async () => list<any>((await get('/pt/wallet/renewals')).data),
+  ptProducts: async () => list<any>((await get('/pt/products')).data),
+  ptSingleOffers: async () => list<{ id: number; level: string; price: number; durationDays: number; maxQuantity: number; benefits: string | null }>((await get('/pt/single-offers')).data),
+  ptRenewalOptions: async () => list<{ id: number; name: string; level: string; ptProductId: number | null; purchaseMode: string | null; durationDays: number; price: number }>((await get('/pt/renewal-options')).data),
+  buyPtCredit: (productId: number, quantity: number, purchaseMode: 'PACKAGE' | 'SINGLE' = 'PACKAGE') => post('/payments/pt-credit/checkout', { productId, quantity, purchaseMode }),
+  checkoutPtItems: (items: { mode: 'PACKAGE' | 'SINGLE'; productId?: number; level?: string; quantity: number }[]) => post('/payments/pt-credit/checkout', { items }),
+  ptCoachChangeRequests: async () => list<any>((await get('/pt/coach-change-requests/mine')).data),
+  requestPtCoachChange: (batchId: number, newCoachId: number, reason: string) => post('/pt/coach-change-requests', { batchId, newCoachId, reason }),
+  renewPtDuration: (batchId: number, optionId: number) => post('/payments/pt-renewal/checkout', { batchId, optionId }),
+  bookPtCredit: (level: string, coachId: number, bookingDates: string[]) => post('/pt/wallet/bookings', { level, coachId, bookingDates }),
+  ptTrainers: async (level?: string) => list<any>((await get(`/pt/trainers${level ? `?level=${encodeURIComponent(level)}` : ''}`)).data),
   ptSlots: async (trainerId: number, date: Date) => list<any>((await get(`/pt/trainers/${trainerId}/slots?date=${dayKey(date)}`)).slots),
   bookPt: (ptSubscriptionId: number, bookingDate: string, coachId?: number) => post('/pt/booking', { ptSubscriptionId, bookingDate, coachId }),
   bookPtBatch: (ptSubscriptionId: number, bookingDates: string[], coachId?: number) => post('/pt/booking/batch', { ptSubscriptionId, bookingDates, coachId }),
   makeupPt: (originalBookingId: number, newBookingDate: string) => post('/pt/booking/schedule-makeup', { originalBookingId, newBookingDate }),
   absentPt: (bookingId: number, reason: string) => post(`/pt/booking/${bookingId}/mark-absent`, { reason }),
+  ptAbsencePolicy: (bookingId: number) => get(`/pt/booking/${bookingId}/absence-policy`),
   ptQr: (bookingId: number) => post(`/pt/booking/${bookingId}/generate-session-qr`),
   startPt: (qrToken: string) => post('/pt/booking/start-session', { qrToken }),
   completePt: (bookingId: number) => post(`/pt/booking/${bookingId}/complete-session`),
   chat: (bookingId: number, query = '') => get(`/pt/booking/${bookingId}/messages${query}`),
   sendChat: (bookingId: number, content: string) => post(`/pt/booking/${bookingId}/messages`, { content }),
+  ptConversations: () => get('/pt/conversations'),
+  pairChat: (partnerId: number, query = '') => get(`/pt/conversations/${partnerId}/messages${query}`),
+  sendPairChat: (partnerId: number, content: string, bookingId?: number) => post(`/pt/conversations/${partnerId}/messages`, { content, bookingId }),
   gymQr: () => get('/checkin/generate-qr'),
   checkInHistory: (page = 1) => get(`/checkin/history?page=${page}&limit=10`),
   notifications: (page = 1) => get(`/notifications?page=${page}&limit=20`),
@@ -123,27 +139,5 @@ export const api = {
   readNotification: (id: number) => request('PATCH', `/notifications/${id}/read`),
   readAllNotifications: () => request('PATCH', '/notifications/read-all'),
   progress: (memberId: number) => get(`/workouts/progress/${memberId}`),
-  // Payment history
-  paymentHistory: (page = 1) => get(`/payments/history?page=${page}&limit=10`),
-  // Booking history (all types)
-  bookingHistory: (page = 1, type?: string) => get(`/member/my-schedule?page=${page}&limit=10${type ? `&type=${type}` : ''}&includeCompleted=true`),
-  // Workout sessions history
-  workoutSessions: (page = 1) => get(`/workouts/sessions?page=${page}&limit=10`),
-  // Ratings
-  submitRating: (bookingId: number, rating: number, comment: string, targetType: 'COACH' | 'CLASS') =>
-    post('/ratings', { bookingId, rating, comment, targetType }),
-  myRatings: () => get('/ratings/my-ratings'),
-  coachRatings: (coachId: number) => get(`/ratings/coach/${coachId}`),
-  // Support
-  supportTickets: () => get('/support/tickets'),
-  createSupportTicket: (subject: string, message: string, category: string) =>
-    post('/support/tickets', { subject, message, category }),
-  // Notification settings
-  notificationSettings: () => get('/notifications/settings'),
-  updateNotificationSettings: (settings: Record<string, boolean>) =>
-    request('PATCH', '/notifications/settings', settings),
-  // Profile update
-  updateProfile: (data: { fullName?: string; phone?: string; dateOfBirth?: string; gender?: string; height?: number; weight?: number }) =>
-    request('PATCH', '/auth/profile', data),
-  myProfile: () => get('/auth/profile'),
+  workoutPlanRevisions: (planId: number) => get(`/workouts/student-plans/${planId}/revisions`),
 };

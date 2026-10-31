@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import prisma from '../config/prisma.js';
 
 // Mở rộng Request để chứa thông tin user
 export interface AuthRequest extends Request {
@@ -9,7 +10,7 @@ export interface AuthRequest extends Request {
   };
 }
 
-export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
@@ -22,37 +23,41 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     });
   }
 
+  let decoded: { userId: number; role: string };
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret') as { userId: number, role: string };
-    if (decoded.role === 'RECEPTIONIST') {
-      decoded.role = 'STAFF';
-    }
-    req.user = decoded;
-    next();
+    decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret') as { userId: number; role: string };
   } catch (error: any) {
-    const decoded = jwt.decode(token) as { userId: number; role: string } | null;
-    if (decoded && decoded.role === 'RECEPTIONIST') {
-      decoded.role = 'STAFF';
-    }
-    const isStaff = decoded?.role === 'STAFF';
+    const expiredToken = error?.name === 'TokenExpiredError';
+    const tokenPayload = jwt.decode(token) as { userId?: number; role?: string } | null;
+    const tokenRole = tokenPayload?.role === 'RECEPTIONIST' ? 'STAFF' : tokenPayload?.role;
+    const isStaff = tokenRole === 'STAFF';
 
-    // Cho phép staff thực hiện đối soát và đóng ca ngay cả khi token vừa hết hạn
+    // Staff can finish shift reconciliation after their session expires.
     const requestPath = (req.baseUrl || '') + (req.path || '');
-    if (error.name === 'TokenExpiredError' && isStaff && (requestPath.includes('/shift/close') || requestPath.includes('/shift/current'))) {
-      if (decoded && decoded.userId) {
-        req.user = decoded;
-        return next();
+    const isShiftCashoutRequest = requestPath.includes('/shift/close') || requestPath.includes('/shift/current');
+    if (expiredToken && isStaff && isShiftCashoutRequest && tokenPayload?.userId) {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: tokenPayload.userId },
+          select: { role: true },
+        });
+        if (user && (user.role === 'STAFF' || user.role === 'RECEPTIONIST')) {
+          req.user = { userId: tokenPayload.userId, role: 'STAFF' };
+          return next();
+        }
+      } catch (lookupError) {
+        return next(lookupError);
       }
     }
 
-    if (error.name === 'TokenExpiredError') {
+    if (expiredToken) {
       return res.status(401).json({
         success: false,
         message: 'Phiên đăng nhập đã hết hạn.',
         code: 'TOKEN_EXPIRED',
-        role: decoded?.role || null,
+        role: tokenRole || null,
         requiresStaffCashout: isStaff,
-        redirectTo: '/'
+        redirectTo: '/',
       });
     }
 
@@ -60,8 +65,33 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
       success: false,
       message: 'Token không hợp lệ hoặc đã hết hạn.',
       code: 'INVALID_TOKEN',
-      redirectTo: '/'
+      redirectTo: '/',
     });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { role: true, mustChangePassword: true },
+    });
+    if (!user) {
+      return res.status(403).json({ success: false, message: 'Tài khoản không còn tồn tại.' });
+    }
+    if (user.mustChangePassword && !req.originalUrl.split('?')[0].endsWith('/auth/change-password')) {
+      return res.status(403).json({
+        success: false,
+        code: 'PASSWORD_CHANGE_REQUIRED',
+        message: 'Vui lòng đổi mật khẩu tạm thời trước khi tiếp tục.'
+      });
+    }
+
+    req.user = {
+      userId: decoded.userId,
+      role: user.role === 'RECEPTIONIST' ? 'STAFF' : user.role,
+    };
+    return next();
+  } catch (error) {
+    return next(error);
   }
 };
 

@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { PaymentController } from '../controllers/payment.controller.js';
-import { authenticateToken } from '../middlewares/auth.middleware.js';
+import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 
 const router = Router();
+router.post('/pt-credit/checkout', authenticateToken, authorizeRoles('MEMBER'), PaymentController.createPtCreditCheckout);
+router.post('/pt-renewal/checkout', authenticateToken, authorizeRoles('MEMBER'), PaymentController.createPtRenewalCheckout);
 
 /**
  * @swagger

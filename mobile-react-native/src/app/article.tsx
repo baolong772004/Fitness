@@ -26,7 +26,7 @@ export default function Article() {
   return <Page style={{ backgroundColor: aura.cream }}>
     <View style={{ height: 245, marginHorizontal: -16, marginTop: -16, backgroundColor: aura.darkCoffee }}>
       {item.image ? <ImageBackground source={item.image} style={{ flex: 1 }}>{overlay}</ImageBackground> : <LinearGradient colors={[aura.coffee, aura.espresso]} style={{ flex: 1 }}>{overlay}</LinearGradient>}
-      <Pressable onPress={() => router.back()} accessibilityLabel="Quay về" style={{ position: 'absolute', top: 48, left: 12, width: 38, height: 38, borderRadius: 19, backgroundColor: '#0007', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="arrow-back" size={20} color="#fff" /></Pressable>
+      <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} accessibilityLabel="Quay về" style={{ position: 'absolute', top: 48, left: 12, width: 38, height: 38, borderRadius: 19, backgroundColor: '#0007', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="arrow-back" size={20} color="#fff" /></Pressable>
     </View>
     <View style={{ backgroundColor: aura.cream, borderTopLeftRadius: 29, borderTopRightRadius: 29, marginTop: -39, padding: 20, marginHorizontal: -16 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><Text style={{ color: aura.caramel, backgroundColor: '#F0DFD5', fontSize: 10, fontWeight: '900', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7 }}>{item.category}</Text><Text style={{ color: aura.muted, fontSize: 11 }}>◷  Đọc 3 phút</Text></View>
@@ -38,7 +38,7 @@ export default function Article() {
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 25 }}><Text style={{ color: aura.darkCoffee, fontWeight: '900', fontSize: 12, letterSpacing: .7 }}>LÀM THEO TỪNG BƯỚC</Text><Text style={{ color: aura.muted, fontSize: 11 }}>{articleSteps.length} bước</Text></View>
       {articleSteps.map((step, index) => <View key={index} style={{ flexDirection: 'row', gap: 11, padding: 13, borderRadius: 14, borderColor: aura.border, borderWidth: 1, backgroundColor: '#fff', marginTop: 9 }}><View style={{ width: 27, height: 27, borderRadius: 9, backgroundColor: aura.latte, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: aura.darkCoffee, fontWeight: '900' }}>{index + 1}</Text></View><Text style={{ flex: 1, color: aura.ink, fontSize: 12, lineHeight: 19 }}>{step}</Text></View>)}
       <View style={{ flexDirection: 'row', gap: 10, padding: 15, backgroundColor: aura.darkCoffee, borderRadius: 16, marginTop: 19 }}><Ionicons name="bulb-outline" size={20} color="#E5B18E" /><Text style={{ flex: 1, color: '#fff', fontSize: 12, lineHeight: 19 }}>Mẹo nhỏ: Bạn có thể mở lại tài liệu này bất cứ lúc nào trong mục Tin tức và hướng dẫn trên trang chủ.</Text></View>
-      <View style={{ marginTop: 35 }}><Button title="QUAY LẠI TRANG TRƯỚC" onPress={() => router.back()} /></View>
+      <View style={{ marginTop: 35 }}><Button title="QUAY LẠI TRANG TRƯỚC" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} /></View>
     </View>
   </Page>;
 }

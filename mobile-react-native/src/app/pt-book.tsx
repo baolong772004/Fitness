@@ -16,9 +16,9 @@ export default function PtBook() {
   const { subscription, makeupFor, deadline } = useLocalSearchParams<{ subscription?: string; makeupFor?: string; deadline?: string }>();
   const sub = useMemo(() => { try { return JSON.parse(subscription || '{}'); } catch { return {}; } }, [subscription]);
   const [coaches, setCoaches] = useState<any[]>([]);
-  const [trialCoachId, setTrialCoachId] = useState<number | null>(null);
-  const coachId = sub.isTrial ? trialCoachId : Number(sub.coachId);
-  const coachName = sub.isTrial ? coaches.find(item => Number(item.userId) === coachId)?.fullName : sub.coach?.fullName;
+  const [selectedCoachId, setSelectedCoachId] = useState<number | null>(null);
+  const coachId = makeupFor ? Number(sub.coachId) : selectedCoachId;
+  const coachName = makeupFor ? sub.coach?.fullName : coaches.find(item => Number(item.userId) === coachId)?.fullName;
   const availableSessions = Number(sub.availableSessions ?? sub.remainingSessions ?? 0);
   const selectionLimit = makeupFor ? 1 : Math.min(20, Math.max(0, availableSessions));
   const [date, setDate] = useState(() => {
@@ -28,13 +28,15 @@ export default function PtBook() {
   });
   const [showDate, setShowDate] = useState(false);
   const [slots, setSlots] = useState<PtSlot[]>([]);
+  const [creditSources, setCreditSources] = useState<Awaited<ReturnType<typeof api.ptWallet>>['sources']>([]);
   const [selected, setSelected] = useState<ChosenSlot[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loadId = useRef(0);
 
-  useEffect(() => { if (sub.isTrial) void api.ptTrainers().then(setCoaches).catch(() => setCoaches([])); }, [sub.isTrial]);
+  useEffect(() => { if (!makeupFor) void api.ptTrainers(sub.level).then(setCoaches).catch(() => setCoaches([])); }, [makeupFor, sub.level]);
+  useEffect(() => { if (!makeupFor) void api.ptWallet().then(wallet => setCreditSources(wallet.sources ?? [])).catch(() => setCreditSources([])); }, [makeupFor, sub.level]);
   useEffect(() => { setSelected([]); }, [coachId]);
   const gymInstant = (time: string) => {
     const [hours, minutes] = time.split(':').map(Number);
@@ -64,8 +66,15 @@ export default function PtBook() {
     return () => { socket.emit('coach:unwatch', coachId); socket.disconnect(); };
   }, [coachId, load]);
 
-  const isSlotAvailable = (slot: PtSlot) => slot.isAvailable === true &&
-    (!deadline || gymInstant(slot.endTime).getTime() <= new Date(deadline).getTime());
+  const isSlotAvailable = (slot: PtSlot) => {
+    if (!slot.isAvailable) return false;
+    const start = gymInstant(slot.startTime).getTime();
+    const end = gymInstant(slot.endTime).getTime();
+    if (makeupFor) return !deadline || end <= new Date(deadline).getTime();
+    return creditSources.some(source => source.level === sub.level && source.availableSessions > 0 &&
+      (!source.startAt || new Date(source.startAt).getTime() <= start) &&
+      (!source.endAt || new Date(source.endAt).getTime() >= end));
+  };
   const chooseSlot = (slot: PtSlot) => {
     if (!isSlotAvailable(slot) || busy) return;
     const bookingDate = gymInstant(slot.startTime).toISOString();
@@ -91,26 +100,28 @@ export default function PtBook() {
         setBusy(true);
         try {
           if (makeupFor) await api.makeupPt(Number(makeupFor), selected[0].bookingDate);
-          else if (selected.length === 1) await api.bookPt(Number(sub.id), selected[0].bookingDate, coachId || undefined);
-          else await api.bookPtBatch(Number(sub.id), selected.map(item => item.bookingDate), coachId || undefined);
+          else await api.bookPtCredit(String(sub.level), Number(coachId), selected.map(item => item.bookingDate));
           Alert.alert('Thành công', makeupFor ? 'Đã đặt lịch học bù.' : `${selected.length} buổi PT đã được xác nhận.`);
-          router.back();
+          if (router.canGoBack()) router.back();
+          else router.replace('/pt');
         } catch (cause) { showError(cause); await load(); }
         finally { setBusy(false); }
       })() },
     ]);
   };
 
-  if (!sub.isTrial && !sub.coachId) return <Page><Empty title="Gói PT chưa có Coach được gán" /></Page>;
+  if (!makeupFor && !sub.level) return <Page><Empty title="Chưa chọn loại credit PT" /></Page>;
   if (deadline && new Date(deadline).getTime() < Date.now()) return <Page><Empty title="Lượt học bù đã hết hạn" message="Bạn không thể đặt thêm buổi học bù cho lịch này." /></Page>;
   return <Page loading={loading} refresh={() => void load()}>
     <LinearGradient colors={[aura.espresso, aura.darkCoffee]} style={{ borderRadius: 20, padding: 17, flexDirection: 'row', alignItems: 'center', gap: 12 }}><View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFFFFF26', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="fitness-outline" size={25} color={aura.latte} /></View><View style={{ flex: 1 }}><Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>{coachName || (sub.isTrial ? 'Chọn Coach bên dưới' : 'Huấn luyện viên Aura')}</Text><Text style={{ color: '#E8D8CF', fontSize: 12, marginTop: 4 }}>{sub.package?.name || 'Gói PT'}</Text></View>{sub.remainingSessions != null && <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{sub.availableSessions ?? sub.remainingSessions} buổi</Text>}</LinearGradient>
     {makeupFor && <Card><Text style={{ color: aura.caramel, fontWeight: '800', fontSize: 12 }}>BUỔI HỌC BÙ</Text><Text style={{ color: aura.muted, fontSize: 12, marginTop: 5 }}>Lượt học bù chỉ được chọn một ca trước khi hết hạn.</Text></Card>}
-    {sub.isTrial && <><Section title="Chọn Coach cho buổi PT dùng thử" icon="people-outline" /><View style={{ gap: 8 }}>{coaches.map(coach => <Button key={String(coach.userId)} secondary={coachId !== Number(coach.userId)} title={coach.fullName || 'Coach'} onPress={() => setTrialCoachId(Number(coach.userId))} />)}</View></>}
+    {!makeupFor && <><Section title={`Chọn Coach chuyên ${sub.level}`} icon="people-outline" /><View style={{ gap: 8 }}>{coaches.map(coach => <Button key={String(coach.userId)} secondary={coachId !== Number(coach.userId)} title={coach.fullName || 'Coach'} onPress={() => setSelectedCoachId(Number(coach.userId))} />)}</View>{coaches.length === 0 && <Empty title="Chưa có Coach phù hợp" />}</>}
     <Section title={`Ngày tập · ${dateLabel(date)}`} subtitle={makeupFor ? 'Chọn một ca học bù' : 'Có thể chọn ca ở nhiều ngày khác nhau'} icon="calendar-outline" />
+    {!makeupFor && creditSources.some(source => source.level === sub.level && source.remainingSessions > 0 && source.status === 'EXPIRED') && <Card><Text style={{ color: aura.caramel }}>Một số buổi PT đã hết hạn; chỉ các ca được nguồn còn hiệu lực bao phủ mới có thể đặt.</Text></Card>}
     <Button secondary title="Chọn ngày khác" onPress={() => setShowDate(true)} />
-    {showDate && <DateTimePicker mode="date" value={date} minimumDate={new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())} maximumDate={deadline ? new Date(deadline) : new Date(Date.now() + 90 * 86400000)} onChange={(_, value) => { setShowDate(false); if (value) setDate(value); }} />}
+    {showDate && <DateTimePicker mode="date" value={date} minimumDate={new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())} maximumDate={deadline ? new Date(deadline) : new Date(Date.now() + 90 * 86400000)} onValueChange={(_, value) => { setShowDate(false); setDate(value); }} onDismiss={() => setShowDate(false)} />}
     <Section title="Ca tập còn trống" subtitle="Chạm nhiều ca rồi chuyển ngày để chọn tiếp" icon="time-outline" />
+    {!makeupFor && <Text style={{ color: aura.muted, fontSize: 12 }}>Ca nằm ngoài thời hạn của mọi nguồn PT còn buổi sẽ bị khóa. Cần có Membership Gym hợp lệ cho toàn bộ ca.</Text>}
     {error && <><Empty title="Chưa tải được lịch Coach" message={error} icon="wifi-outline" /><Button secondary title="Thử lại" onPress={() => void load()} /></>}
     {!error && !loading && !!coachId && slots.length === 0 && <Empty title="Ngày này chưa có ca trống" message="Chọn ngày khác để xem lịch Coach." />}
     {!error && <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{slots.map(slot => { const available = isSlotAvailable(slot); const chosen = selected.some(item => item.bookingDate === gymInstant(slot.startTime).toISOString()); return <Pressable key={slot.startTime} accessibilityRole="button" accessibilityLabel={`${slot.startTime} đến ${slot.endTime}${chosen ? ', đã chọn' : ''}`} accessibilityState={{ selected: chosen, disabled: !available }} disabled={!available || busy} onPress={() => chooseSlot(slot)} style={{ backgroundColor: chosen ? aura.darkCoffee : aura.white, borderColor: chosen ? aura.darkCoffee : aura.border, borderWidth: 1, borderRadius: 13, padding: 13, opacity: available ? 1 : .5 }}><Text style={{ color: chosen ? aura.white : available ? aura.darkCoffee : aura.muted, fontWeight: '800' }}>{chosen ? '✓ ' : ''}{slot.startTime}–{slot.endTime}</Text></Pressable>; })}</View>}

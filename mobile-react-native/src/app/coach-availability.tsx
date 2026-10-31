@@ -102,7 +102,7 @@ export default function CoachAvailability() {
     finally { setBusy(false); }
   };
 
-  if (!['COACH', 'TRAINER'].includes(user?.role ?? '')) return <Page><Hero eyebrow="COACH" title="Lịch làm việc" subtitle="Chức năng dành cho Coach." /><Button title="Quay lại" onPress={() => router.back()} /></Page>;
+  if (!['COACH', 'TRAINER'].includes(user?.role ?? '')) return <Page><Hero eyebrow="COACH" title="Lịch làm việc" subtitle="Chức năng dành cho Coach." /><Button title="Quay lại" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} /></Page>;
   const pending = mode === 'weekly' ? weeklyDraft !== null : Object.keys(dateDrafts).length > 0;
   return <Page loading={loading} refresh={() => void load()}>
     <Hero eyebrow="COACH" title="Lịch đăng ký làm việc PT" subtitle="Chọn trực tiếp các ô giờ trong lịch chung. Ca hợp lệ được mở cho hội viên đặt ngay." />

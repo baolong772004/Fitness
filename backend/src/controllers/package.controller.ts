@@ -9,8 +9,8 @@ export class PackageController {
       const { name, type, description, price, durationDays, trialPtSessions, totalPtSessions } = req.body;
 
       // Validate Type
-      if (type !== 'MEMBERSHIP' && type !== 'PT') {
-        return res.status(400).json({ success: false, message: 'Package type must be either MEMBERSHIP or PT' });
+      if (type !== 'MEMBERSHIP') {
+        return res.status(410).json({ success: false, message: 'Gói PT mới phải tạo trong PT Credit Products.' });
       }
       if (type === 'PT' && (!Number.isSafeInteger(Number(totalPtSessions)) || Number(totalPtSessions) <= 0)) {
         return res.status(400).json({ success: false, message: 'PT packages must have a positive totalPtSessions value' });
@@ -56,7 +56,7 @@ export class PackageController {
 
   static async getPackageById(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number(req.params.id);
       if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       const pkg = await prisma.package.findUnique({
@@ -73,13 +73,16 @@ export class PackageController {
 
   static async updatePackage(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number(req.params.id);
       if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       const { name, type, description, price, durationDays, trialPtSessions, totalPtSessions, isActive } = req.body;
 
       const pkgExists = await prisma.package.findUnique({ where: { id } });
       if (!pkgExists) return res.status(404).json({ success: false, message: 'Package not found' });
+      if (pkgExists.type === 'PT' || type === 'PT') {
+        return res.status(410).json({ success: false, message: 'Gói PT cũ chỉ giữ lịch sử. Tạo sản phẩm PT Credit mới.' });
+      }
 
       const effectiveType = type ?? pkgExists.type;
       const effectivePtSessions = totalPtSessions ?? pkgExists.totalPtSessions;
@@ -109,7 +112,7 @@ export class PackageController {
 
   static async deletePackage(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number(req.params.id);
       if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid ID' });
 
       const pkgExists = await prisma.package.findUnique({ where: { id } });

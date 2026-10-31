@@ -1,6 +1,5 @@
 import React from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { articles } from '../lib/articles';
@@ -14,9 +13,25 @@ export const editorialRows = {
 export function EditorialCard({ item, width = 286 }: { item: typeof articles[number]; width?: number }) {
   return <Pressable onPress={() => router.push({ pathname: '/article', params: { id: item.id } })} style={{ width, height: 255, borderRadius: 19, backgroundColor: '#fff', overflow: 'hidden', borderColor: aura.border, borderWidth: 1 }}>
     <View style={{ height: 146, backgroundColor: aura.darkCoffee }}>
-      {item.image ? <Image source={item.image} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : <LinearGradient colors={[aura.espresso, aura.caramel]} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Ionicons name={item.id === 'checkin' ? 'qr-code-outline' : item.id === 'support' ? 'headset-outline' : 'calendar-outline'} size={55} color="#FFFFFF99" /></LinearGradient>}
+      {item.image ? (
+        <Image source={item.image} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+      ) : (
+        <LinearGradient
+          colors={[aura.espresso, aura.caramel]}
+          style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 }}
+        >
+          <View style={{ borderWidth: 1, borderColor: '#FFFFFF33', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6 }}>
+            <Text style={{ color: '#FFD487', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>AURA GYM DOC</Text>
+          </View>
+          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '900', textAlign: 'center' }}>{item.title}</Text>
+        </LinearGradient>
+      )}
     </View>
-    <View style={{ padding: 12 }}><Text style={{ color: aura.caramel, fontSize: 9, fontWeight: '900', letterSpacing: .8 }}>{item.category}</Text><Text numberOfLines={2} style={{ color: aura.darkCoffee, fontSize: 14, fontWeight: '900', lineHeight: 18, marginTop: 4 }}>{item.title}</Text><Text numberOfLines={2} style={{ color: aura.muted, fontSize: 11, lineHeight: 15, marginTop: 4 }}>{item.summary}</Text></View>
+    <View style={{ padding: 12 }}>
+      <Text style={{ color: aura.caramel, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 }}>{item.category}</Text>
+      <Text numberOfLines={2} style={{ color: aura.darkCoffee, fontSize: 14, fontWeight: '900', lineHeight: 18, marginTop: 4 }}>{item.title}</Text>
+      <Text numberOfLines={2} style={{ color: aura.muted, fontSize: 11, lineHeight: 15, marginTop: 4 }}>{item.summary}</Text>
+    </View>
   </Pressable>;
 }
 

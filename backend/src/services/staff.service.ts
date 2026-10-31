@@ -2,9 +2,20 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { createUserNotification } from './notification.service.js';
+import { grantPtCredit } from './ptWallet.service.js';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
+const STAFF_TEMP_PASSWORD = '123456';
+
+function normalizeStaffMemberPhone(value: string) {
+  const raw = value.trim();
+  const digits = raw.replace(/\D/g, '');
+  if (!/^\+?[0-9 ()-]+$/.test(raw) || digits.length < 8 || digits.length > 15) {
+    throw new Error('Số điện thoại không hợp lệ.');
+  }
+  return digits.startsWith('84') && digits.length === 11 ? `0${digits.slice(2)}` : digits;
+}
 
 export class StaffService {
   // =========================================================================
@@ -703,6 +714,46 @@ export class StaffService {
   // GIAI ĐOẠN 3: HỖ TRỢ THANH TOÁN TẠI QUẦY (Offline POS Fallback)
   // =========================================================================
 
+  static async createMemberAccount(params: { fullName: string; phone: string; email?: string; staffId: number }) {
+    const fullName = params.fullName.trim();
+    const phone = normalizeStaffMemberPhone(params.phone);
+    const email = params.email?.trim().toLowerCase() || `walkin_${phone.replace(/\D/g, '')}@gymfitness.local`;
+    if (fullName.length < 2) {
+      throw new Error('Vui lòng nhập họ tên và số điện thoại hợp lệ.');
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Email đăng nhập không hợp lệ.');
+    const [phoneOwner, emailOwner] = await Promise.all([
+      prisma.user.findFirst({ where: { phone: { in: [phone, params.phone.trim()] } }, select: { id: true } }),
+      prisma.user.findUnique({ where: { email }, select: { id: true } })
+    ]);
+    if (phoneOwner || emailOwner) {
+      throw new Error('Số điện thoại hoặc email đã có tài khoản. Không tạo trùng hoặc đặt lại mật khẩu.');
+    }
+
+    const password = await bcrypt.hash(STAFF_TEMP_PASSWORD, 10);
+    const member = await prisma.$transaction(async tx => {
+      const created = await tx.user.create({ data: {
+        fullName, phone, email, password,
+        mustChangePassword: true, role: 'MEMBER', status: 'ACTIVE'
+      } });
+      await tx.actionLog.create({ data: {
+        userId: params.staffId,
+        action: 'STAFF_CREATE_MEMBER_ACCOUNT',
+        details: `Lễ tân ID ${params.staffId} tạo tài khoản hội viên ${created.fullName} (${created.phone}).`
+      } });
+      return created;
+    });
+
+    return {
+      success: true,
+      message: 'Tạo tài khoản hội viên thành công.',
+      data: {
+        member: { id: member.id, fullName: member.fullName, phone: member.phone, email: member.email },
+        account: { created: true, loginEmail: member.email, temporaryPassword: STAFF_TEMP_PASSWORD, mustChangePassword: true }
+      }
+    };
+  }
+
   /**
    * Tạo và kích hoạt nhanh cho khách Walk-in chưa tải App
    */
@@ -739,10 +790,14 @@ export class StaffService {
     if (!pkg || !pkg.isActive) {
       throw new Error('Gói tập không tồn tại hoặc đã ngừng cung cấp.');
     }
+    if (pkg.type === 'PT') throw new Error('Gói PT cũ đã ngừng bán. Hội viên mua PT Credit qua PayOS.');
 
     const packagePrice = Number(pkg.price);
 
     // 2. Validate thanh toán
+    if (paymentMethod !== 'CASH' && paymentMethod !== 'POS') {
+      throw new Error('Hình thức thanh toán không hợp lệ.');
+    }
     if (paymentMethod === 'POS' && (!traceRefNo || traceRefNo.trim() === '')) {
       throw new Error('Thanh toán qua POS quẹt thẻ ngân hàng bắt buộc phải nhập Mã chuẩn chi (Trace / Ref No.).');
     }
@@ -760,42 +815,31 @@ export class StaffService {
     }
 
     // 3. Tìm hoặc tạo tài khoản Member
-    const normalizedPhone = phone.trim();
-    let member = await prisma.user.findFirst({
-      where: { phone: normalizedPhone }
-    });
-
-    if (!member) {
-      const generatedEmail = email?.trim() || `walkin_${normalizedPhone}@gymfitness.local`;
-      const defaultPassword = await bcrypt.hash('Gym@123456', 10);
-
-      member = await prisma.user.create({
-        data: {
-          fullName: fullName.trim(),
-          phone: normalizedPhone,
-          email: generatedEmail,
-          password: defaultPassword,
-          role: 'MEMBER',
-          status: 'ACTIVE'
-        }
-      });
+    const normalizedPhone = normalizeStaffMemberPhone(phone);
+    const normalizedEmail = email?.trim().toLowerCase();
+    if (fullName.trim().length < 2) {
+      throw new Error('Vui lòng nhập họ tên và số điện thoại hợp lệ.');
     }
+    if (normalizedEmail && !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      throw new Error('Email đăng nhập không hợp lệ.');
+    }
+    let member = await prisma.user.findFirst({
+      where: { phone: { in: [normalizedPhone, phone.trim()] } }
+    });
+    if (member && member.role !== 'MEMBER') {
+      throw new Error('Số điện thoại này thuộc tài khoản nhân viên. Vui lòng kiểm tra lại.');
+    }
+    const accountCreated = !member;
+    const loginEmail = normalizedEmail || `walkin_${normalizedPhone.replace(/\D/g, '')}@gymfitness.local`;
+    if (!member) {
+      const emailOwner = await prisma.user.findUnique({ where: { email: loginEmail } });
+      if (emailOwner) throw new Error('Email này đã có tài khoản. Vui lòng kiểm tra thông tin khách hàng.');
+    }
+    const defaultPasswordHash = accountCreated ? await bcrypt.hash(STAFF_TEMP_PASSWORD, 10) : null;
 
     // 4. Kích hoạt Membership ngay lập tức
     const startDate = new Date();
     const endDate = new Date(startDate.getTime() + pkg.durationDays * 86400000);
-
-    const membership = await prisma.membership.create({
-      data: {
-        userId: member.id,
-        packageId: pkg.id,
-        startDate,
-        endDate,
-        remainingSessions: pkg.type === 'PT' ? pkg.totalPtSessions : null,
-        status: 'ACTIVE',
-        coachId: consultantStaffId || null
-      }
-    });
 
     // 5. Ghi nhận giao dịch Payment
     const generatedOrderCode = BigInt(Date.now() + Math.floor(Math.random() * 1000));
@@ -803,42 +847,36 @@ export class StaffService {
       ? traceRefNo!.trim()
       : `CASH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
 
-    const payment = await prisma.payment.create({
-      data: {
-        userId: member.id,
-        membershipId: membership.id,
-        amount: pkg.price,
-        method: paymentMethod === 'CASH' ? 'CASH' : 'POS_CARD',
-        status: 'COMPLETED',
-        orderCode: generatedOrderCode,
-        transactionNo,
-        staffId,
-        shiftId,
+    const { registeredMember, membership, payment } = await prisma.$transaction(async tx => {
+      const registeredMember = member || await tx.user.create({ data: {
+        fullName: fullName.trim(), phone: normalizedPhone, email: loginEmail,
+        password: defaultPasswordHash!, mustChangePassword: true,
+        role: 'MEMBER', status: 'ACTIVE'
+      } });
+      const membership = await tx.membership.create({ data: {
+        userId: registeredMember.id, packageId: pkg.id, startDate, endDate,
+        remainingSessions: null, status: 'ACTIVE', coachId: consultantStaffId || null,
+      } });
+      const payment = await tx.payment.create({ data: {
+        userId: registeredMember.id, membershipId: membership.id, amount: pkg.price,
+        method: paymentMethod === 'CASH' ? 'CASH' : 'POS_CARD', status: 'COMPLETED',
+        orderCode: generatedOrderCode, transactionNo, staffId, shiftId,
         consultantId: consultantStaffId || null,
         traceRefNo: paymentMethod === 'POS' ? traceRefNo!.trim() : null,
         cashReceived: cashReceived ? cashReceived : null,
         cashChange: cashChange > 0 ? cashChange : null,
-        note: `Đăng ký gói Walk-in tại quầy [${pkg.name}]`
-      }
-    });
-
-    // 6. Nếu thu Tiền mặt: Ghi nhận ngay vào quỹ tiền mặt ca trực của Lễ tân
-    if (paymentMethod === 'CASH') {
-      await prisma.staffShift.update({
-        where: { id: shiftId },
-        data: {
-          systemCashAmount: { increment: pkg.price }
-        }
-      });
-    }
-
-    // 7. Ghi ActionLog
-    await prisma.actionLog.create({
-      data: {
-        userId: staffId,
-        action: 'WALK_IN_REGISTRATION',
-        details: `Lễ tân ID ${staffId} đăng ký gói [${pkg.name}] cho khách Walk-in ${member.fullName} (${member.phone}). Hình thức: ${paymentMethod}. Số tiền: ${packagePrice.toLocaleString('vi-VN')} đ.`
-      }
+        note: `Đăng ký gói Walk-in tại quầy [${pkg.name}]`,
+      } });
+      if (pkg.trialPtSessions > 0) await grantPtCredit(tx, { memberId: registeredMember.id,
+        level: 'TRIAL', source: 'MEMBERSHIP_GIFT', count: pkg.trialPtSessions,
+        membershipId: membership.id });
+      if (paymentMethod === 'CASH') await tx.staffShift.update({ where: { id: shiftId },
+        data: { systemCashAmount: { increment: pkg.price } } });
+      await tx.actionLog.create({ data: {
+        userId: staffId, action: 'WALK_IN_REGISTRATION',
+        details: `Lễ tân ID ${staffId} đăng ký gói [${pkg.name}] cho khách Walk-in ${registeredMember.fullName} (${registeredMember.phone}). Hình thức: ${paymentMethod}. Số tiền: ${packagePrice.toLocaleString('vi-VN')} đ.`,
+      } });
+      return { registeredMember, membership, payment };
     });
 
     // 8. Sinh link SMS hướng dẫn tải App
@@ -849,10 +887,10 @@ export class StaffService {
       message: 'Kích hoạt gói Walk-in thành công!',
       data: {
         member: {
-          id: member.id,
-          fullName: member.fullName,
-          phone: member.phone,
-          email: member.email
+          id: registeredMember.id,
+          fullName: registeredMember.fullName,
+          phone: registeredMember.phone,
+          email: registeredMember.email
         },
         membership: {
           id: membership.id,
@@ -869,8 +907,16 @@ export class StaffService {
           cashReceived,
           cashChange
         },
+        account: {
+          created: accountCreated,
+          loginEmail: registeredMember.email,
+          temporaryPassword: accountCreated ? STAFF_TEMP_PASSWORD : null,
+          mustChangePassword: registeredMember.mustChangePassword
+        },
         smsInvitation: {
-          messageText: `Chuc mung ${member.fullName} da tro thanh hoi vien cua Gym Fitness! Tai app tai day de check-in vao phong: ${smsLink}. Mat khau tam thoi: Gym@123456`,
+          messageText: accountCreated
+            ? `Chuc mung ${registeredMember.fullName} da tro thanh hoi vien cua Gym Fitness! Dang nhap bang email ${registeredMember.email}, mat khau tam thoi 123456 va doi mat khau ngay sau khi dang nhap. Tai app: ${smsLink}`
+            : `Goi tap cua ${registeredMember.fullName} da duoc kich hoat. Dang nhap bang tai khoan hien co de xem thong tin.${registeredMember.mustChangePassword ? ' Hay doi mat khau tam thoi sau khi dang nhap.' : ''} Tai app: ${smsLink}`,
           smsLink
         }
       }
@@ -952,6 +998,9 @@ export class StaffService {
     if (payment.status === 'COMPLETED') {
       throw new Error('Hóa đơn này đã được thanh toán trước đó.');
     }
+    if (payment.membership?.package.type === 'PT') {
+      throw new Error('Gói PT cũ đã ngừng bán. Không thể kích hoạt bằng thanh toán tại quầy.');
+    }
 
     const amount = Number(payment.amount);
 
@@ -1007,6 +1056,11 @@ export class StaffService {
             endDate
           }
         });
+        if (payment.membership.package.trialPtSessions > 0) {
+          await grantPtCredit(tx, { memberId: payment.userId, level: 'TRIAL',
+            source: 'MEMBERSHIP_GIFT', count: payment.membership.package.trialPtSessions,
+            membershipId: payment.membershipId });
+        }
       }
 
       // 3. Nếu là Tiền mặt: ghi nhận vào quỹ ca trực
@@ -1361,7 +1415,7 @@ export class StaffService {
    * Lấy tóm tắt ca trực hiện tại của Lễ tân để chuẩn bị đóng ca
    */
   static async getCurrentShiftSummary(staffId: number) {
-    const shift = await prisma.staffShift.findFirst({
+    let shift = await prisma.staffShift.findFirst({
       where: {
         staffId,
         status: 'OPEN'

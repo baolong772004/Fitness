@@ -1,0 +1,164 @@
+{
+  "testedAt": "2026-10-31T19:53:34.438Z",
+  "upload": 202,
+  "workerStatus": "COMPLETED",
+  "exercise": "SQUAT",
+  "variant": "BODYWEIGHT",
+  "modelVersion": "pose_landmarker_lite-59929e1d1ee9",
+  "ruleVersion": "squat-observation-7",
+  "standardVersion": "bodyweight-squat-1.0.0-draft",
+  "repetitions": 5,
+  "poseFrames": 165,
+  "criterionResults": [
+    {
+      "criterionId": "SQUAT-01",
+      "resultStatus": "MEASURED"
+    },
+    {
+      "criterionId": "SQUAT-02",
+      "resultStatus": "UNABLE_TO_ASSESS"
+    },
+    {
+      "criterionId": "SQUAT-03",
+      "resultStatus": "MEASURED"
+    },
+    {
+      "criterionId": "SQUAT-04",
+      "resultStatus": "UNABLE_TO_ASSESS"
+    },
+    {
+      "criterionId": "SQUAT-05",
+      "resultStatus": "MEASURED"
+    },
+    {
+      "criterionId": "SQUAT-06",
+      "resultStatus": "NOT_SUPPORTED"
+    },
+    {
+      "criterionId": "SQUAT-07",
+      "resultStatus": "NOT_SUPPORTED"
+    },
+    {
+      "criterionId": "SQUAT-08",
+      "resultStatus": "MEASURED"
+    }
+  ],
+  "memberSidePreview": {
+    "screeningStatus": "NEEDS_IMPROVEMENT_DETECTED",
+    "wholeExerciseStatus": "UNABLE_TO_CONFIRM",
+    "corrections": [
+      {
+        "criterionId": "SQUAT-02",
+        "title": "Độ sâu theo mục tiêu",
+        "bodyPart": "HIP",
+        "repNumber": 2,
+        "timestampSeconds": 5.205,
+        "observedValue": 0.7501,
+        "units": "projected_femur_length",
+        "threshold": {
+          "maximum": 0,
+          "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+          "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+        },
+        "feedback": "Trên ảnh quay ngang, hông còn cao hơn gối ở đáy rep; thử xuống tới mục tiêu đã chọn và nhờ Coach kiểm tra độ sâu thực tế.",
+        "affectedReps": [
+          2
+        ],
+        "evidenceFrames": 3
+      },
+      {
+        "criterionId": "SQUAT-08",
+        "title": "Đối chiếu mục tiêu giáo án",
+        "bodyPart": "WHOLE_BODY",
+        "repNumber": 2,
+        "timestampSeconds": 5.21,
+        "observedValue": 0.7501,
+        "units": "projected_femur_length",
+        "threshold": {
+          "maximum": 0,
+          "source": "REQUEST_PROTOCOL.depthTarget=HIP_AT_KNEE",
+          "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+        },
+        "feedback": "Thời gian hạ người hoặc độ sâu ở rep này chưa khớp mục tiêu cá nhân đã chọn; điều chỉnh nhịp đếm và độ sâu theo hướng dẫn của Coach.",
+        "affectedReps": [
+          2
+        ],
+        "evidenceFrames": 3
+      },
+      {
+        "criterionId": "SQUAT-05",
+        "title": "Nhịp và kiểm soát chuyển động",
+        "bodyPart": "WHOLE_BODY",
+        "repNumber": 1,
+        "timestampSeconds": 2.7,
+        "observedValue": 0.65,
+        "units": "seconds",
+        "threshold": {
+          "maximum": 0.3,
+          "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+          "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+        },
+        "feedback": "Nhịp hạ xuống hoặc đứng lên ở rep này lệch nhiều so với trung vị của hiệp tập; hãy giữ tốc độ đều giữa các rep.",
+        "affectedReps": [
+          1,
+          2
+        ],
+        "evidenceFrames": 3
+      }
+    ],
+    "officialImproved": 0
+  },
+  "uneditedSamples": {
+    "front": {
+      "analysisId": 9,
+      "measuredCriteria": 5,
+      "sourceReference": "squat-front-pexels-5034577"
+    },
+    "side": {
+      "analysisId": 11,
+      "measuredCriteria": 6,
+      "sourceReference": "squat-side-github-01"
+    },
+    "oblique": {
+      "analysisId": 12,
+      "sourceReference": "squat-oblique-pexels-8837221",
+      "tempoStatus": "NEEDS_IMPROVEMENT",
+      "improvementPredictions": [
+        {
+          "repNumber": 1,
+          "timestampSeconds": 2.2,
+          "observedValue": 0.4,
+          "units": "seconds",
+          "threshold": {
+            "maximum": 0.3,
+            "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+            "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+          },
+          "feedback": "Nhịp hạ xuống hoặc đứng lên ở rep này lệch nhiều so với trung vị của hiệp tập; hãy giữ tốc độ đều giữa các rep.",
+          "evidenceFrames": 3
+        },
+        {
+          "repNumber": 4,
+          "timestampSeconds": 17.32,
+          "observedValue": 0.4,
+          "units": "seconds",
+          "threshold": {
+            "maximum": 0.3,
+            "source": "SQUAT_CONFIG.tempo_tolerance_seconds",
+            "validation": "PROVISIONAL_NOT_COACH_VALIDATED"
+          },
+          "feedback": "Nhịp hạ xuống hoặc đứng lên ở rep này lệch nhiều so với trung vị của hiệp tập; hãy giữ tốc độ đều giữa các rep.",
+          "evidenceFrames": 3
+        }
+      ]
+    }
+  },
+  "detailAndHistoryChecked": true,
+  "creditBatchCountUnchanged": true,
+  "coachWorkflowFixture": {
+    "labelPersisted": true,
+    "reviewStatus": "COACH_REVIEWED_PENDING_VIDEO_VALIDATION",
+    "realCoachApproval": false
+  },
+  "limitation": "HTTP/SQL integration; on-device Mobile interaction and Coach accuracy are not assessed."
+}

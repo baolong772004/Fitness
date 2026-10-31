@@ -1,0 +1,887 @@
+{
+  "schemaVersion": 1,
+  "exerciseId": "SQUAT",
+  "exerciseName": "Bodyweight Squat",
+  "exerciseVariant": "BODYWEIGHT",
+  "equipment": [
+    "NONE"
+  ],
+  "trainingLevel": "COACH_ADAPTED",
+  "referenceSources": [
+    {
+      "sourceId": "ACE_BODYWEIGHT_SQUAT",
+      "title": "ACE Bodyweight Squat",
+      "url": "https://www.acefitness.org/resources/everyone/exercise-library/135/bodyweight-squat/",
+      "publisher": "American Council on Exercise",
+      "accessedAt": "2026-10-31",
+      "summary": "Hướng dẫn mô tả đứng, hạ người và trở lại đứng; theo dõi bàn chân, hướng gối và phối hợp hông–thân. Mức xuống cần cân nhắc khả năng giữ tư thế.",
+      "scope": "EXERCISE_COACHING_REFERENCE",
+      "providesValidatedComputerVisionThresholds": false
+    },
+    {
+      "sourceId": "NSCA_SQUAT_CONTEXT",
+      "title": "NSCA Bridge: Optimizing Squat Technique",
+      "url": "https://www.nsca.com/education/videos/bridge-series/bridge-optimizing-squat-technique/",
+      "publisher": "National Strength and Conditioning Association",
+      "accessedAt": "2026-10-31",
+      "summary": "Nguồn trình bày các gợi ý huấn luyện về thế đứng, gót, đầu và độ sâu squat; không cung cấp ngưỡng phân loại lỗi từ video 2D.",
+      "scope": "EXERCISE_COACHING_REFERENCE",
+      "providesValidatedComputerVisionThresholds": false
+    },
+    {
+      "sourceId": "MEDIAPIPE_POSE",
+      "title": "Pose landmark detection guide",
+      "url": "https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker",
+      "publisher": "Google AI Edge",
+      "accessedAt": "2026-10-31",
+      "summary": "Pose Landmarker dự đoán vị trí khớp theo ảnh/video; output không tự xác nhận kỹ thuật hay lực lên khớp.",
+      "scope": "MEASUREMENT_TECHNOLOGY_NOT_TECHNIQUE_STANDARD",
+      "providesValidatedComputerVisionThresholds": false
+    }
+  ],
+  "approvedByCoach": null,
+  "approvedAt": null,
+  "approvedStandardDigest": null,
+  "standardVersion": "bodyweight-squat-1.0.0-draft",
+  "status": "EXPERIMENTAL",
+  "startingPosition": {
+    "reference": "Đứng với thế chân phù hợp, thấy vai đến bàn chân. Điều kiện phần mềm: khớp chân đủ rõ và có đoạn đứng phù hợp ở bất kỳ lúc nào.",
+    "requiredLandmarks": [
+      "ankle",
+      "heel",
+      "hip",
+      "knee",
+      "leftAnkle",
+      "leftHeel",
+      "leftHip",
+      "leftKnee",
+      "leftToe",
+      "rightAnkle",
+      "rightHeel",
+      "rightHip",
+      "rightKnee",
+      "rightToe",
+      "shoulder",
+      "toe"
+    ],
+    "detectionConditions": [
+      "Nhận diện từ đoạn frame liên tục phù hợp, không chỉ frame đầu.",
+      "Tách điều kiện khởi tạo đo với điều kiện kết luận kỹ thuật."
+    ]
+  },
+  "movementPhases": [
+    {
+      "phaseId": "PREPARE",
+      "description": "Tìm đoạn đứng để làm mốc."
+    },
+    {
+      "phaseId": "DESCENT",
+      "description": "Hạ hông và gập gối."
+    },
+    {
+      "phaseId": "BOTTOM",
+      "description": "Mốc thấp nhất quan sát được."
+    },
+    {
+      "phaseId": "ASCENT",
+      "description": "Duỗi hông/gối để trở lại đứng."
+    },
+    {
+      "phaseId": "FINISH",
+      "description": "Xác nhận trở lại mốc đứng."
+    }
+  ],
+  "criteria": [
+    {
+      "criterionId": "SQUAT-01",
+      "criterionName": "Chu kỳ Squat hoàn chỉnh",
+      "type": "A",
+      "description": "Đo chu kỳ và mốc từng rep hoàn chỉnh.",
+      "applicableExerciseVariants": [
+        "BODYWEIGHT"
+      ],
+      "requiredCameraAngles": [
+        "SIDE",
+        "FRONT",
+        "OBLIQUE"
+      ],
+      "requiredLandmarks": [
+        "hip",
+        "knee",
+        "ankle"
+      ],
+      "implementationKey": "completion",
+      "sourceCriterionCodes": [
+        "MOVEMENT_TIMING"
+      ],
+      "referenceSourceIds": [
+        "ACE_BODYWEIGHT_SQUAT"
+      ],
+      "measurementMethod": {
+        "id": "completion",
+        "formula": "standing -> descent -> bottom -> ascent -> standing; no joining tracking gaps",
+        "units": "repetitions, seconds",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "QUALITATIVE_COACHING_REFERENCE",
+        "targetKey": null,
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "COACH_REVIEW_PENDING",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": null,
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Thử quay cả lúc bắt đầu và kết thúc tư thế đứng để kiểm tra chu kỳ."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "ACE_BODYWEIGHT_SQUAT"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "EXPERIMENTAL_NOT_COACH_VALIDATED",
+      "evaluationPolicy": {
+        "status": "EXPERIMENTAL",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    },
+    {
+      "criterionId": "SQUAT-02",
+      "criterionName": "Độ sâu theo mục tiêu",
+      "type": "B",
+      "description": "Lưu vị trí hông so với gối dù chưa có mục tiêu; chỉ kết luận khi mục tiêu và phương pháp được duyệt.",
+      "applicableExerciseVariants": [
+        "BODYWEIGHT"
+      ],
+      "requiredCameraAngles": [
+        "SIDE"
+      ],
+      "requiredLandmarks": [
+        "hip",
+        "knee",
+        "ankle"
+      ],
+      "implementationKey": "target_depth",
+      "sourceCriterionCodes": [
+        "DEPTH_TARGET"
+      ],
+      "referenceSourceIds": [
+        "ACE_BODYWEIGHT_SQUAT"
+      ],
+      "measurementMethod": {
+        "id": "target_depth",
+        "formula": "(knee_y - hip_y) / projected_femur_length at rep bottom",
+        "units": "femur_lengths",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "INDIVIDUAL_TRAINING_TARGET",
+        "targetKey": "depthTarget",
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "INDIVIDUAL_TRAINING_TARGET",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": "depthTarget",
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Giảm tốc để kiểm soát biên độ; đối chiếu mục tiêu đã thống nhất trong phạm vi thoải mái."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "ACE_BODYWEIGHT_SQUAT"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "EXPERIMENTAL_NOT_COACH_VALIDATED",
+      "evaluationPolicy": {
+        "status": "EXPERIMENTAL",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    },
+    {
+      "criterionId": "SQUAT-03",
+      "criterionName": "Chuyển động tương đối của gối",
+      "type": "C",
+      "description": "Mô tả hai bên gối và mốc bàn chân; một khoảng cách ngang đơn lẻ không chẩn đoán valgus.",
+      "applicableExerciseVariants": [
+        "BODYWEIGHT"
+      ],
+      "requiredCameraAngles": [
+        "FRONT"
+      ],
+      "requiredLandmarks": [
+        "leftHip",
+        "rightHip",
+        "leftKnee",
+        "rightKnee",
+        "leftAnkle",
+        "rightAnkle",
+        "leftHeel",
+        "rightHeel",
+        "leftToe",
+        "rightToe"
+      ],
+      "implementationKey": "knee_projection",
+      "sourceCriterionCodes": [
+        "KNEE_INWARD_LEFT",
+        "KNEE_INWARD_RIGHT"
+      ],
+      "referenceSourceIds": [
+        "ACE_BODYWEIGHT_SQUAT"
+      ],
+      "measurementMethod": {
+        "id": "knee_projection",
+        "formula": "signed knee displacement relative to foot reference from standing, normalized by stance width; inspect hip/foot stability",
+        "units": "stance_widths",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "QUALITATIVE_COACHING_REFERENCE",
+        "targetKey": null,
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "COACH_REVIEW_PENDING",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": null,
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Giữ bàn chân ổn định, quay rõ hai chân và nhờ Coach đối chiếu hướng gối với bàn chân."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "ACE_BODYWEIGHT_SQUAT"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "EXPERIMENTAL_NOT_COACH_VALIDATED",
+      "evaluationPolicy": {
+        "status": "EXPERIMENTAL",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    },
+    {
+      "criterionId": "SQUAT-04",
+      "criterionName": "Phối hợp hông và thân lúc lên",
+      "type": "C",
+      "description": "Quan sát thay đổi thân qua pha lên; không đo đường cong cột sống.",
+      "applicableExerciseVariants": [
+        "BODYWEIGHT"
+      ],
+      "requiredCameraAngles": [
+        "SIDE"
+      ],
+      "requiredLandmarks": [
+        "shoulder",
+        "hip",
+        "knee",
+        "ankle"
+      ],
+      "implementationKey": "torso_change",
+      "sourceCriterionCodes": [
+        "TORSO_ASCENT_CHANGE"
+      ],
+      "referenceSourceIds": [
+        "ACE_BODYWEIGHT_SQUAT"
+      ],
+      "measurementMethod": {
+        "id": "torso_change",
+        "formula": "lean(t)-lean(bottom); (hipRise-shoulderRise)/projected_torso_length",
+        "units": "degrees, torso_lengths",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "QUALITATIVE_COACHING_REFERENCE",
+        "targetKey": null,
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "COACH_REVIEW_PENDING",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": null,
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Thử đứng lên chậm hơn để đối chiếu nhịp nâng vai và hông trên video ngang."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "ACE_BODYWEIGHT_SQUAT"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "EXPERIMENTAL_NOT_COACH_VALIDATED",
+      "evaluationPolicy": {
+        "status": "EXPERIMENTAL",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    },
+    {
+      "criterionId": "SQUAT-05",
+      "criterionName": "Nhịp và kiểm soát chuyển động",
+      "type": "A",
+      "description": "Đo nhịp xuống/lên và khác biệt giữa rep; không tự coi tốc độ khác là nguy hiểm.",
+      "applicableExerciseVariants": [
+        "BODYWEIGHT"
+      ],
+      "requiredCameraAngles": [
+        "SIDE",
+        "FRONT",
+        "OBLIQUE"
+      ],
+      "requiredLandmarks": [
+        "hip",
+        "knee",
+        "ankle"
+      ],
+      "implementationKey": "movement_control",
+      "sourceCriterionCodes": [
+        "DESCENT_TARGET",
+        "MOVEMENT_TIMING",
+        "TEMPO_CONSISTENCY"
+      ],
+      "referenceSourceIds": [
+        "ACE_BODYWEIGHT_SQUAT"
+      ],
+      "measurementMethod": {
+        "id": "movement_control",
+        "formula": "bottomTime-startTime; endTime-bottomTime; descriptive within-clip variability",
+        "units": "seconds",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "QUALITATIVE_COACHING_REFERENCE",
+        "targetKey": null,
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "COACH_REVIEW_PENDING",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": null,
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Thử nhịp đều để kiểm soát các pha; đối chiếu nhịp riêng nếu Coach đã chọn."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "ACE_BODYWEIGHT_SQUAT"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "EXPERIMENTAL_NOT_COACH_VALIDATED",
+      "evaluationPolicy": {
+        "status": "EXPERIMENTAL",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    },
+    {
+      "criterionId": "SQUAT-06",
+      "criterionName": "Hai bên cơ thể trên ảnh",
+      "type": "C",
+      "description": "Chỉ quan sát hai bên khi đủ khớp và góc quay; chưa có thuật toán kết luận đối xứng kỹ thuật.",
+      "applicableExerciseVariants": [
+        "BODYWEIGHT"
+      ],
+      "requiredCameraAngles": [
+        "FRONT"
+      ],
+      "requiredLandmarks": [
+        "leftHip",
+        "rightHip",
+        "leftKnee",
+        "rightKnee",
+        "leftAnkle",
+        "rightAnkle"
+      ],
+      "implementationKey": "symmetry_observation",
+      "sourceCriterionCodes": [
+        "LEFT_RIGHT_SYMMETRY"
+      ],
+      "referenceSourceIds": [
+        "NSCA_SQUAT_CONTEXT"
+      ],
+      "measurementMethod": {
+        "id": "symmetry_observation",
+        "formula": "bilateral projected displacement/phase timing; camera perspective must be controlled",
+        "units": "degrees, seconds, normalized_displacement",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "QUALITATIVE_COACHING_REFERENCE",
+        "targetKey": null,
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "COACH_REVIEW_PENDING",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": null,
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Quay chính diện, cố định camera; nhờ Coach xem khi hai bên trông khác nhau."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "NSCA_SQUAT_CONTEXT"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "NOT_SUPPORTED",
+      "evaluationPolicy": {
+        "status": "NOT_SUPPORTED",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    },
+    {
+      "criterionId": "SQUAT-07",
+      "criterionName": "Chuyển động gót và giới hạn tiếp xúc sàn",
+      "type": "D",
+      "description": "Thấy landmark gót không xác nhận chạm sàn, lực phân bổ hoặc nhấc gót thật.",
+      "applicableExerciseVariants": [
+        "BODYWEIGHT"
+      ],
+      "requiredCameraAngles": [
+        "SIDE"
+      ],
+      "requiredLandmarks": [
+        "heel",
+        "toe",
+        "ankle"
+      ],
+      "implementationKey": "heel_observation",
+      "sourceCriterionCodes": [
+        "HEEL_LIFT"
+      ],
+      "referenceSourceIds": [
+        "ACE_BODYWEIGHT_SQUAT"
+      ],
+      "measurementMethod": {
+        "id": "heel_observation",
+        "formula": "projected heel-toe motion only; floor contact/force is unobserved",
+        "units": "pixels_or_normalized_displacement",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "QUALITATIVE_COACHING_REFERENCE",
+        "targetKey": null,
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "COACH_REVIEW_PENDING",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": null,
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Quay rõ bàn chân và nhờ Coach kiểm tra trực tiếp khi cần kết luận tiếp xúc sàn."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "ACE_BODYWEIGHT_SQUAT"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "NOT_SUPPORTED",
+      "evaluationPolicy": {
+        "status": "NOT_SUPPORTED",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    },
+    {
+      "criterionId": "SQUAT-08",
+      "criterionName": "Đối chiếu mục tiêu giáo án",
+      "type": "B",
+      "description": "Đối chiếu mục tiêu có nguồn và đơn vị; không parse ghi chú tự do thành ngưỡng tự động.",
+      "applicableExerciseVariants": [
+        "BODYWEIGHT"
+      ],
+      "requiredCameraAngles": [
+        "SIDE",
+        "FRONT"
+      ],
+      "requiredLandmarks": [
+        "hip",
+        "knee",
+        "ankle"
+      ],
+      "implementationKey": "target_achievement",
+      "sourceCriterionCodes": [
+        "DESCENT_TARGET",
+        "DEPTH_TARGET"
+      ],
+      "referenceSourceIds": [
+        "NSCA_SQUAT_CONTEXT"
+      ],
+      "measurementMethod": {
+        "id": "target_achievement",
+        "formula": "measured criterion value versus typed Coach target for same exercise/variant",
+        "units": "target_dependent",
+        "configurationRef": "measurementConfiguration",
+        "outputIsProjected2D": true
+      },
+      "evaluationMethod": {
+        "id": "COACH_APPROVED_POLICY_WITH_VALIDATION_GATE",
+        "requiresReviewedCriterion": true,
+        "requiresIndependentVideoValidation": true,
+        "requiresApplicableVariant": true
+      },
+      "referenceRangeOrTarget": {
+        "kind": "INDIVIDUAL_TRAINING_TARGET",
+        "targetKey": "individualTarget",
+        "value": null,
+        "universalNumericRange": null
+      },
+      "thresholdSource": "INDIVIDUAL_TRAINING_TARGET",
+      "passCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "targetKey": "individualTarget",
+        "description": "Chưa có điều kiện định lượng được Coach phê duyệt cho phạm vi sử dụng."
+      },
+      "improvementCondition": {
+        "kind": "COACH_CONDITION_REQUIRED",
+        "description": "Chỉ so điều kiện đã được duyệt; không suy ra từ absence of signal."
+      },
+      "insufficientDataCondition": [
+        "Biến thể không khớp hoặc chưa xác định.",
+        "Góc quay không phù hợp hay thay đổi.",
+        "Thiếu khớp hoặc mất tracking trong pha cần đo.",
+        "Thiếu mục tiêu áp dụng hoặc chưa có policy đã duyệt và kiểm chứng."
+      ],
+      "evidenceRequirements": {
+        "repOrSegment": true,
+        "timestampSeconds": true,
+        "observedValueAndUnits": true,
+        "targetAndProvenanceWhenUsed": true,
+        "landmarkCoordinatesAndVisibility": true,
+        "modelRuleStandardVersions": true
+      },
+      "correctionAdvice": {
+        "suggestions": [
+          "Thử lại cùng góc, biến thể và mục tiêu; trao đổi với Coach khi cần thay mục tiêu."
+        ],
+        "retry": "Giữ camera cố định theo góc hỗ trợ và quay lại cùng biến thể để đối chiếu.",
+        "coachReviewWhen": "Có đau, mất kiểm soát, dấu hiệu lặp lại hoặc cần đổi mục tiêu: dừng và nhờ người chuyên môn xem trực tiếp.",
+        "referenceSourceIds": [
+          "NSCA_SQUAT_CONTEXT"
+        ],
+        "approvalStatus": "SOURCE_INFORMED_REVIEW_PENDING"
+      },
+      "limitations": [
+        "Hình chiếu 2D chịu ảnh hưởng phối cảnh, vóc dáng và độ chính xác landmark.",
+        "Không suy ra lực, kích hoạt cơ, áp lực khớp, chẩn đoán hoặc mức an toàn tuyệt đối."
+      ],
+      "validationStatus": "EXPERIMENTAL_NOT_COACH_VALIDATED",
+      "evaluationPolicy": {
+        "status": "EXPERIMENTAL",
+        "approvedByCoach": null,
+        "approvedAt": null,
+        "approvedStandardDigest": null,
+        "validationReport": null,
+        "passCondition": null,
+        "improvementCondition": null
+      }
+    }
+  ],
+  "measurementConfiguration": {
+    "source": "IMPLEMENTATION_CONFIGURATION",
+    "coordinateSystem": "NORMALIZED_IMAGE_TO_PIXEL_2D",
+    "visibilityThreshold": 0.65,
+    "sampleRateHz": 10,
+    "visibilityMeaning": "landmark visibility, not probability of correct technique",
+    "version": "pose-measurement-1"
+  },
+  "algorithmThresholds": {
+    "source": "EXPERIMENTAL_ALGORITHM_CONFIGURATION",
+    "configurationRef": "SquatConfig",
+    "scientificallyValidatedTechniqueStandard": false,
+    "changesRequireRegressionTests": true
+  },
+  "individualTrainingTargetSchema": {
+    "source": "COACH_WORKOUT_PLAN_OR_EXPLICIT_USER_TARGET",
+    "targetsRequire": [
+      "value",
+      "units",
+      "exerciseVariant",
+      "source",
+      "configuredBy",
+      "configuredAt"
+    ],
+    "defaults": null,
+    "interpretFreeTextNotesAutomatically": false
+  },
+  "history": [
+    {
+      "version": "bodyweight-squat-1.0.0-draft",
+      "createdAt": "2026-10-31",
+      "status": "DRAFT",
+      "changeReason": "First source-informed reference; pending qualified Coach review and labeled-video validation."
+    }
+  ]
+}

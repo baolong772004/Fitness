@@ -1,0 +1,16 @@
+{
+  "status": "INSUFFICIENT_GROUND_TRUTH",
+  "claim": "CHƯA ĐỦ BẰNG CHỨNG VỀ ĐỘ CHÍNH XÁC",
+  "matching": "one-to-one temporal IoU >= 0.5; per-rep binary signals; positive abstentions count as false negatives; unassessable labels excluded; insufficient output counts as zero reps",
+  "metrics": {
+    "precision": null,
+    "recall": null,
+    "repCountMAE": null,
+    "insufficientDataRate": null,
+    "evaluatedClips": 0,
+    "byCriterion": {}
+  },
+  "byView": {},
+  "clips": [],
+  "excluded": []
+}

@@ -44,6 +44,7 @@ export interface Member {
   // Hybrid PT quota
   ptSessionsTotal: number;
   ptSessionsRemaining: number;
+  legacyPtSessions?: number;
   assignedCoachId?: string;
   assignedCoachName?: string;
   // History & notes
@@ -66,6 +67,7 @@ export interface Coach {
   avatar: string;
   rank: CoachRank;
   specialties: string[];
+  ptLevels?: string[];
   hourlyRateVND: number; // Đơn giá riêng theo Coach (e.g. 250k, 400k, 650k)
   commissionPercent: number;
   rating: number;

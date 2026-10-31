@@ -21,7 +21,7 @@ export default function ForgotPassword() {
     if (password.length < 6 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) return Alert.alert('Mật khẩu chưa hợp lệ', 'Mật khẩu cần ít nhất 6 ký tự, gồm chữ và số.');
     if (password !== confirm) return Alert.alert('Mật khẩu chưa khớp', 'Hãy nhập lại mật khẩu mới.');
     setBusy(true); setRequesting(false);
-    try { await api.resetPassword(token, password); Alert.alert('Thành công', 'Đổi mật khẩu thành công. Hãy đăng nhập lại.', [{ text: 'Đăng nhập', onPress: () => router.back() }]); }
+    try { await api.resetPassword(token, password); Alert.alert('Thành công', 'Đổi mật khẩu thành công. Hãy đăng nhập lại.', [{ text: 'Đăng nhập', onPress: () => router.canGoBack() ? router.back() : router.replace('/auth') }]); }
     catch (error) { showError(error); } finally { setBusy(false); }
   };
   return <View style={{ flex: 1 }}><Page><Hero eyebrow="BẢO MẬT TÀI KHOẢN" title="Khôi phục mật khẩu" subtitle={token ? 'Tạo mật khẩu mới cho tài khoản Aura của bạn.' : 'Nhập email để lấy lại quyền truy cập tài khoản.'} />

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aura-fitness:exercise-standard:1",
+  "title": "Versioned Exercise Technique Standard",
+  "type": "object",
+  "required": ["schemaVersion", "exerciseId", "exerciseName", "exerciseVariant", "equipment", "trainingLevel", "referenceSources", "approvedByCoach", "approvedAt", "standardVersion", "status", "startingPosition", "movementPhases", "criteria", "measurementConfiguration", "algorithmThresholds", "individualTrainingTargetSchema", "history"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "exerciseId": {"enum": ["SQUAT", "PUSH_UP", "PLANK", "LUNGE", "BICEPS_CURL", "SHOULDER_PRESS"]},
+    "exerciseName": {"type": "string", "minLength": 1},
+    "exerciseVariant": {"type": "string", "minLength": 1},
+    "equipment": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "trainingLevel": {"type": "string", "minLength": 1},
+    "standardVersion": {"type": "string", "minLength": 1},
+    "status": {"enum": ["EXPERIMENTAL", "PARTIAL", "SUPPORTED", "RETIRED"]},
+    "approvedByCoach": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/reviewer"}]},
+    "approvedAt": {"type": ["string", "null"], "format": "date-time"},
+    "approvedStandardDigest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "referenceSources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}},
+    "startingPosition": {"type": "object", "required": ["reference", "requiredLandmarks", "detectionConditions"]},
+    "movementPhases": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["phaseId", "description"]}},
+    "criteria": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/criterion"}},
+    "measurementConfiguration": {"type": "object", "required": ["source", "coordinateSystem", "version"], "properties": {"source": {"const": "IMPLEMENTATION_CONFIGURATION"}}},
+    "algorithmThresholds": {"type": "object", "required": ["source", "scientificallyValidatedTechniqueStandard"], "properties": {"source": {"const": "EXPERIMENTAL_ALGORITHM_CONFIGURATION"}, "scientificallyValidatedTechniqueStandard": {"type": "boolean"}}},
+    "individualTrainingTargetSchema": {"type": "object", "required": ["source", "targetsRequire", "defaults", "interpretFreeTextNotesAutomatically"], "properties": {"interpretFreeTextNotesAutomatically": {"const": false}}},
+    "history": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["version", "createdAt", "status", "changeReason"]}}
+  },
+  "$defs": {
+    "reviewer": {"type": "object", "required": ["reviewerId", "qualification", "reviewRecordId"], "properties": {"reviewerId": {"type": "string", "minLength": 1}, "qualification": {"type": "string", "minLength": 1}, "reviewRecordId": {"type": "string", "minLength": 1}}},
+    "source": {"type": "object", "required": ["sourceId", "title", "url", "publisher", "accessedAt", "summary", "providesValidatedComputerVisionThresholds"], "properties": {"sourceId": {"type": "string", "minLength": 1}, "url": {"type": "string", "format": "uri", "pattern": "^https://"}, "providesValidatedComputerVisionThresholds": {"const": false}}},
+    "criterion": {
+      "type": "object",
+      "required": ["criterionId", "criterionName", "description", "type", "applicableExerciseVariants", "requiredCameraAngles", "requiredLandmarks", "implementationKey", "measurementMethod", "evaluationMethod", "referenceRangeOrTarget", "thresholdSource", "passCondition", "improvementCondition", "insufficientDataCondition", "evidenceRequirements", "correctionAdvice", "limitations", "validationStatus", "evaluationPolicy"],
+      "properties": {
+        "criterionId": {"type": "string", "minLength": 1},
+        "criterionName": {"type": "string", "minLength": 1},
+        "type": {"enum": ["A", "B", "C", "D"]},
+        "applicableExerciseVariants": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "requiredCameraAngles": {"type": "array", "items": {"enum": ["SIDE", "FRONT", "OBLIQUE", "ANY_TRACKED"]}},
+        "requiredLandmarks": {"type": "array", "items": {"type": "string"}},
+        "implementationKey": {"type": "string", "minLength": 1},
+        "evaluationPolicy": {"$ref": "#/$defs/policy"},
+        "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "policy": {
+      "type": "object",
+      "required": ["status", "approvedByCoach", "approvedAt", "validationReport", "passCondition", "improvementCondition"],
+      "properties": {
+        "status": {"enum": ["EXPERIMENTAL", "NOT_SUPPORTED", "APPROVED_AND_VALIDATED"]},
+        "approvedByCoach": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/reviewer"}]},
+        "approvedAt": {"type": ["string", "null"], "format": "date-time"},
+        "approvedStandardDigest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "validationReport": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["path", "sha256", "standardVersion", "criterionId", "scope", "acceptanceCriteriaId"], "properties": {"sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "scope": {"type": "object", "required": ["exerciseVariant"]}}}]}
+      },
+      "allOf": [{"if": {"properties": {"status": {"enum": ["EXPERIMENTAL", "NOT_SUPPORTED"]}}}, "then": {"properties": {"approvedByCoach": {"type": "null"}, "approvedAt": {"type": "null"}, "validationReport": {"type": "null"}}}}]
+    }
+  }
+}

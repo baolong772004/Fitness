@@ -7,3 +7,10 @@ coverage/
 .env.*
 !backend/.env.example
 .DS_Store
+**/.npm-cache/
+backend/private-exercise-media/
+ai-exercise-service/models/
+ai-exercise-service/samples/
+ai-exercise-service/__pycache__/
+ai-exercise-service/.venv/
+ai-exercise-service/evaluation/private/

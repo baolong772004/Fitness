@@ -1,0 +1,143 @@
+[
+  {
+    "id": "side",
+    "path": "samples/github-side-squat.mp4",
+    "sourceType": "REAL",
+    "coachGroundTruth": null,
+    "sha256": "0a1b6dc35f6df231de33525c1f40ab1d4b98906b3523a1de39cd4e6f32316541"
+  },
+  {
+    "id": "front",
+    "path": "samples/front-facing-squat-pexels-5034577.mp4",
+    "sourceType": "REAL",
+    "coachGroundTruth": null,
+    "sha256": "5d27d9b378af0d323237fa48fa2fe32befec20a72e4f24988f7979f7fef9c7a8"
+  },
+  {
+    "id": "barbell",
+    "path": "samples/barbell-back-squat.mp4",
+    "sourceType": "REAL",
+    "coachGroundTruth": null,
+    "sha256": "e1619abcd21b0f97d83703b13f36c4a3f3261535417d92f50df99ffb7810d993"
+  },
+  {
+    "id": "dumbbell",
+    "path": "samples/dumbbell-goblet-squat.mp4",
+    "sourceType": "REAL",
+    "coachGroundTruth": null,
+    "sha256": "b904f193848260c75d89c56cccf00237cbcbca1d15b27136f698853a1e5f6536"
+  },
+  {
+    "id": "kettlebell",
+    "path": "samples/kettlebell-goblet-squat.mp4",
+    "sourceType": "REAL",
+    "coachGroundTruth": null,
+    "sha256": "c161fa1de4a9a03d51d0561d54b2a43964e187b6b99b5c6865f768c4ce56051b"
+  },
+  {
+    "id": "oblique",
+    "path": "samples/oblique-squat-pexels-8837221.mp4",
+    "sourceType": "REAL",
+    "coachGroundTruth": null,
+    "sha256": "43d04e787f559d041469295e1de93a619f7cfd7d8e18957b7d93fcc240c7cf85"
+  },
+  {
+    "id": "non-squat",
+    "path": "samples/hammer-curls-ymove.mp4",
+    "sourceType": "REAL",
+    "coachGroundTruth": null,
+    "sha256": "f75af638089352a4de0cfd3ad39de36350b894f8555d4f16404655a769ab12b9"
+  },
+  {
+    "id": "front-mid-rep",
+    "path": "samples/debug/front-mid-rep.mp4",
+    "sourceType": "EDITED",
+    "parent": "samples\\front-facing-squat-pexels-5034577.mp4",
+    "transformation": "trim=start=0.8,setpts=PTS-STARTPTS",
+    "coachGroundTruth": null,
+    "sha256": "8de6d50da933a99f34c9fe55e4e25dd43aa6a272885038f548e4822f3f834ab7"
+  },
+  {
+    "id": "front-delayed",
+    "path": "samples/debug/front-delayed.mp4",
+    "sourceType": "EDITED",
+    "parent": "samples\\front-facing-squat-pexels-5034577.mp4",
+    "transformation": "tpad=start_duration=3:start_mode=clone",
+    "coachGroundTruth": null,
+    "sha256": "f274687b22e606753ba6f7574f4e7acffd2611eebf4f6aee785d15831b767998"
+  },
+  {
+    "id": "front-short-gap",
+    "path": "samples/debug/front-short-gap.mp4",
+    "sourceType": "EDITED",
+    "parent": "samples\\front-facing-squat-pexels-5034577.mp4",
+    "transformation": "drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:enable='between(t,6.2,6.38)'",
+    "coachGroundTruth": null,
+    "sha256": "156f741ed9a7b1f9f7ad3210ab45534437fefe331ee913c5e21e93debe396336"
+  },
+  {
+    "id": "front-long-gap",
+    "path": "samples/debug/front-long-gap.mp4",
+    "sourceType": "EDITED",
+    "parent": "samples\\front-facing-squat-pexels-5034577.mp4",
+    "transformation": "drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:enable='between(t,6.0,6.9)'",
+    "coachGroundTruth": null,
+    "sha256": "f42aa3c0bbbf0a17bc7a0e5d8df8098d0234b94d43f76877352d3433dd6cd516"
+  },
+  {
+    "id": "front-static",
+    "path": "samples/debug/front-static.mp4",
+    "sourceType": "EDITED",
+    "parent": "samples\\front-facing-squat-pexels-5034577.mp4",
+    "transformation": "trim=start=2,trim=end_frame=1,loop=loop=149:size=1:start=0,setpts=N/(25*TB)",
+    "coachGroundTruth": null,
+    "sha256": "7ccef8fecdbf0b0891398ea4126c339d5ae5ff56c0dd2824394055547a849fb9"
+  },
+  {
+    "id": "front-vfr",
+    "path": "samples/debug/front-vfr.mp4",
+    "sourceType": "EDITED",
+    "parent": "samples\\front-facing-squat-pexels-5034577.mp4",
+    "transformation": "select='if(lt(t,8),not(mod(n,2)),1)'",
+    "coachGroundTruth": null,
+    "sha256": "919d076ebce082808e59a5a7324c03a0cc9c5b6a51721de6969d45a82b00f557"
+  },
+  {
+    "id": "front-rotation-metadata",
+    "path": "samples/debug/front-rotation-metadata.mp4",
+    "sourceType": "EDITED",
+    "parent": "samples\\front-facing-squat-pexels-5034577.mp4",
+    "transformation": "clockwise pixels + FFmpeg display_rotation=90 (OpenCV orientation metadata 270 degrees)",
+    "coachGroundTruth": null,
+    "sha256": "2540db1b90c14c4c011dd96914b327a56f6aca5642718c5e4d8dabc8a3771284"
+  },
+  {
+    "id": "variable-depth",
+    "path": "samples/squat-variable-depth-test.mp4",
+    "sourceType": "EDITED",
+    "transformation": "Existing reversed/edited fixture; see build_sample_variant.py",
+    "coachGroundTruth": null,
+    "sha256": "d093fffb25f91cc58bd3828aba59b3cf247140d40715724e4a10337f2c358532"
+  },
+  {
+    "id": "legacy-first",
+    "path": "samples/squat_first_view-220k.mp4",
+    "sourceType": "REAL",
+    "coachGroundTruth": null,
+    "sha256": "4cac8ede022aa71070ff0169d59c5fe330d588d52a2c46330296b5023acafbeb"
+  },
+  {
+    "id": "legacy-second",
+    "path": "samples/squat_second_view-220k.mp4",
+    "sourceType": "REAL",
+    "coachGroundTruth": null,
+    "sha256": "412e20afc0062916d711295419c2bb53022996193227f229ba92d7a2c2b8f3d9"
+  },
+  {
+    "id": "legacy-third",
+    "path": "samples/squat_third_view-220k.mp4",
+    "sourceType": "REAL",
+    "coachGroundTruth": null,
+    "sha256": "e92d5b8221c95be58da451c2fb1ca65363f2a2bbe753c36417226cce9c41f17c"
+  }
+]

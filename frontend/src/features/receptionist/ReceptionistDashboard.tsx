@@ -113,6 +113,10 @@ interface StaffConsultant {
     traceRefNo: ''
   });
   const [walkInSuccessData, setWalkInSuccessData] = useState<any | null>(null);
+  const [walkInSubmitting, setWalkInSubmitting] = useState(false);
+  const [memberAccountForm, setMemberAccountForm] = useState({ fullName: '', phone: '', email: '' });
+  const [memberAccountResult, setMemberAccountResult] = useState<{ member: { fullName: string; phone: string }; account: { loginEmail: string; temporaryPassword: string } } | null>(null);
+  const [memberAccountSubmitting, setMemberAccountSubmitting] = useState(false);
 
   // 3.2 Hóa đơn chờ
   const [pendingPhoneSearch, setPendingPhoneSearch] = useState('');
@@ -457,6 +461,27 @@ interface StaffConsultant {
   // =========================================================================
 
   // 3.1 Khách Walk-in
+  const handleCreateMemberAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (memberAccountSubmitting) return;
+    setMemberAccountSubmitting(true);
+    setMemberAccountResult(null);
+    try {
+      const res = await api.staff.createMemberAccount({
+        fullName: memberAccountForm.fullName.trim(),
+        phone: memberAccountForm.phone.trim(),
+        email: memberAccountForm.email.trim() || undefined
+      });
+      setMemberAccountResult(res.data);
+      setWalkInForm(current => ({ ...current, fullName: res.data.member.fullName, phone: res.data.member.phone, email: res.data.account.loginEmail }));
+      toast.success('Đã tạo tài khoản mới. Hãy bàn giao thông tin đăng nhập cho khách.', 'Tài khoản hội viên');
+    } catch (err: any) {
+      toast.error(err.message, 'Không thể tạo tài khoản');
+    } finally {
+      setMemberAccountSubmitting(false);
+    }
+  };
+
   const handleWalkInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!walkInForm.fullName || !walkInForm.phone || !walkInForm.packageId) {
@@ -464,6 +489,9 @@ interface StaffConsultant {
       return;
     }
 
+    if (walkInSubmitting) return;
+    setWalkInSubmitting(true);
+    setWalkInSuccessData(null);
     try {
       const res = await api.staff.walkInRegistration({
         fullName: walkInForm.fullName,
@@ -486,6 +514,8 @@ interface StaffConsultant {
     } catch (err: any) {
       soundEffects.playErrorBeep();
       toast.error(err.message, 'Lỗi Walk-in');
+    } finally {
+      setWalkInSubmitting(false);
     }
   };
 
@@ -1228,6 +1258,12 @@ interface StaffConsultant {
                       />
                     </Field>
 
+                    <div className="rounded-xl border border-primary/25 bg-primary/5 p-3 text-sm">
+                      <div className="flex items-center gap-2 font-bold text-primary"><Lock className="size-4" /> Tài khoản đăng nhập cho khách mới</div>
+                      <p className="mt-1 text-muted-foreground">Nếu số điện thoại chưa có tài khoản, hệ thống sẽ tạo tài khoản mới với mật khẩu tạm <strong>123456</strong>. Khách phải đổi mật khẩu ngay sau lần đăng nhập đầu. Nếu đã có tài khoản, mật khẩu hiện tại được giữ nguyên.</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Nên nhập email thật để khách dễ đăng nhập và khôi phục mật khẩu; nếu bỏ trống, email đăng nhập sẽ được tự sinh và hiển thị sau khi tạo.</p>
+                    </div>
+
                     {/* Chọn gói tập - Riêng 1 dòng đầy đủ không gian */}
                     <Field label="Chọn gói tập (Membership / PT) *">
                       <Select
@@ -1322,8 +1358,8 @@ interface StaffConsultant {
                       </Field>
                     </div>
 
-                    <Button type="submit" size="lg" className="w-full font-bold bg-primary text-primary-foreground mt-2 cursor-pointer">
-                      <Check className="size-5" /> Kích Hoạt Gói Ngay & Gửi Link SMS Tải App
+                    <Button type="submit" size="lg" disabled={walkInSubmitting} className="w-full font-bold bg-primary text-primary-foreground mt-2 cursor-pointer">
+                      <Check className="size-5" /> {walkInSubmitting ? 'Đang xử lý...' : 'Tạo Tài Khoản Nếu Chưa Có & Kích Hoạt Gói'}
                     </Button>
                   </form>
                 </CardContent>
@@ -1331,6 +1367,28 @@ interface StaffConsultant {
 
               {/* Tóm tắt phiếu thu Walk-in */}
               <div className="grid content-start gap-4">
+                <Card className="border-primary/30">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2"><UserPlus className="size-4 text-primary" /> Tạo tài khoản hội viên riêng</CardTitle>
+                    <CardDescription>Dùng khi khách chưa có tài khoản và chưa cần mua gói tập ngay.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleCreateMemberAccount} className="grid gap-3">
+                      <Field label="Họ và tên *"><Input required value={memberAccountForm.fullName} onChange={e => { setMemberAccountResult(null); setMemberAccountForm({ ...memberAccountForm, fullName: e.target.value }); }} /></Field>
+                      <Field label="Số điện thoại *"><Input required type="tel" value={memberAccountForm.phone} onChange={e => { setMemberAccountResult(null); setMemberAccountForm({ ...memberAccountForm, phone: e.target.value }); }} /></Field>
+                      <Field label="Email (tùy chọn)"><Input type="email" value={memberAccountForm.email} onChange={e => { setMemberAccountResult(null); setMemberAccountForm({ ...memberAccountForm, email: e.target.value }); }} /></Field>
+                      <p className="text-xs text-muted-foreground">Mật khẩu tạm: <strong>123456</strong>. Tài khoản mới phải đổi mật khẩu khi đăng nhập. Không thay đổi tài khoản đã tồn tại.</p>
+                      <Button type="submit" disabled={memberAccountSubmitting} className="w-full cursor-pointer">{memberAccountSubmitting ? 'Đang tạo...' : 'Tạo tài khoản mới'}</Button>
+                    </form>
+                    {memberAccountResult && <div className="mt-4 rounded-lg border border-success/50 bg-success/10 p-3 text-xs">
+                      <strong className="block mb-1">Đã tạo cho {memberAccountResult.member.fullName}</strong>
+                      <p>Email đăng nhập: <span className="font-mono break-all">{memberAccountResult.account.loginEmail}</span></p>
+                      <p>Mật khẩu tạm: <strong className="font-mono">{memberAccountResult.account.temporaryPassword}</strong></p>
+                      <p>Hãy hướng dẫn khách đổi mật khẩu ngay sau khi đăng nhập.</p>
+                    </div>}
+                  </CardContent>
+                </Card>
+
                 <Card className="border-primary/30 bg-muted/10">
                   <CardHeader className="pb-3 border-b">
                     <CardTitle className="text-sm flex items-center gap-2">
@@ -1385,8 +1443,15 @@ interface StaffConsultant {
                     <CardContent className="grid gap-2 text-xs">
                       <p>Hội viên: <strong>{walkInSuccessData.member.fullName}</strong> ({walkInSuccessData.member.phone})</p>
                       <p>Hạn sử dụng: Đến <strong>{new Date(walkInSuccessData.membership.endDate).toLocaleDateString('vi-VN')}</strong></p>
+                      <div className="rounded-lg border bg-background p-2.5">
+                        <strong className="block mb-1">{walkInSuccessData.account?.created ? 'Tài khoản mới đã tạo' : 'Khách đã có tài khoản'}</strong>
+                        <p>Email đăng nhập: <span className="font-mono break-all">{walkInSuccessData.account?.loginEmail || walkInSuccessData.member.email}</span></p>
+                        {walkInSuccessData.account?.created
+                          ? <p>Mật khẩu tạm: <strong className="font-mono">123456</strong> · Bắt buộc đổi khi đăng nhập lần đầu.</p>
+                          : <p>{walkInSuccessData.account?.mustChangePassword ? 'Tài khoản đã được tạo trước đó và vẫn cần đổi mật khẩu tạm.' : 'Mật khẩu của khách được giữ nguyên.'}</p>}
+                      </div>
                       <div className="mt-2 p-2.5 rounded-lg bg-background border">
-                        <span className="font-bold block mb-1">Nội dung SMS gửi hội viên:</span>
+                        <span className="font-bold block mb-1">Nội dung SMS để gửi hội viên:</span>
                         <code className="text-[11px] text-primary block break-all">{walkInSuccessData.smsInvitation.messageText}</code>
                       </div>
                     </CardContent>

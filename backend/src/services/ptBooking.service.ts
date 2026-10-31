@@ -2,13 +2,13 @@ import { Booking, Prisma, PrismaClient } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { lockGymMember } from './gymMembershipLock.service.js';
 import { availableSlots, vietnamDate } from './ptCalendar.service.js';
+import { isPtLevel, reservePtCredit, type PtLevel } from './ptWallet.service.js';
+import { PtBookingError } from './ptError.js';
+import { verifiedGymPayment } from './gymEntitlement.service.js';
+export { PtBookingError } from './ptError.js';
 
 const HOUR = 60 * 60 * 1000;
 export const PT_BOOKING_HOLD_STATUSES = ['PENDING', 'UPCOMING', 'CONFIRMED', 'IN_PROGRESS'];
-
-export class PtBookingError extends Error {
-  constructor(public status: number, message: string) { super(message); }
-}
 
 async function lock(tx: Prisma.TransactionClient, resource: string) {
   const rows = await tx.$queryRaw<Array<{ result: number }>>`
@@ -65,17 +65,21 @@ export async function debitPtSession(tx: Prisma.TransactionClient, membershipId:
 }
 
 export async function requirePtSlot(
-  tx: Prisma.TransactionClient, coachId: number, memberId: number, start: Date,
+  tx: Prisma.TransactionClient, coachId: number, memberId: number, start: Date, level?: PtLevel,
 ) {
   const now = new Date();
   if (Number.isNaN(start.getTime()) || start.getTime() < now.getTime() + 2 * HOUR) {
     throw new PtBookingError(400, 'Cần đặt lịch trước giờ tập ít nhất 2 tiếng.');
   }
   const profile = await tx.coachProfile.findUnique({
-    where: { userId: coachId }, select: { id: true, status: true, user: { select: { status: true } } },
+    where: { userId: coachId }, select: { id: true, status: true, user: { select: { status: true } },
+      specializations: { select: { level: true } } },
   });
   if (!profile || profile.status !== 'ACTIVE' || profile.user.status !== 'ACTIVE') {
     throw new PtBookingError(409, 'Coach không còn hoạt động.');
+  }
+  if (level && !profile.specializations.some(item => item.level === level)) {
+    throw new PtBookingError(403, `Coach chưa được Admin cấp quyền hướng dẫn ${level}.`);
   }
   const slot = (await availableSlots(tx, profile.id, vietnamDate(start)))
     .find(row => row.start.getTime() === start.getTime());
@@ -95,8 +99,97 @@ export async function requireGymOnDate(tx: Prisma.TransactionClient, memberId: n
   const gym = await tx.membership.findFirst({ where: {
     userId: memberId, status: { in: ['ACTIVE', 'PENDING_ACTIVATION'] },
     startDate: { lte: start }, endDate: { gte: end }, package: { type: 'MEMBERSHIP' },
+    payments: { some: verifiedGymPayment },
   }, select: { id: true } });
   if (!gym) throw new PtBookingError(403, 'Cần có gói Gym hợp lệ vào ngày tập.');
+}
+
+/** New wallet flow. All dates and credit holds commit together under member/coach locks. */
+export async function createWalletPtBookings(input: {
+  memberId: number; coachId: number; level: PtLevel; starts: Date[];
+}) {
+  if (!isPtLevel(input.level) || !Number.isSafeInteger(input.coachId) || input.coachId <= 0 ||
+    input.starts.length < 1 || input.starts.length > 20 ||
+    input.starts.some(date => Number.isNaN(date.getTime())) ||
+    new Set(input.starts.map(date => date.getTime())).size !== input.starts.length) {
+    throw new PtBookingError(400, 'Cần loại PT, Coach và 1–20 ca khác nhau.');
+  }
+  const starts = [...input.starts].sort((a, b) => a.getTime() - b.getTime());
+  return prisma.$transaction(async tx => {
+    await lockPtCalendar(tx);
+    await lockPtCoach(tx, input.coachId);
+    await lockPtMember(tx, input.memberId);
+    await lockGymMember(tx, input.memberId);
+    const bookings: Booking[] = [];
+    for (const start of starts) {
+      try {
+        const end = await requirePtSlot(tx, input.coachId, input.memberId, start, input.level);
+        await requireGymOnDate(tx, input.memberId, start, end);
+        const booking = await tx.booking.create({ data: {
+          type: 'PT', memberId: input.memberId, coachId: input.coachId,
+          startTime: start, endTime: end, status: 'CONFIRMED',
+        } });
+        const batch = await reservePtCredit(tx, { memberId: input.memberId, coachId: input.coachId,
+          level: input.level, bookingId: booking.id, start, end });
+        if (batch.membershipId) {
+          await tx.booking.update({ where: { id: booking.id }, data: { membershipId: batch.membershipId } });
+        }
+        bookings.push({ ...booking, membershipId: batch.membershipId });
+      } catch (error) {
+        if (error instanceof PtBookingError) throw new PtBookingError(error.status,
+          `Ca ${start.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}: ${error.message}`);
+        throw error;
+      }
+    }
+    return bookings;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 15000, timeout: 60000 });
+}
+
+export async function createWalletPtMakeup(input: {
+  memberId: number; originalBookingId: number; start: Date;
+}) {
+  return prisma.$transaction(async tx => {
+    const original = await tx.booking.findFirst({ where: { id: input.originalBookingId,
+      memberId: input.memberId, type: 'PT' }, select: { id: true, coachId: true, membershipId: true } });
+    if (!original?.coachId) throw new PtBookingError(404, 'Không tìm thấy lịch PT gốc.');
+    await lockPtCalendar(tx);
+    await lockPtCoach(tx, original.coachId);
+    await lockPtMember(tx, input.memberId);
+    await lockGymMember(tx, input.memberId);
+    const allocation = await tx.ptBookingCreditAllocation.findUnique({ where: { bookingId: original.id },
+      include: { batch: { include: { membership: true } } } });
+    const request = await tx.makeUpRequest.findFirst({ where: {
+      originalBookingId: original.id, status: 'PENDING', expiresAt: { gt: new Date() },
+    } });
+    if (!allocation || allocation.status !== 'HELD' || !request) {
+      throw new PtBookingError(409, 'Quyền học bù không còn khả dụng.');
+    }
+    if (!isPtLevel(allocation.batch.level)) throw new PtBookingError(409, 'Cấp độ PT không hợp lệ.');
+    const end = await requirePtSlot(tx, original.coachId, input.memberId, input.start, allocation.batch.level);
+    if (end > request.expiresAt) throw new PtBookingError(409, 'Ca học bù phải kết thúc trong hạn 7 ngày.');
+    await requireGymOnDate(tx, input.memberId, input.start, end);
+    const gift = allocation.batch.membership;
+    if (allocation.batch.level === 'TRIAL' && (!gift ||
+      !['ACTIVE', 'PENDING_ACTIVATION'].includes(gift.status) ||
+      gift.startDate > input.start || gift.endDate < end)) {
+      throw new PtBookingError(403, 'Trial không còn hiệu lực vào ngày học bù.');
+    }
+    const booking = await tx.booking.create({ data: {
+      type: 'PT', memberId: input.memberId, coachId: original.coachId,
+      membershipId: original.membershipId, startTime: input.start, endTime: end,
+      status: 'CONFIRMED', isMakeup: true, makeupFromId: original.id,
+    } });
+    await tx.ptBookingCreditAllocation.update({ where: { bookingId: original.id },
+      data: { bookingId: booking.id } });
+    await tx.ptCreditTransaction.create({ data: { batchId: allocation.batchId,
+      bookingId: booking.id, kind: 'TRANSFER_HOLD', quantity: 1,
+      note: `From booking #${original.id}` } });
+    const claimed = await tx.makeUpRequest.updateMany({ where: { id: request.id, status: 'PENDING' },
+      data: { status: 'APPROVED', newBookingId: booking.id } });
+    if (claimed.count !== 1) throw new PtBookingError(409, 'Quyền học bù vừa được sử dụng.');
+    await tx.booking.update({ where: { id: original.id }, data: { status: 'MAKEUP_BOOKED' } });
+    return booking;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 15000, timeout: 30000 });
 }
 
 export async function createConfirmedPtBooking(input: {
