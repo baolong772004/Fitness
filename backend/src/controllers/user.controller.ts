@@ -125,7 +125,7 @@ export class UserController {
         return res.status(403).json({ success: false, message: 'Forbidden: You can only update your own profile' });
       }
 
-      const { fullName, phone, address, avatar } = req.body; // Bỏ qua address nếu Schema ko có, update schema nếu cần
+      const { fullName, phone, address, avatar, gender, dateOfBirth, height, weight } = req.body; // Bỏ qua address nếu Schema ko có, update schema nếu cần
 
       const userExists = await prisma.user.findUnique({ where: { id } });
       if (!userExists) return res.status(404).json({ success: false, message: 'User not found' });
@@ -135,7 +135,11 @@ export class UserController {
         data: {
           fullName,
           phone,
-          avatar
+          avatar,
+          ...(gender !== undefined && { gender }),
+          ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
+          ...(height !== undefined && { height: height !== null && height !== '' ? Number(height) : null }),
+          ...(weight !== undefined && { weight: weight !== null && weight !== '' ? Number(weight) : null }),
         },
         select: {
           id: true,
@@ -143,6 +147,10 @@ export class UserController {
           fullName: true,
           phone: true,
           avatar: true,
+          gender: true,
+          dateOfBirth: true,
+          height: true,
+          weight: true,
           role: true,
           status: true,
           updatedAt: true

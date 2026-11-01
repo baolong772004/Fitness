@@ -59,6 +59,19 @@ router.get('/', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), UserControl
  *       404:
  *         description: Không tìm thấy user
  */
+router.get('/me', authenticateToken, (req: any, res: any, next: any) => {
+  req.params.id = String(req.user?.userId);
+  return UserController.getUserById(req, res, next);
+});
+router.put('/me', authenticateToken, (req: any, res: any, next: any) => {
+  req.params.id = String(req.user?.userId);
+  return UserController.updateUser(req, res, next);
+});
+router.patch('/me', authenticateToken, (req: any, res: any, next: any) => {
+  req.params.id = String(req.user?.userId);
+  return UserController.updateUser(req, res, next);
+});
+
 router.get('/:id', authenticateToken, UserController.getUserById);
 
 /**

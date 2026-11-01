@@ -3,9 +3,11 @@ import { ActivityIndicator, BackHandler, Pressable, Text, View } from 'react-nat
 import { isLoaded } from 'expo-font';
 import { Stack, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from '../lib/auth';
 import { aura } from '../lib/theme';
 import { AuraLoader } from '../components/AuraLoader';
+import { InAppChatBanner } from '../components/InAppChatBanner';
 import { loadIconFonts } from '../lib/iconFonts';
 
 export default function RootLayout() {
@@ -65,26 +67,91 @@ function RootNavigation() {
     return () => sub.remove();
   }, [pathname]);
   const lightTab = ['/booking', '/notifications', '/(tabs)/booking', '/(tabs)/notifications'].includes(pathname);
-  return <View style={{ flex: 1 }}><StatusBar style={lightTab ? 'dark' : 'light'} /><Stack screenOptions={{ headerStyle: { backgroundColor: aura.espresso }, headerTintColor: '#fff', headerTitleStyle: { fontWeight: '800' }, contentStyle: { backgroundColor: aura.cream } }}>
-    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-    <Stack.Screen name="auth" options={{ title: 'Đăng nhập' }} />
-    <Stack.Screen name="forgot-password" options={{ title: 'Khôi phục mật khẩu' }} />
-    <Stack.Screen name="packages" options={{ title: 'Gói tập Aura' }} />
-    <Stack.Screen name="subscriptions" options={{ title: 'Gói tập của tôi' }} />
-    <Stack.Screen name="classes" options={{ title: 'Workout Class' }} />
-    <Stack.Screen name="pt" options={{ title: 'Lịch tập cùng PT' }} />
-    <Stack.Screen name="pt-purchase" options={{ title: 'Mua PT' }} />
-    <Stack.Screen name="coach-availability" options={{ title: 'Đăng ký lịch Coach' }} />
-    <Stack.Screen name="pt-book" options={{ title: 'Đặt lịch PT' }} />
-    <Stack.Screen name="pt-renew" options={{ title: 'Gia hạn thời gian PT' }} />
-    <Stack.Screen name="pt-chat" options={{ title: 'Tin nhắn PT' }} />
-    <Stack.Screen name="pt-qr" options={{ title: 'QR buổi tập PT' }} />
-    <Stack.Screen name="scanner" options={{ title: 'Quét mã QR' }} />
-    <Stack.Screen name="checkout" options={{ title: 'Thanh toán PayOS' }} />
-    <Stack.Screen name="progress" options={{ title: 'Tiến độ tập luyện' }} />
-    <Stack.Screen name="exercise-analysis" options={{ title: 'Kiểm tra kỹ thuật AI' }} />
-    <Stack.Screen name="history" options={{ title: 'Lịch sử điểm danh' }} />
-    <Stack.Screen name="change-password" options={{ title: 'Đổi mật khẩu', headerBackVisible: !user?.mustChangePassword, gestureEnabled: !user?.mustChangePassword }} />
+  return (
+    <View style={{ flex: 1 }}>
+      <StatusBar style={lightTab ? 'dark' : 'light'} />
+      <InAppChatBanner />
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: aura.espresso },
+          headerTintColor: '#fff',
+          headerTitleStyle: { fontWeight: '800' },
+          headerTitleAlign: 'center',
+          headerBackVisible: false,
+          headerBackTitle: '',
+          headerLeft: ({ canGoBack }) =>
+            canGoBack ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Quay lại"
+                onPress={() => {
+                  if (router.canGoBack()) router.back();
+                  else router.replace('/(tabs)');
+                }}
+                hitSlop={12}
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 19,
+                  backgroundColor: 'rgba(255, 255, 255, 0.16)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="chevron-back" size={20} color="#fff" />
+              </Pressable>
+            ) : null,
+          contentStyle: { backgroundColor: aura.cream },
+        }}
+      >
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="auth" options={{ title: 'Đăng nhập' }} />
+        <Stack.Screen name="forgot-password" options={{ title: 'Khôi phục mật khẩu' }} />
+        <Stack.Screen name="packages" options={{ title: 'Gói tập Aura' }} />
+        <Stack.Screen name="subscriptions" options={{ title: 'Gói tập của tôi' }} />
+        <Stack.Screen name="classes" options={{ title: 'Workout Class' }} />
+        <Stack.Screen name="pt" options={{ title: 'Lịch tập cùng PT' }} />
+        <Stack.Screen name="pt-purchase" options={{ title: 'Mua PT' }} />
+        <Stack.Screen name="coach-availability" options={{ title: 'Đăng ký lịch Coach' }} />
+        <Stack.Screen name="pt-book" options={{ title: 'Đặt lịch PT' }} />
+        <Stack.Screen name="pt-renew" options={{ title: 'Gia hạn thời gian PT' }} />
+        <Stack.Screen name="pt-chat" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="pt-qr" options={{ title: 'QR buổi tập PT' }} />
+        <Stack.Screen name="scanner" options={{ headerShown: false }} />
+        <Stack.Screen name="checkout" options={{ title: 'Thanh toán PayOS' }} />
+        <Stack.Screen name="progress" options={{ title: 'Tiến độ tập luyện' }} />
+        <Stack.Screen name="exercise-analysis" options={{ title: 'Kiểm tra kỹ thuật AI' }} />
+        <Stack.Screen name="history" options={{ title: 'Lịch sử điểm danh' }} />
+        <Stack.Screen
+          name="change-password"
+          options={{
+            title: 'Đổi mật khẩu',
+            headerBackVisible: false,
+            headerLeft: () =>
+              user?.mustChangePassword ? null : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Quay lại"
+                  onPress={() => {
+                    if (router.canGoBack()) router.back();
+                    else router.replace('/(tabs)');
+                  }}
+                  hitSlop={12}
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 19,
+                    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="chevron-back" size={20} color="#fff" />
+                </Pressable>
+              ),
+            gestureEnabled: !user?.mustChangePassword,
+          }}
+        />
     <Stack.Screen name="article" options={{ headerShown: false }} />
     <Stack.Screen name="articles" options={{ title: 'Tin tức & hướng dẫn' }} />
     <Stack.Screen name="payment-history" options={{ title: 'Lịch sử thanh toán' }} />
@@ -92,6 +159,8 @@ function RootNavigation() {
     <Stack.Screen name="rate-session" options={{ title: 'Đánh giá buổi tập' }} />
     <Stack.Screen name="support" options={{ title: 'Hỗ trợ & Liên hệ' }} />
     <Stack.Screen name="settings" options={{ title: 'Cài đặt' }} />
+    <Stack.Screen name="profile" options={{ headerShown: false }} />
     <Stack.Screen name="profile-edit" options={{ title: 'Chỉnh sửa hồ sơ' }} />
-  </Stack>{!ready && <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: aura.cream, alignItems: 'center', justifyContent: 'center' }}><AuraLoader size={68} /></View>}</View>;
+  </Stack>{!ready && <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: aura.cream, alignItems: 'center', justifyContent: 'center' }}><AuraLoader size={68} /></View>}</View>
+  );
 }

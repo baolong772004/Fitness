@@ -102,25 +102,212 @@ export default function CoachAvailability() {
     finally { setBusy(false); }
   };
 
-  if (!['COACH', 'TRAINER'].includes(user?.role ?? '')) return <Page><Hero eyebrow="COACH" title="Lịch làm việc" subtitle="Chức năng dành cho Coach." /><Button title="Quay lại" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} /></Page>;
+  if (!['COACH', 'TRAINER'].includes(user?.role ?? '')) return <Page><Hero eyebrow="COACH" title="Lịch làm việc" subtitle="Chức năng dành cho Coach." /><Button title="Quay lại trang chủ" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} /></Page>;
   const pending = mode === 'weekly' ? weeklyDraft !== null : Object.keys(dateDrafts).length > 0;
   return <Page loading={loading} refresh={() => void load()}>
     <Hero eyebrow="COACH" title="Lịch đăng ký làm việc PT" subtitle="Chọn trực tiếp các ô giờ trong lịch chung. Ca hợp lệ được mở cho hội viên đặt ngay." />
     <Card><Text style={{ color: aura.ink, fontSize: 16, fontWeight: '900' }}>Lịch chung do Admin thiết lập</Text><Text style={{ color: aura.muted, marginTop: 5 }}>{data?.calendar.openTime ?? '…'}–{data?.calendar.closeTime ?? '…'} · Ca {data?.calendar.slotMinutes ?? 60} phút · Nghỉ {data?.calendar.breakMinutes ?? 0} phút · Giờ Việt Nam</Text></Card>
     <Section title="Chọn ca trên lịch" subtitle="Vuốt ngang để xem đủ bảy ngày; chạm ô để đăng ký hoặc bỏ chọn." icon="calendar-outline" />
-    <Card>
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 13 }}><Button compact title="Theo ngày" secondary={mode !== 'dates'} onPress={() => setMode('dates')} /><Button compact title="Lặp hằng tuần" secondary={mode !== 'weekly'} onPress={() => setMode('weekly')} /></View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}><Button compact secondary title="‹ Tuần trước" onPress={() => setWeekStart(addDays(weekStart, -7))} /><Text style={{ color: aura.ink, fontWeight: '800', fontSize: 12 }}>{shortDate(weekStart)}–{shortDate(dates[6])}</Text><Button compact secondary title="Tuần sau ›" onPress={() => setWeekStart(addDays(weekStart, 7))} /></View>
-      <Text style={{ color: aura.muted, fontSize: 11, marginBottom: 11 }}>🟡 Chưa đăng ký   🟢 Đã chọn   🔵 Đã đặt   ⚪ Đóng cửa / đã qua</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingBottom: 4 }}><View>
-        <View style={{ flexDirection: 'row' }}><View style={{ width: 75, padding: 6 }}><Text style={{ color: aura.muted, fontSize: 11 }}>Giờ ca</Text></View>{dates.map((date, index) => <View key={date} style={{ width: 96, padding: 5, alignItems: 'center' }}><Text style={{ color: aura.ink, fontWeight: '800' }}>{labels[index]}</Text><Text style={{ color: aura.muted, fontSize: 11 }}>{shortDate(date)}</Text></View>)}</View>
-        {data?.slots.map(slot => <View key={slot.startTime} style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: aura.border }}><View style={{ width: 75, justifyContent: 'center', padding: 4 }}><Text style={{ color: aura.ink, fontSize: 12, fontWeight: '800' }}>{slot.startTime}</Text><Text style={{ color: aura.muted, fontSize: 10 }}>–{slot.endTime}</Text></View>{dates.map(date => { const status = cellStatus(date, slot); const selected = mode === 'weekly' ? selectedWeek.has(key(weekday(date), slot.startTime)) : selectedDate(date).has(slot.startTime); const backgroundColor = status === 'Đã đặt' ? '#DBEAFE' : status ? '#E7E5E4' : selected ? '#16A34A' : '#FEF3C7'; const color = selected && !status ? '#FFFFFF' : status === 'Đã đặt' ? '#1D4ED8' : status ? '#78716C' : '#78350F'; return <View key={`${date}-${slot.startTime}`} style={{ width: 96, padding: 3 }}><Pressable accessibilityRole="button" accessibilityLabel={`${date} ${slot.startTime} đến ${slot.endTime}: ${status ?? (selected ? 'Đã chọn' : 'Chưa đăng ký')}`} accessibilityState={{ disabled: !!status || busy, selected }} disabled={!!status || busy} onPress={() => toggle(date, slot)} style={{ height: 50, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor, padding: 3 }}><Text style={{ color, fontSize: 10, fontWeight: '800', textAlign: 'center' }}>{status ?? (selected ? '✓ Đã chọn' : '+ Chọn ca')}</Text></Pressable></View>; })}</View>)}
-      </View></ScrollView>
-      {data?.slots.length === 0 && <Text style={{ color: aura.muted, marginTop: 12 }}>Admin cần thiết lập giờ mở cửa đủ cho một ca PT.</Text>}
-      {mode === 'dates' && dates.filter(date => data?.dates.some(row => row.date === date) && date >= today()).map(date => <Pressable key={date} disabled={busy} onPress={() => void resetDay(date)} style={{ paddingVertical: 7 }}><Text style={{ color: aura.darkCoffee, textDecorationLine: 'underline', fontSize: 12 }}>↺ {shortDate(date)}: trở về lịch lặp hằng tuần</Text></Pressable>)}
-      <Text style={{ color: aura.muted, marginTop: 12, marginBottom: 9, fontSize: 12 }}>{mode === 'weekly' ? `${selectedWeek.size} ca lặp mỗi tuần` : `${Object.keys(dateDrafts).length} ngày có thay đổi chưa lưu`}</Text>
-      <Button title={busy ? 'Đang lưu…' : 'Lưu lịch đã chọn'} disabled={busy || loading || !pending} onPress={() => void save()} />
-    </Card>
+    <View style={{ marginHorizontal: -16, backgroundColor: aura.white, borderTopWidth: 1, borderBottomWidth: 1, borderColor: aura.border, paddingVertical: 14 }}>
+      <View style={{ paddingHorizontal: 16 }}>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 13 }}>
+          <Button compact title="Theo ngày" secondary={mode !== 'dates'} onPress={() => setMode('dates')} />
+          <Button compact title="Lặp hằng tuần" secondary={mode !== 'weekly'} onPress={() => setMode('weekly')} />
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Tuần trước"
+            onPress={() => setWeekStart(addDays(weekStart, -7))}
+            hitSlop={12}
+            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}
+          >
+            <Text style={{ color: aura.darkCoffee, fontWeight: '800', fontSize: 13.5 }}>‹ </Text>
+            <Text style={{ color: aura.darkCoffee, fontWeight: '800', fontSize: 13.5, textDecorationLine: 'underline' }}>
+              Tuần trước
+            </Text>
+          </Pressable>
+
+          <Text style={{ color: aura.ink, fontWeight: '900', fontSize: 13.5 }}>
+            {shortDate(weekStart)} – {shortDate(dates[6])}
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Tuần sau"
+            onPress={() => setWeekStart(addDays(weekStart, 7))}
+            hitSlop={12}
+            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}
+          >
+            <Text style={{ color: aura.darkCoffee, fontWeight: '800', fontSize: 13.5, textDecorationLine: 'underline' }}>
+              Tuần sau
+            </Text>
+            <Text style={{ color: aura.darkCoffee, fontWeight: '800', fontSize: 13.5 }}> ›</Text>
+          </Pressable>
+        </View>
+
+        <Text style={{ color: aura.muted, fontSize: 11, marginBottom: 12 }}>
+          🟡 Chưa đăng ký   🟢 Đã chọn   🔵 Đã đặt   ⚪ Đóng cửa / đã qua
+        </Text>
+      </View>
+
+      {/* Bảng lịch đăng ký ca: Toàn màn hình, cột 'Giờ ca' bên trái cố định khi vuốt ngang */}
+      <View style={{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: aura.border, flexDirection: 'row', backgroundColor: aura.white }}>
+        {/* Cột trái cố định: Giờ ca */}
+        <View style={{ width: 76, backgroundColor: '#FAF7F5', borderRightWidth: 1, borderColor: aura.border, zIndex: 2 }}>
+          <View style={{ height: 48, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 1, borderColor: aura.border, backgroundColor: '#F8F5F2' }}>
+            <Text style={{ color: aura.ink, fontSize: 11.5, fontWeight: '900' }}>Giờ ca</Text>
+          </View>
+          {data?.slots.map(slot => (
+            <View
+              key={slot.startTime}
+              style={{
+                height: 56,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderBottomWidth: 1,
+                borderColor: aura.border,
+                paddingHorizontal: 2,
+              }}
+            >
+              <Text style={{ color: aura.darkCoffee, fontSize: 12, fontWeight: '900' }}>{slot.startTime}</Text>
+              <Text style={{ color: aura.muted, fontSize: 10, fontWeight: '600' }}>–{slot.endTime}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Các cột ngày lướt ngang: T2 -> CN */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ flex: 1 }}>
+          <View>
+            {/* Header các ngày */}
+            <View style={{ flexDirection: 'row', height: 48, borderBottomWidth: 1, borderColor: aura.border, backgroundColor: '#F8F5F2' }}>
+              {dates.map((date, index) => {
+                const isToday = date === today();
+                return (
+                  <View
+                    key={date}
+                    style={{
+                      width: 90,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRightWidth: index < 6 ? 1 : 0,
+                      borderColor: aura.border,
+                      backgroundColor: isToday ? '#F5ECE3' : 'transparent',
+                    }}
+                  >
+                    <Text style={{ color: isToday ? aura.darkCoffee : aura.ink, fontWeight: '900', fontSize: 13 }}>
+                      {labels[index]}
+                    </Text>
+                    <Text style={{ color: isToday ? aura.caramel : aura.muted, fontSize: 11, fontWeight: isToday ? '700' : '500' }}>
+                      {shortDate(date)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Các ô chọn ca */}
+            {data?.slots.map(slot => (
+              <View
+                key={slot.startTime}
+                style={{
+                  flexDirection: 'row',
+                  height: 56,
+                  borderBottomWidth: 1,
+                  borderColor: aura.border,
+                }}
+              >
+                {dates.map((date, index) => {
+                  const status = cellStatus(date, slot);
+                  const selected =
+                    mode === 'weekly'
+                      ? selectedWeek.has(key(weekday(date), slot.startTime))
+                      : selectedDate(date).has(slot.startTime);
+
+                  const backgroundColor =
+                    status === 'Đã đặt'
+                      ? '#DBEAFE'
+                      : status
+                      ? '#E7E5E4'
+                      : selected
+                      ? '#16A34A'
+                      : '#FEF3C7';
+
+                  const color =
+                    selected && !status
+                      ? '#FFFFFF'
+                      : status === 'Đã đặt'
+                      ? '#1D4ED8'
+                      : status
+                      ? '#78716C'
+                      : '#78350F';
+
+                  return (
+                    <View
+                      key={`${date}-${slot.startTime}`}
+                      style={{
+                        width: 90,
+                        padding: 3,
+                        borderRightWidth: index < 6 ? 1 : 0,
+                        borderColor: aura.border,
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`${date} ${slot.startTime} đến ${slot.endTime}: ${status ?? (selected ? 'Đã chọn' : 'Chưa đăng ký')}`}
+                        accessibilityState={{ disabled: !!status || busy, selected }}
+                        disabled={!!status || busy}
+                        onPress={() => toggle(date, slot)}
+                        style={{
+                          flex: 1,
+                          borderRadius: 8,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor,
+                          padding: 2,
+                        }}
+                      >
+                        <Text style={{ color, fontSize: 10.5, fontWeight: '800', textAlign: 'center' }}>
+                          {status ?? (selected ? '✓ Đã chọn' : '+ Chọn ca')}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+
+      <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+        {data?.slots.length === 0 && (
+          <Text style={{ color: aura.muted, marginTop: 4 }}>Admin cần thiết lập giờ mở cửa đủ cho một ca PT.</Text>
+        )}
+        {mode === 'dates' &&
+          dates
+            .filter(date => data?.dates.some(row => row.date === date) && date >= today())
+            .map(date => (
+              <Pressable key={date} disabled={busy} onPress={() => void resetDay(date)} style={{ paddingVertical: 7 }}>
+                <Text style={{ color: aura.darkCoffee, textDecorationLine: 'underline', fontSize: 12 }}>
+                  ↺ {shortDate(date)}: trở về lịch lặp hằng tuần
+                </Text>
+              </Pressable>
+            ))}
+        <Text style={{ color: aura.muted, marginTop: 8, marginBottom: 12, fontSize: 12 }}>
+          {mode === 'weekly'
+            ? `${selectedWeek.size} ca lặp mỗi tuần`
+            : `${Object.keys(dateDrafts).length} ngày có thay đổi chưa lưu`}
+        </Text>
+        <Button
+          title={busy ? 'Đang lưu…' : 'Lưu lịch đã chọn'}
+          disabled={busy || loading || !pending}
+          onPress={() => void save()}
+        />
+      </View>
+    </View>
     {requests.length > 0 && <Card><Text style={{ color: aura.ink, fontWeight: '800' }}>Yêu cầu đổi ca / báo vắng</Text>{requests.slice(0, 5).map(row => <Text key={row.id} style={{ color: aura.muted, marginTop: 6, fontSize: 12 }}>Booking #{row.bookingId} · {row.status} · {row.reason}</Text>)}</Card>}
   </Page>;
 }

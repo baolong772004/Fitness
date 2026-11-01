@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { aura, dateLabel, timeLabel } from '../../lib/theme';
@@ -18,6 +19,7 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 }
 
 export default function BookingHub() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const coach = ['COACH', 'TRAINER'].includes(user?.role || '');
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
@@ -75,7 +77,26 @@ export default function BookingHub() {
   };
 
   return (
-    <Page loading={loading} refresh={user ? () => void load() : undefined}>
+    <View style={{ flex: 1, backgroundColor: aura.cream }}>
+      {/* Header an toàn tuyệt đối khỏi tai thỏ / status bar */}
+      <View
+        style={{
+          paddingTop: insets.top + 8,
+          paddingBottom: 11,
+          paddingHorizontal: 16,
+          backgroundColor: aura.white,
+          borderBottomWidth: 1,
+          borderBottomColor: '#EAD8C7',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Text style={{ fontSize: 18, fontWeight: '900', color: aura.darkCoffee, letterSpacing: 0.4 }}>
+          {coach ? 'Lịch dạy của Coach' : 'Đặt lịch & Lớp học'}
+        </Text>
+      </View>
+
+      <Page loading={loading} refresh={user ? () => void load() : undefined}>
       {/* 1. Header Hero Banner */}
       <LinearGradient
         colors={[aura.espresso, aura.darkCoffee, aura.caramel]}
@@ -335,6 +356,7 @@ export default function BookingHub() {
       {/* Khoảng đệm dưới cùng */}
       <View style={{ height: 24 }} />
     </Page>
+    </View>
   );
 }
 

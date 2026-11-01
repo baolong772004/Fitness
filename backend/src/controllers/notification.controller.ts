@@ -16,7 +16,14 @@ export const getMyNotifications = async (req: AuthRequest, res: Response) => {
     const limit = Number.isSafeInteger(requestedLimit) && requestedLimit > 0
       ? Math.min(100, requestedLimit)
       : 20;
-    const where = { userId };
+    const where = {
+      userId,
+      NOT: [
+        { title: { contains: 'tin nhắn' } },
+        { title: { contains: 'tin nhan' } },
+        { title: { contains: 'chat' } },
+      ],
+    };
     const [notifications, total, unreadCount] = await Promise.all([
       prisma.notification.findMany({
         where,
@@ -25,7 +32,7 @@ export const getMyNotifications = async (req: AuthRequest, res: Response) => {
         take: limit,
       }),
       prisma.notification.count({ where }),
-      prisma.notification.count({ where: { userId, isRead: false } }),
+      prisma.notification.count({ where: { ...where, isRead: false } }),
     ]);
 
     return res.status(200).json({
@@ -44,7 +51,17 @@ export const getUnreadNotificationCount = async (req: AuthRequest, res: Response
   try {
     const userId = req.user?.userId;
     if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-    const count = await prisma.notification.count({ where: { userId, isRead: false } });
+    const count = await prisma.notification.count({
+      where: {
+        userId,
+        isRead: false,
+        NOT: [
+          { title: { contains: 'tin nhắn' } },
+          { title: { contains: 'tin nhan' } },
+          { title: { contains: 'chat' } },
+        ],
+      },
+    });
     return res.status(200).json({ success: true, data: { unreadCount: count } });
   } catch (error) {
     console.error('Get unread notifications count error:', error);
@@ -80,7 +97,15 @@ export const markAllNotificationsRead = async (req: AuthRequest, res: Response) 
     const userId = req.user?.userId;
     if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const result = await prisma.notification.updateMany({
-      where: { userId, isRead: false },
+      where: {
+        userId,
+        isRead: false,
+        NOT: [
+          { title: { contains: 'tin nhắn' } },
+          { title: { contains: 'tin nhan' } },
+          { title: { contains: 'chat' } },
+        ],
+      },
       data: { isRead: true },
     });
     return res.status(200).json({
