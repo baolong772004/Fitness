@@ -68,10 +68,6 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
   // GIAI ĐOẠN 1 & 5: THÔNG TIN PHIÊN CA TRỰC (SHIFT STATE)
   // =========================================================================
   const [shiftSummary, setShiftSummary] = useState<ShiftSummaryData | null>(null);
-  const [isCloseShiftModalOpen, setIsCloseShiftModalOpen] = useState(false);
-  const [actualCashInput, setActualCashInput] = useState<string>('');
-  const [differenceReason, setDifferenceReason] = useState<string>('');
-  const [isSubmittingShift, setIsSubmittingShift] = useState(false);
 
   // =========================================================================
   // GIAI ĐOẠN 2: SOÁT VÉ VÀO CỔNG (VENUE CHECK-IN)
@@ -713,54 +709,6 @@ interface StaffConsultant {
   // GIAI ĐOẠN 5: CHỐT CA & TỰ ĐỘNG CHẤM CÔNG RA (CLOCK-OUT)
   // =========================================================================
 
-  const systemCashX = shiftSummary?.systemCashAmount || 0;
-  const actualCashY = actualCashInput !== '' ? Number(actualCashInput) : null;
-  const differenceAmount = actualCashY !== null ? actualCashY - systemCashX : null;
-  const isDifferenceDetected = differenceAmount !== null && differenceAmount !== 0;
-
-  const handleCloseShiftSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (actualCashY === null) {
-      toast.warning('Vui lòng nhập số tiền mặt thực tế kiểm đếm được trong ngăn kéo.');
-      return;
-    }
-
-    if (isDifferenceDetected && !differenceReason.trim()) {
-      soundEffects.playErrorBeep();
-      toast.error('Số tiền thực tế chênh lệch với hệ thống! Bắt buộc phải nhập lý do chênh lệch trước khi chốt ca.', 'Đối Soát Ca');
-      return;
-    }
-
-    setIsSubmittingShift(true);
-    try {
-      const res = await api.staff.closeShift({
-        actualCashAmount: actualCashY,
-        differenceReason: differenceReason.trim() || undefined
-      });
-
-      soundEffects.playSuccessBeep();
-      toast.success('Chốt ca và chấm công ra (Clock-out) thành công! Hệ thống sẽ tự động đăng xuất.', 'Chốt Ca');
-      setIsCloseShiftModalOpen(false);
-
-      // Xóa phiên ca trực khỏi localStorage
-      localStorage.removeItem('aura_current_shift');
-
-      setTimeout(() => {
-        if (onLogout) {
-          onLogout();
-        } else {
-          api.auth.logout();
-          window.location.reload();
-        }
-      }, 1200);
-    } catch (err: any) {
-      soundEffects.playErrorBeep();
-      toast.error(err.message, 'Lỗi Đóng Ca');
-    } finally {
-      setIsSubmittingShift(false);
-    }
-  };
-
   const handleOpenNewShift = async () => {
     try {
       const shiftRes = await api.staff.getCurrentShift();
@@ -875,10 +823,7 @@ interface StaffConsultant {
               type="button"
               variant="destructive"
               className="gap-2 font-bold shadow-xs hover:bg-destructive/90 cursor-pointer"
-              onClick={() => {
-                setActualCashInput(String(shiftSummary?.systemCashAmount || ''));
-                setIsCloseShiftModalOpen(true);
-              }}
+              onClick={() => onLogout?.()}
             >
               <LogOut className="size-4" /> Chốt Quỹ & Đăng Xuất
             </Button>
@@ -2176,10 +2121,7 @@ interface StaffConsultant {
                   size="lg"
                   variant="destructive"
                   className="font-bold gap-2 cursor-pointer"
-                  onClick={() => {
-                    setActualCashInput(String(shiftSummary?.systemCashAmount || ''));
-                    setIsCloseShiftModalOpen(true);
-                  }}
+                  onClick={() => onLogout?.()}
                 >
                   <LogOut className="size-5" /> Bàn Giao Tiền Mặt & Đăng Xuất
                 </Button>
@@ -2285,107 +2227,6 @@ interface StaffConsultant {
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* =====================================================================
-          MODAL: CHỐT CA & ĐỐI SOÁT DOANH THU (GIAI ĐOẠN 5)
-      ===================================================================== */}
-      {isCloseShiftModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in-50 duration-200">
-          <Card className="w-full max-w-lg border-2 border-primary/40 shadow-2xl bg-card">
-            <CardHeader className="border-b bg-muted/20 pb-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2 text-foreground font-extrabold">
-                  <LogOut className="size-5 text-destructive" /> Chốt Ca & Bàn Giao Tiền Mặt Trước Khi Đăng Xuất
-                </CardTitle>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="size-8 p-0 cursor-pointer"
-                  onClick={() => setIsCloseShiftModalOpen(false)}
-                >
-                  ✕
-                </Button>
-              </div>
-              <CardDescription>
-                Kiểm đếm tiền mặt thực tế trong ngăn kéo và đối soát với số liệu hệ thống.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-5 pt-4">
-              <div className="rounded-xl border bg-muted/30 p-3.5 grid grid-cols-2 gap-4 text-center">
-                <div>
-                  <span className="text-xs text-muted-foreground">Tiền hệ thống ghi nhận (X):</span>
-                  <div className="text-lg font-black text-primary font-mono mt-0.5">
-                    {systemCashX.toLocaleString('vi-VN')} đ
-                  </div>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground">Tiền thực tế kiểm đếm (Y):</span>
-                  <div className="text-lg font-black text-foreground font-mono mt-0.5">
-                    {actualCashY !== null ? actualCashY.toLocaleString('vi-VN') : '0'} đ
-                  </div>
-                </div>
-              </div>
-
-              {/* Cảnh báo chênh lệch */}
-              {isDifferenceDetected && (
-                <Alert variant="destructive" className="animate-pulse">
-                  <AlertCircle className="size-4" />
-                  <AlertTitle className="text-xs font-bold">Phát hiện chênh lệch doanh thu tiền mặt!</AlertTitle>
-                  <AlertDescription className="text-xs">
-                    Chênh lệch: <strong>{differenceAmount?.toLocaleString('vi-VN')} đ</strong>. Hệ thống bắt buộc bạn phải
-                    nhập lý do chênh lệch trước khi hoàn tất đóng ca.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              <form onSubmit={handleCloseShiftSubmit} className="grid gap-4">
-                <Field label="Nhập số tiền mặt thực tế trong ngăn kéo quầy (Y) *">
-                  <Input
-                    required
-                    type="number"
-                    className="h-11 font-mono font-bold text-base"
-                    placeholder="VD: 500000"
-                    value={actualCashInput}
-                    onChange={(e) => setActualCashInput(e.target.value)}
-                  />
-                </Field>
-
-                {isDifferenceDetected && (
-                  <Field label="Lý do chênh lệch doanh thu (Bắt buộc) *">
-                    <Textarea
-                      required
-                      rows={2}
-                      className="border-destructive focus-visible:ring-destructive text-xs"
-                      placeholder="VD: Trả nhầm tiền thừa cho khách 10k, đổi tiền lẻ tại quầy nước..."
-                      value={differenceReason}
-                      onChange={(e) => setDifferenceReason(e.target.value)}
-                    />
-                  </Field>
-                )}
-
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1 cursor-pointer"
-                    onClick={() => setIsCloseShiftModalOpen(false)}
-                  >
-                    Hủy Bỏ
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={isSubmittingShift}
-                    className="flex-1 font-bold bg-destructive text-destructive-foreground hover:bg-destructive/90 cursor-pointer"
-                  >
-                    {isSubmittingShift ? 'Đang đóng ca...' : 'Xác Nhận & Đăng Xuất'}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
       )}
 
       {/* =====================================================================

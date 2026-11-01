@@ -336,5 +336,42 @@ export const ptApi = {
       method: 'POST',
       body: JSON.stringify(payload)
     });
+  },
+
+  async getPtConversations() {
+    return request<{
+      success: boolean;
+      data: Array<{
+        key: string;
+        memberId: number;
+        coachId: number;
+        partner: { id: number; fullName: string; role?: string; phone?: string; avatar?: string };
+        canSend: boolean;
+        chatType?: 'PAID' | 'TRIAL' | 'EXPIRED' | 'NONE';
+        reason?: string;
+        latestBookingId?: number | null;
+        latestBookingTime?: string | null;
+        lastMessage?: { id: number; content: string; createdAt: string; senderId: number; readAt?: string | null } | null;
+        unreadCount?: number;
+      }>;
+    }>('/pt/conversations');
+  },
+
+  async getPairMessages(partnerId: number | string, beforeId?: number) {
+    const query = beforeId ? `?beforeId=${beforeId}&limit=40` : '?limit=40';
+    return request<{
+      success: boolean;
+      data: Array<{ id: number; senderId: number; content: string; createdAt: string; sender: { fullName: string; role?: string; avatar?: string } }>;
+      canSend: boolean;
+      hasMore: boolean;
+      reason?: string;
+    }>(`/pt/conversations/${partnerId}/messages${query}`);
+  },
+
+  async sendPairMessage(partnerId: number | string, content: string, bookingId?: number) {
+    return request<{ success: boolean; data: { id: number } }>(`/pt/conversations/${partnerId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content, bookingId })
+    });
   }
 };

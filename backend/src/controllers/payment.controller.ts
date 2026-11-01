@@ -16,6 +16,71 @@ import { activePaidGymMembershipWhere } from '../services/gymEntitlement.service
 
 
 export class PaymentController {
+  static async getPaymentHistory(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+      const requestedPage = Number(req.query.page);
+      const requestedLimit = Number(req.query.limit);
+      const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+      const limit = Number.isSafeInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(50, requestedLimit)
+        : 10;
+      const skip = (page - 1) * limit;
+      if (!Number.isSafeInteger(skip)) {
+        return res.status(400).json({ success: false, message: 'Thông tin phân trang không hợp lệ' });
+      }
+
+      const where = { userId };
+      const [payments, total] = await Promise.all([
+        prisma.payment.findMany({
+          where,
+          select: {
+            id: true,
+            membershipId: true,
+            amount: true,
+            method: true,
+            status: true,
+            orderCode: true,
+            transactionNo: true,
+            renewalDurationDays: true,
+            createdAt: true,
+            membership: { select: { package: { select: { name: true, type: true } } } },
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          skip,
+          take: limit,
+        }),
+        prisma.payment.count({ where }),
+      ]);
+
+      const data = payments.map((payment) => {
+        const isRenewal = payment.renewalDurationDays !== null;
+        return {
+          id: payment.id,
+          amount: Number(payment.amount),
+          status: payment.status === 'PAID' ? 'SUCCESS' : payment.status,
+          packageName: payment.membership?.package.name ?? (isRenewal ? 'Gia hạn gói' : 'Thanh toán gói'),
+          packageType: isRenewal ? 'RENEWAL' : payment.membership?.package.type ?? 'PACKAGE',
+          paymentMethod: payment.method,
+          orderCode: payment.orderCode?.toString() ?? null,
+          transactionNo: payment.transactionNo,
+          createdAt: payment.createdAt,
+        };
+      });
+
+      return res.status(200).json({
+        success: true,
+        data,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      });
+    } catch (error) {
+      console.error('Get payment history error:', error);
+      return res.status(500).json({ success: false, message: 'Không thể tải lịch sử thanh toán' });
+    }
+  }
+
   static async createPtRenewalCheckout(req: AuthRequest, res: Response) {
     const userId = req.user?.userId;
     const batchId = Number(req.body?.batchId);

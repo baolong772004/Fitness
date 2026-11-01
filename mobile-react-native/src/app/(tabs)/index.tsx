@@ -19,6 +19,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Page, Section } from '../../components/ui';
 import { ArticleRail } from '../../components/editorial';
+import { CoachHomeView } from '../../components/CoachHomeView';
+import { HomeHeader } from '../../components/HomeHeader';
 import { useAuth } from '../../lib/auth';
 import { aura, money } from '../../lib/theme';
 
@@ -303,64 +305,22 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [promoWidth]);
 
+  const roleStr = String(user?.role || '').toUpperCase().trim();
+  const isCoach = roleStr === 'COACH' || roleStr === 'TRAINER' || roleStr === 'PT' || roleStr === 'HLV';
+
+  if (__DEV__) {
+    console.log('[Home Tab] User:', user?.email, 'Role:', user?.role, 'isCoach:', isCoach);
+  }
+
+  if (isCoach) {
+    return <CoachHomeView />;
+  }
+
   return (
-    <Page refresh={onRefresh} refreshing={refreshing}>
-      {/* 1. Header Chào Mừng & Tài Khoản */}
-      <FadeInUp delay={0}>
-        <View style={[styles.headerContainer, { paddingTop: insets.top + 14 }]}>
-          <View style={styles.headerTopRow}>
-            <View style={styles.userInfo}>
-              <View style={styles.avatarCircle}>
-                <Ionicons name="person" size={17} color={aura.white} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.welcomeGreeting}>
-                  {user ? `Xin chào, ${user.fullName} 👋` : 'Chào mừng bạn đến với Aura!'}
-                </Text>
-                <Text style={styles.welcomeSub}>Hôm nay bạn muốn tập luyện gì nào?</Text>
-              </View>
-            </View>
-
-            <View style={styles.headerRightActions}>
-              {user?.balance != null && (
-                <Pressable
-                  onPress={() => router.push('/wallet')}
-                  style={styles.balancePill}
-                >
-                  <Ionicons name="wallet-outline" size={13} color="#FFD6B4" />
-                  <Text style={styles.balanceText}>{money(user.balance)}</Text>
-                </Pressable>
-              )}
-              <Pressable
-                onPress={() => router.push('/(tabs)/notifications')}
-                style={styles.notificationBtn}
-              >
-                <Ionicons name="notifications-outline" size={21} color="#fff" />
-                <View style={styles.notifDot} />
-              </Pressable>
-            </View>
-          </View>
-
-          {!user && (
-            <View style={styles.authButtonsRow}>
-              <Pressable
-                onPress={() => router.push('/auth?register=1')}
-                style={[styles.authBtn, styles.authBtnSecondary]}
-              >
-                <Text style={styles.authBtnSecondaryText}>Đăng ký ngay</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => router.push('/auth')}
-                style={[styles.authBtn, styles.authBtnPrimary]}
-              >
-                <Text style={styles.authBtnPrimaryText}>Đăng nhập</Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-      </FadeInUp>
-
-      {/* 2. Hero banner ảnh chuyển động nhẹ */}
+    <View style={{ flex: 1, backgroundColor: aura.cream }}>
+      <HomeHeader />
+      <Page refresh={onRefresh} refreshing={refreshing}>
+        {/* 2. Hero banner ảnh chuyển động nhẹ */}
       <FadeInUp delay={80}>
         <View style={styles.heroWrapper}>
           <View style={styles.heroMediaContainer}>
@@ -745,6 +705,7 @@ export default function Home() {
 
       <View style={{ height: 28 }} />
     </Page>
+    </View>
   );
 }
 

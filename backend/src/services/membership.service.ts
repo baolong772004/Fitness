@@ -105,5 +105,5 @@ export function startGymMembershipWorker() {
 
   void scan();
   const timer = setInterval(() => void scan(), scanIntervalMs);
-  timer.unref?.();
+  (timer as any).unref?.();
 }
