@@ -13,55 +13,63 @@ export function HomeHeader() {
   const { openDrawer } = useDrawer();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
-      {/* 1. Nút 3 dấu gạch ngang (thay thế cho icon user trước đây) */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Mở menu danh mục"
-        onPress={openDrawer}
-        hitSlop={12}
-        style={styles.actionBtn}
-      >
-        <Ionicons name="menu" size={26} color={aura.darkCoffee} />
-      </Pressable>
+    <View style={{ backgroundColor: aura.cream }}>
+      <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
+        {/* 1. Nút 3 dấu gạch ngang (thay thế cho icon user trước đây) */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Mở menu danh mục"
+          onPress={openDrawer}
+          hitSlop={12}
+          style={styles.actionBtn}
+        >
+          <Ionicons name="menu" size={26} color="#fff" />
+        </Pressable>
 
-      {/* 2. Tiêu đề ứng dụng 'Aura Fitness' thay vì tên người dùng */}
-      <View style={styles.titleWrapper}>
-        <Text style={styles.appTitle}>Aura Fitness</Text>
+        {/* 2. Tiêu đề ứng dụng 'Aura Fitness' thay vì tên người dùng */}
+        <View style={styles.titleWrapper}>
+          <Text style={styles.appTitle}>Aura Fitness</Text>
+        </View>
+
+        {/* 3. Button chat ghim tại vị trí top-right (nút thông báo đã xóa đi) */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Mở tin nhắn PT"
+          onPress={() => router.push(user ? '/pt-chat' : '/auth')}
+          hitSlop={12}
+          style={styles.actionBtn}
+        >
+          <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
+          {unreadChatCount > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>
+                {unreadChatCount > 9 ? '9+' : unreadChatCount}
+              </Text>
+            </View>
+          )}
+        </Pressable>
       </View>
-
-      {/* 3. Button chat ghim tại vị trí top-right (nút thông báo đã xóa đi) */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Mở tin nhắn PT"
-        onPress={() => router.push(user ? '/pt-chat' : '/auth')}
-        hitSlop={12}
-        style={styles.actionBtn}
-      >
-        <Ionicons name="chatbubbles-outline" size={24} color={aura.darkCoffee} />
-        {unreadChatCount > 0 && (
-          <View style={styles.unreadBadge}>
-            <Text style={styles.unreadBadgeText}>
-              {unreadChatCount > 9 ? '9+' : unreadChatCount}
-            </Text>
-          </View>
-        )}
-      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: aura.white,
+    backgroundColor: aura.espresso,
     paddingBottom: 11,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    // Không bo tròn góc ở phân vùng, chỉ có 1 đường kẻ ngang hết màn hình chia ra
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
     borderBottomWidth: 1,
-    borderBottomColor: '#EAD8C7',
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
     zIndex: 99,
   },
   actionBtn: {
@@ -79,7 +87,7 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: aura.darkCoffee,
+    color: '#fff',
     letterSpacing: 0.5,
   },
   unreadBadge: {
@@ -94,7 +102,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: aura.white,
+    borderColor: aura.espresso,
   },
   unreadBadgeText: {
     color: '#fff',

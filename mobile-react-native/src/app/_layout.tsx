@@ -66,10 +66,10 @@ function RootNavigation() {
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
   }, [pathname]);
-  const lightTab = ['/booking', '/notifications', '/(tabs)/booking', '/(tabs)/notifications'].includes(pathname);
+  const hasLightHeader = ['/qr', '/(tabs)/qr', '/account', '/(tabs)/account', '/profile'].includes(pathname);
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar style={lightTab ? 'dark' : 'light'} />
+      <StatusBar style={hasLightHeader ? 'dark' : 'light'} />
       <InAppChatBanner />
       <Stack
         screenOptions={{

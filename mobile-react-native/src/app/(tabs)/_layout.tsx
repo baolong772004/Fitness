@@ -34,6 +34,7 @@ function TabLayoutContent() {
   const pathname = usePathname();
 
   const isHome = pathname === '/' || pathname === '/(tabs)' || pathname === '/(tabs)/' || pathname === '/(tabs)/index';
+  const isDarkTab = pathname === '/qr' || pathname === '/(tabs)/qr' || pathname.endsWith('/qr');
 
   const isDrawerOpenRef = useRef(isDrawerOpen);
   isDrawerOpenRef.current = isDrawerOpen;
@@ -134,7 +135,7 @@ function TabLayoutContent() {
       <Animated.View
         style={{
           flex: 1,
-          backgroundColor: aura.cream,
+          backgroundColor: isDarkTab ? aura.darkCoffee : aura.cream,
           transform: [
             {
               translateX: drawerAnim.interpolate({
@@ -150,15 +151,29 @@ function TabLayoutContent() {
           screenOptions={{ headerShown: false }}
           tabBar={({ state, emitter, navigateToTab }) => {
             const open = (route: typeof state.routes[number]) => {
-              const event = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-              if (!event.defaultPrevented && state.routes[state.index]?.key !== route.key) navigateToTab(route.key);
+              const event = emitter?.emit
+                ? emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true })
+                : { defaultPrevented: false };
+              if (!event?.defaultPrevented && state.routes[state.index]?.key !== route.key) {
+                navigateToTab(route.key);
+              }
               if (route.name === 'notifications') void refreshUnreadCount();
             };
+
+            const currentTab = state.routes[state.index]?.name;
+            const isDark = currentTab === 'qr' || isDarkTab;
+            const outerBg = isDark ? aura.darkCoffee : aura.cream;
+
             const renderItem = (name: string) => {
               const route = state.routes.find(row => row.name === name);
               if (!route) return null;
               const active = state.routes[state.index]?.name === name;
               const itemInfo = items[name] || { title: name, icon: 'square' as const };
+
+              const activeColor = isDark ? aura.darkCoffee : '#fff';
+              const inactiveColor = isDark ? '#8C7A70' : '#FFFFFF95';
+              const itemColor = active ? activeColor : inactiveColor;
+
               return (
                 <Pressable
                   key={name}
@@ -168,7 +183,7 @@ function TabLayoutContent() {
                   style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 }}
                 >
                   <View>
-                    <Ionicons name={itemInfo.icon} size={22} color={active ? '#fff' : '#FFFFFF95'} />
+                    <Ionicons name={itemInfo.icon} size={22} color={itemColor} />
                     {name === 'notifications' && unreadCount > 0 && (
                       <View
                         style={{
@@ -182,6 +197,8 @@ function TabLayoutContent() {
                           borderRadius: 9,
                           alignItems: 'center',
                           justifyContent: 'center',
+                          borderWidth: isDark ? 1.5 : 0,
+                          borderColor: '#fff',
                         }}
                       >
                         <Text style={{ color: '#fff', fontWeight: '900', fontSize: 9 }}>
@@ -190,7 +207,7 @@ function TabLayoutContent() {
                       </View>
                     )}
                   </View>
-                  <Text style={{ color: active ? '#fff' : '#FFFFFF95', fontSize: 10, fontWeight: active ? '900' : '600' }}>
+                  <Text style={{ color: itemColor, fontSize: 10, fontWeight: active ? '900' : '600' }}>
                     {itemInfo.title}
                   </Text>
                 </Pressable>
@@ -200,54 +217,64 @@ function TabLayoutContent() {
             const qrRoute = state.routes.find(route => route.name === 'qr');
             const isQrActive = state.routes[state.index]?.name === 'qr';
 
-            // Navbar ngang 1 màu duy nhất (aura.espresso), giữ lại thiết kế nút tròn QR ban đầu
+            // Đường cong navbar ngang ban đầu (bo 2 góc trên), tự động đảo màu ngược lại khi vào trang tối (QR)
+            // Lớp bọc bên ngoài mang đúng màu nền của trang (aura.darkCoffee hoặc aura.cream) để hoàn toàn triệt tiêu viền màu lộ ra ở 2 góc cong!
             return (
-              <View
-                style={{
-                  height: 64 + insets.bottom,
-                  backgroundColor: aura.espresso,
-                  paddingBottom: insets.bottom,
-                  paddingTop: 6,
-                  flexDirection: 'row',
-                  borderTopWidth: 1,
-                  borderTopColor: 'rgba(255, 255, 255, 0.08)',
-                  overflow: 'visible',
-                }}
-              >
-                {renderItem('index')}
-                {renderItem('booking')}
-                <View style={{ flex: 1 }} />
-                {renderItem('notifications')}
-                {renderItem('account')}
+              <View style={{ backgroundColor: outerBg }}>
+                <View
+                  style={{
+                    height: 64 + insets.bottom,
+                    backgroundColor: isDark ? aura.white : aura.espresso,
+                    borderTopLeftRadius: 22,
+                    borderTopRightRadius: 22,
+                    paddingBottom: insets.bottom,
+                    paddingTop: 6,
+                    flexDirection: 'row',
+                    borderTopWidth: 1,
+                    borderTopColor: isDark ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.08)',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: -3 },
+                    shadowOpacity: isDark ? 0.12 : 0.22,
+                    shadowRadius: 8,
+                    elevation: 8,
+                    overflow: 'visible',
+                  }}
+                >
+                  {renderItem('index')}
+                  {renderItem('booking')}
+                  <View style={{ flex: 1 }} />
+                  {renderItem('notifications')}
+                  {renderItem('account')}
 
-                {qrRoute && (
-                  <Pressable
-                    accessibilityRole="tab"
-                    accessibilityLabel={isCoach ? 'Quét QR' : 'Mở mã QR hội viên'}
-                    accessibilityState={{ selected: isQrActive }}
-                    onPress={() => open(qrRoute)}
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      top: -18,
-                      transform: [{ translateX: -30 }],
-                      width: 60,
-                      height: 60,
-                      borderRadius: 30,
-                      backgroundColor: aura.espresso,
-                      borderWidth: 4,
-                      borderColor: aura.white,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      elevation: 8,
-                      shadowColor: '#000',
-                      shadowOpacity: 0.22,
-                      shadowRadius: 8,
-                    }}
-                  >
-                    <Ionicons name="qr-code" size={27} color="#fff" />
-                  </Pressable>
-                )}
+                  {qrRoute && (
+                    <Pressable
+                      accessibilityRole="tab"
+                      accessibilityLabel={isCoach ? 'Quét QR' : 'Mở mã QR hội viên'}
+                      accessibilityState={{ selected: isQrActive }}
+                      onPress={() => open(qrRoute)}
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        top: -18,
+                        transform: [{ translateX: -30 }],
+                        width: 60,
+                        height: 60,
+                        borderRadius: 30,
+                        backgroundColor: isDark ? aura.darkCoffee : aura.espresso,
+                        borderWidth: 4,
+                        borderColor: aura.white,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        elevation: 9,
+                        shadowColor: '#000',
+                        shadowOpacity: 0.25,
+                        shadowRadius: 8,
+                      }}
+                    >
+                      <Ionicons name="qr-code" size={27} color="#fff" />
+                    </Pressable>
+                  )}
+                </View>
               </View>
             );
           }}

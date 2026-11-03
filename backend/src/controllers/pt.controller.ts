@@ -147,6 +147,12 @@ export class PtController {
       }
       const legacy = await prisma.membership.findFirst({ where: { id: membershipId, userId },
         include: { package: true } });
+      if (legacy?.status === 'FROZEN') {
+        return res.status(400).json({
+          success: false,
+          message: `Gói tập [${legacy.package.name}] của bạn đang trong trạng thái BẢO LƯU. Vui lòng mở lại gói bảo lưu tại quầy trước khi đặt lịch PT!`
+        });
+      }
       const level = legacy?.package.type === 'MEMBERSHIP' ? 'TRIAL' : legacy?.package.ptLevel;
       const trainerId = legacy?.package.type === 'PT' ? legacy.coachId : selectedCoachId;
       if (!legacy || !isPtLevel(level) || !trainerId) {
@@ -185,6 +191,12 @@ export class PtController {
       const starts = rawDates.map(value => new Date(value));
       const legacy = await prisma.membership.findFirst({ where: { id: membershipId, userId: memberId },
         include: { package: true } });
+      if (legacy?.status === 'FROZEN') {
+        return res.status(400).json({
+          success: false,
+          message: `Gói tập [${legacy.package.name}] của bạn đang trong trạng thái BẢO LƯU. Vui lòng mở lại gói bảo lưu tại quầy trước khi đặt lịch PT!`
+        });
+      }
       const level = legacy?.package.type === 'MEMBERSHIP' ? 'TRIAL' : legacy?.package.ptLevel;
       const trainerId = legacy?.package.type === 'PT' ? legacy.coachId : coachId;
       if (!legacy || !isPtLevel(level) || !trainerId) {
@@ -670,8 +682,8 @@ export class PtController {
   }
 
   /**
-   * 9. BÁO VẮNG / HỦY LỊCH (MEMBER XIN NGHỈ)
-   * @route POST /api/pt/booking/:id/mark-absent
+   * 8. CHÍNH SÁCH BÁO VẮNG
+   * @route GET /api/pt/booking/:id/absence-policy
    */
   static async getAbsencePolicy(req: AuthRequest, res: Response) {
     const userId = req.user?.userId;
@@ -706,6 +718,10 @@ export class PtController {
     return res.json({ success: true, data: policy });
   }
 
+  /**
+   * 9. BÁO VẮNG / HỦY LỊCH (MEMBER XIN NGHỈ)
+   * @route POST /api/pt/booking/:id/mark-absent
+   */
   static async markAbsent(req: AuthRequest, res: Response) {
     const userId = req.user?.userId;
     const role = req.user?.role;
@@ -749,20 +765,18 @@ export class PtController {
         if (!membership && !allocation) throw new PtBookingError(409, 'Lịch PT không có credit để xử lý.');
         const coachAbsence = isCoach;
         const batch = allocation ? await tx.ptCreditBatch.findUniqueOrThrow({ where: { id: allocation.batchId } }) : null;
-        const protectedUsed = batch && !coachAbsence ? await tx.ptCreditTransaction.count({
-          where: { batchId: batch.id, kind: 'PROTECTED_CANCEL' },
+        const walletMakeupUsed = batch && !coachAbsence ? await tx.ptCreditTransaction.count({
+          where: { batchId: batch.id, kind: 'MEMBER_MAKEUP' },
         }) : 0;
-        const policy = decidePtAbsence({ source: batch?.source, initialCount: batch?.initialCount,
-          protectedUsed, startTime: booking.startTime, now, isMakeup: booking.isMakeup,
-          coachAbsence,
-          legacyMakeupRemaining: Boolean(membership?.status === 'ACTIVE' && membership.endDate >= now &&
-            membership.usedMakeupCount < membership.maxMakeupAllowed),
-        });
+        const walletMakeupEligible = Boolean(batch && batch.level !== 'TRIAL' && walletMakeupUsed < 3);
+        const canMakeup = coachAbsence || (!booking.isMakeup &&
+          booking.startTime.getTime() - now.getTime() >= 2 * 60 * 60 * 1000 &&
+          (allocation ? walletMakeupEligible : Boolean(membership?.status === 'ACTIVE' && membership.endDate >= now &&
+            membership.usedMakeupCount < membership.maxMakeupAllowed)));
         const claimed = await tx.booking.updateMany({
           where: { id: bookingId, status: 'CONFIRMED' },
           data: {
-            status: policy.outcome === 'MAKEUP' ? 'ABSENT_ELIGIBLE' :
-              policy.outcome === 'RELEASE' ? 'CANCELLED' : 'ABSENT_NO_REFUND',
+            status: canMakeup ? 'ABSENT_ELIGIBLE' : 'ABSENT_NO_REFUND',
             absenceReason: reason || (coachAbsence ? 'Coach báo vắng' : 'Hội viên báo vắng'),
             absenceReportedAt: now,
             cancelledBy: role,
@@ -770,7 +784,7 @@ export class PtController {
           },
         });
         if (claimed.count !== 1) throw new PtBookingError(409, 'Buổi PT đã được xử lý.');
-        if (policy.outcome === 'MAKEUP') {
+        if (canMakeup) {
           if (!coachAbsence && !allocation && membership) {
             const quota = await tx.membership.updateMany({
               where: { id: membership.id, usedMakeupCount: { lt: membership.maxMakeupAllowed } },
@@ -782,35 +796,28 @@ export class PtController {
             data: { originalBookingId: bookingId, status: 'PENDING',
               expiresAt: new Date(now.getTime() + 7 * 86400000) },
           });
-        } else if (policy.outcome === 'RELEASE') {
-          if (allocation) {
-            const released = await releasePtCredit(tx, bookingId, { kind: 'PROTECTED_CANCEL',
-              actorId: userId, note: reason || 'Hội viên hủy sớm' });
-            if (!released) throw new PtBookingError(409, 'Credit đã được xử lý trước đó.');
-          } else if (membership) {
-            const quota = await tx.membership.updateMany({
-              where: { id: membership.id, usedMakeupCount: { lt: membership.maxMakeupAllowed } },
-              data: { usedMakeupCount: { increment: 1 } },
-            });
-            if (quota.count !== 1) throw new PtBookingError(409, 'Gói đã hết quyền bảo lưu.');
-          }
+          if (!coachAbsence && batch) await tx.ptCreditTransaction.create({ data: {
+            batchId: batch.id, bookingId, kind: 'MEMBER_MAKEUP', quantity: 1,
+            note: 'Member absence makeup quota',
+          } });
         } else {
           if (allocation) await settlePtCredit(tx, bookingId);
           else await debitPtSession(tx, membership!.id);
         }
-        return { booking: await tx.booking.findUniqueOrThrow({ where: { id: bookingId } }), policy };
+        return { booking: await tx.booking.findUniqueOrThrow({ where: { id: bookingId } }), canMakeup };
       }, { maxWait: 15000, timeout: 30000 });
       closePtChatRoom(bookingId);
       emitCoachScheduleChanged(initial.coachId);
       await createUserNotification({
         userId: isCoach ? initial.memberId : initial.coachId,
         title: 'Lịch PT đã được báo vắng',
-        message: result.policy.message,
-      }).catch(error => console.error('Không thể gửi thông báo báo vắng PT:', error));
+        message: result.canMakeup ? 'Buổi PT được cấp quyền đặt học bù trong 7 ngày.'
+          : 'Buổi PT đã bị hủy và trừ một buổi trong gói.',
+      });
       return res.status(200).json({
         success: true,
-        message: result.policy.message,
-        data: result.booking, policy: result.policy,
+        message: result.canMakeup ? 'Đã cấp quyền đặt học bù trong 7 ngày.' : 'Đã báo vắng và trừ một buổi PT.',
+        data: result.booking,
       });
     } catch (error: any) {
       if (error instanceof PtBookingError) return res.status(error.status).json({ success: false, message: error.message });

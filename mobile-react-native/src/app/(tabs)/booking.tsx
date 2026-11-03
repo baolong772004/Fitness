@@ -78,22 +78,32 @@ export default function BookingHub() {
 
   return (
     <View style={{ flex: 1, backgroundColor: aura.cream }}>
-      {/* Header an toàn tuyệt đối khỏi tai thỏ / status bar */}
-      <View
-        style={{
-          paddingTop: insets.top + 8,
-          paddingBottom: 11,
-          paddingHorizontal: 16,
-          backgroundColor: aura.white,
-          borderBottomWidth: 1,
-          borderBottomColor: '#EAD8C7',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Text style={{ fontSize: 18, fontWeight: '900', color: aura.darkCoffee, letterSpacing: 0.4 }}>
-          {coach ? 'Lịch dạy của Coach' : 'Đặt lịch & Lớp học'}
-        </Text>
+      {/* Header an toàn tuyệt đối khỏi tai thỏ / status bar, bo cong đáy giống HomeHeader */}
+      <View style={{ backgroundColor: aura.cream }}>
+        <View
+          style={{
+            paddingTop: insets.top + 8,
+            paddingBottom: 11,
+            paddingHorizontal: 16,
+            backgroundColor: aura.espresso,
+            borderBottomLeftRadius: 22,
+            borderBottomRightRadius: 22,
+            borderBottomWidth: 1,
+            borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.15,
+            shadowRadius: 6,
+            elevation: 4,
+            zIndex: 99,
+          }}
+        >
+          <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff', letterSpacing: 0.4 }}>
+            {coach ? 'Lịch dạy của Coach' : 'Đặt lịch & Lớp học'}
+          </Text>
+        </View>
       </View>
 
       <Page loading={loading} refresh={user ? () => void load() : undefined}>
