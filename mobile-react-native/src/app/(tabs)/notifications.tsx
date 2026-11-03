@@ -83,31 +83,41 @@ export default function Notifications() {
   const markAll = async () => { setMarkingAll(true); try { await api.readAllNotifications(); setRows(previous => previous.map(item => ({ ...item, isRead: true }))); setUnreadCount(0); } catch (cause) { showError(cause); } finally { setMarkingAll(false); } };
   return (
     <View style={{ flex: 1, backgroundColor: aura.cream }}>
-      {/* Header an toàn tuyệt đối khỏi tai thỏ / status bar */}
-      <View
-        style={{
-          paddingTop: insets.top + 8,
-          paddingBottom: 11,
-          paddingHorizontal: 16,
-          backgroundColor: aura.white,
-          borderBottomWidth: 1,
-          borderBottomColor: '#EAD8C7',
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <View style={{ width: 60 }} />
-        <Text style={{ fontSize: 18, fontWeight: '900', color: aura.darkCoffee, letterSpacing: 0.4 }}>
-          Thông báo
-        </Text>
-        {unreadCount > 0 ? (
-          <Pressable onPress={() => void markAll()} hitSlop={10} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
-            <Text style={{ color: aura.caramel, fontWeight: '800', fontSize: 12.5 }}>Đọc tất cả</Text>
-          </Pressable>
-        ) : (
+      {/* Header an toàn tuyệt đối khỏi tai thỏ / status bar, bo cong đáy giống HomeHeader */}
+      <View style={{ backgroundColor: aura.cream }}>
+        <View
+          style={{
+            paddingTop: insets.top + 8,
+            paddingBottom: 11,
+            paddingHorizontal: 16,
+            backgroundColor: aura.espresso,
+            borderBottomLeftRadius: 22,
+            borderBottomRightRadius: 22,
+            borderBottomWidth: 1,
+            borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.15,
+            shadowRadius: 6,
+            elevation: 4,
+            zIndex: 99,
+          }}
+        >
           <View style={{ width: 60 }} />
-        )}
+          <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff', letterSpacing: 0.4 }}>
+            Thông báo
+          </Text>
+          {unreadCount > 0 ? (
+            <Pressable onPress={() => void markAll()} hitSlop={10} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
+              <Text style={{ color: '#F4D3C2', fontWeight: '800', fontSize: 12.5 }}>Đọc tất cả</Text>
+            </Pressable>
+          ) : (
+            <View style={{ width: 60 }} />
+          )}
+        </View>
       </View>
 
       <Page refresh={user ? () => void load() : undefined} loading={loading}>
