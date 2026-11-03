@@ -6,16 +6,6 @@ import { grantPtCredit } from './ptWallet.service.js';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
-const STAFF_TEMP_PASSWORD = '123456';
-
-function normalizeStaffMemberPhone(value: string) {
-  const raw = value.trim();
-  const digits = raw.replace(/\D/g, '');
-  if (!/^\+?[0-9 ()-]+$/.test(raw) || digits.length < 8 || digits.length > 15) {
-    throw new Error('Số điện thoại không hợp lệ.');
-  }
-  return digits.startsWith('84') && digits.length === 11 ? `0${digits.slice(2)}` : digits;
-}
 
 export class StaffService {
   // =========================================================================
@@ -716,12 +706,13 @@ export class StaffService {
 
   static async createMemberAccount(params: { fullName: string; phone: string; email?: string; staffId: number }) {
     const fullName = params.fullName.trim();
-    const phone = normalizeStaffMemberPhone(params.phone);
+    const raw = params.phone.trim();
+    const digits = raw.replace(/\D/g, '');
+    const phone = digits.startsWith('84') && digits.length === 11 ? `0${digits.slice(2)}` : digits;
     const email = params.email?.trim().toLowerCase() || `walkin_${phone.replace(/\D/g, '')}@gymfitness.local`;
     if (fullName.length < 2) {
       throw new Error('Vui lòng nhập họ tên và số điện thoại hợp lệ.');
     }
-    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Email đăng nhập không hợp lệ.');
     const [phoneOwner, emailOwner] = await Promise.all([
       prisma.user.findFirst({ where: { phone: { in: [phone, params.phone.trim()] } }, select: { id: true } }),
       prisma.user.findUnique({ where: { email }, select: { id: true } })
@@ -730,7 +721,7 @@ export class StaffService {
       throw new Error('Số điện thoại hoặc email đã có tài khoản. Không tạo trùng hoặc đặt lại mật khẩu.');
     }
 
-    const password = await bcrypt.hash(STAFF_TEMP_PASSWORD, 10);
+    const password = await bcrypt.hash('123456', 10);
     const member = await prisma.$transaction(async tx => {
       const created = await tx.user.create({ data: {
         fullName, phone, email, password,
@@ -749,7 +740,7 @@ export class StaffService {
       message: 'Tạo tài khoản hội viên thành công.',
       data: {
         member: { id: member.id, fullName: member.fullName, phone: member.phone, email: member.email },
-        account: { created: true, loginEmail: member.email, temporaryPassword: STAFF_TEMP_PASSWORD, mustChangePassword: true }
+        account: { created: true, loginEmail: member.email, temporaryPassword: '123456', mustChangePassword: true }
       }
     };
   }
@@ -795,9 +786,6 @@ export class StaffService {
     const packagePrice = Number(pkg.price);
 
     // 2. Validate thanh toán
-    if (paymentMethod !== 'CASH' && paymentMethod !== 'POS') {
-      throw new Error('Hình thức thanh toán không hợp lệ.');
-    }
     if (paymentMethod === 'POS' && (!traceRefNo || traceRefNo.trim() === '')) {
       throw new Error('Thanh toán qua POS quẹt thẻ ngân hàng bắt buộc phải nhập Mã chuẩn chi (Trace / Ref No.).');
     }
@@ -815,27 +803,26 @@ export class StaffService {
     }
 
     // 3. Tìm hoặc tạo tài khoản Member
-    const normalizedPhone = normalizeStaffMemberPhone(phone);
-    const normalizedEmail = email?.trim().toLowerCase();
-    if (fullName.trim().length < 2) {
-      throw new Error('Vui lòng nhập họ tên và số điện thoại hợp lệ.');
-    }
-    if (normalizedEmail && !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
-      throw new Error('Email đăng nhập không hợp lệ.');
-    }
+    const normalizedPhone = phone.trim();
     let member = await prisma.user.findFirst({
-      where: { phone: { in: [normalizedPhone, phone.trim()] } }
+      where: { phone: normalizedPhone }
     });
-    if (member && member.role !== 'MEMBER') {
-      throw new Error('Số điện thoại này thuộc tài khoản nhân viên. Vui lòng kiểm tra lại.');
-    }
-    const accountCreated = !member;
-    const loginEmail = normalizedEmail || `walkin_${normalizedPhone.replace(/\D/g, '')}@gymfitness.local`;
+
     if (!member) {
-      const emailOwner = await prisma.user.findUnique({ where: { email: loginEmail } });
-      if (emailOwner) throw new Error('Email này đã có tài khoản. Vui lòng kiểm tra thông tin khách hàng.');
+      const generatedEmail = email?.trim() || `walkin_${normalizedPhone}@gymfitness.local`;
+      const defaultPassword = await bcrypt.hash('Gym@123456', 10);
+
+      member = await prisma.user.create({
+        data: {
+          fullName: fullName.trim(),
+          phone: normalizedPhone,
+          email: generatedEmail,
+          password: defaultPassword,
+          role: 'MEMBER',
+          status: 'ACTIVE'
+        }
+      });
     }
-    const defaultPasswordHash = accountCreated ? await bcrypt.hash(STAFF_TEMP_PASSWORD, 10) : null;
 
     // 4. Kích hoạt Membership ngay lập tức
     const startDate = new Date();
@@ -847,18 +834,13 @@ export class StaffService {
       ? traceRefNo!.trim()
       : `CASH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
 
-    const { registeredMember, membership, payment } = await prisma.$transaction(async tx => {
-      const registeredMember = member || await tx.user.create({ data: {
-        fullName: fullName.trim(), phone: normalizedPhone, email: loginEmail,
-        password: defaultPasswordHash!, mustChangePassword: true,
-        role: 'MEMBER', status: 'ACTIVE'
-      } });
+    const { membership, payment } = await prisma.$transaction(async tx => {
       const membership = await tx.membership.create({ data: {
-        userId: registeredMember.id, packageId: pkg.id, startDate, endDate,
+        userId: member!.id, packageId: pkg.id, startDate, endDate,
         remainingSessions: null, status: 'ACTIVE', coachId: consultantStaffId || null,
       } });
       const payment = await tx.payment.create({ data: {
-        userId: registeredMember.id, membershipId: membership.id, amount: pkg.price,
+        userId: member!.id, membershipId: membership.id, amount: pkg.price,
         method: paymentMethod === 'CASH' ? 'CASH' : 'POS_CARD', status: 'COMPLETED',
         orderCode: generatedOrderCode, transactionNo, staffId, shiftId,
         consultantId: consultantStaffId || null,
@@ -867,16 +849,16 @@ export class StaffService {
         cashChange: cashChange > 0 ? cashChange : null,
         note: `Đăng ký gói Walk-in tại quầy [${pkg.name}]`,
       } });
-      if (pkg.trialPtSessions > 0) await grantPtCredit(tx, { memberId: registeredMember.id,
+      if (pkg.trialPtSessions > 0) await grantPtCredit(tx, { memberId: member!.id,
         level: 'TRIAL', source: 'MEMBERSHIP_GIFT', count: pkg.trialPtSessions,
         membershipId: membership.id });
       if (paymentMethod === 'CASH') await tx.staffShift.update({ where: { id: shiftId },
         data: { systemCashAmount: { increment: pkg.price } } });
       await tx.actionLog.create({ data: {
         userId: staffId, action: 'WALK_IN_REGISTRATION',
-        details: `Lễ tân ID ${staffId} đăng ký gói [${pkg.name}] cho khách Walk-in ${registeredMember.fullName} (${registeredMember.phone}). Hình thức: ${paymentMethod}. Số tiền: ${packagePrice.toLocaleString('vi-VN')} đ.`,
+        details: `Lễ tân ID ${staffId} đăng ký gói [${pkg.name}] cho khách Walk-in ${member!.fullName} (${member!.phone}). Hình thức: ${paymentMethod}. Số tiền: ${packagePrice.toLocaleString('vi-VN')} đ.`,
       } });
-      return { registeredMember, membership, payment };
+      return { membership, payment };
     });
 
     // 8. Sinh link SMS hướng dẫn tải App
@@ -887,10 +869,10 @@ export class StaffService {
       message: 'Kích hoạt gói Walk-in thành công!',
       data: {
         member: {
-          id: registeredMember.id,
-          fullName: registeredMember.fullName,
-          phone: registeredMember.phone,
-          email: registeredMember.email
+          id: member.id,
+          fullName: member.fullName,
+          phone: member.phone,
+          email: member.email
         },
         membership: {
           id: membership.id,
@@ -907,16 +889,8 @@ export class StaffService {
           cashReceived,
           cashChange
         },
-        account: {
-          created: accountCreated,
-          loginEmail: registeredMember.email,
-          temporaryPassword: accountCreated ? STAFF_TEMP_PASSWORD : null,
-          mustChangePassword: registeredMember.mustChangePassword
-        },
         smsInvitation: {
-          messageText: accountCreated
-            ? `Chuc mung ${registeredMember.fullName} da tro thanh hoi vien cua Gym Fitness! Dang nhap bang email ${registeredMember.email}, mat khau tam thoi 123456 va doi mat khau ngay sau khi dang nhap. Tai app: ${smsLink}`
-            : `Goi tap cua ${registeredMember.fullName} da duoc kich hoat. Dang nhap bang tai khoan hien co de xem thong tin.${registeredMember.mustChangePassword ? ' Hay doi mat khau tam thoi sau khi dang nhap.' : ''} Tai app: ${smsLink}`,
+          messageText: `Chuc mung ${member.fullName} da tro thanh hoi vien cua Gym Fitness! Tai app tai day de check-in vao phong: ${smsLink}. Mat khau tam thoi: Gym@123456`,
           smsLink
         }
       }
@@ -1136,6 +1110,7 @@ export class StaffService {
 
     const currentEndDate = new Date(membership.endDate);
     const newEndDate = new Date(currentEndDate.getTime() + freezeDays * 86400000);
+    const now = new Date();
 
     const updated = await prisma.membership.update({
       where: { id: membership.id },
@@ -1145,12 +1120,23 @@ export class StaffService {
       }
     });
 
-    // Ghi log kiểm toán
+    // Ghi log kiểm toán dạng JSON có cấu trúc để phục vụ tự động unfreeze và hoàn ngày khi mở sớm
+    const freezePayload = {
+      type: 'FREEZE',
+      membershipId: membership.id,
+      userId: membership.userId,
+      freezeDays,
+      frozenAt: now.toISOString(),
+      originalEndDate: currentEndDate.toISOString(),
+      projectedEndDate: newEndDate.toISOString(),
+      reason
+    };
+
     await prisma.actionLog.create({
       data: {
         userId: staffId,
         action: 'MEMBERSHIP_FREEZE_BY_STAFF',
-        details: `Lễ tân ID ${staffId} đã hỗ trợ bảo lưu gói [${membership.package.name}] cho hội viên ${membership.user.fullName} thêm ${freezeDays} ngày. Trạng thái chuyển sang BẢO LƯU (FROZEN). Hạn mới: ${newEndDate.toLocaleDateString('vi-VN')}. Lý do: ${reason}`
+        details: JSON.stringify(freezePayload)
       }
     });
 
@@ -1158,12 +1144,12 @@ export class StaffService {
     createUserNotification({
       userId: membership.userId,
       title: 'Gói tập đã được bảo lưu thành công',
-      message: `Quầy lễ tân đã hỗ trợ bảo lưu thêm ${freezeDays} ngày cho gói [${membership.package.name}] của bạn. Trạng thái hiện tại: Đang bảo lưu (FROZEN). Hạn sử dụng mới đến ngày ${newEndDate.toLocaleDateString('vi-VN')}.`
+      message: `Quầy lễ tân đã hỗ trợ bảo lưu ${freezeDays} ngày cho gói [${membership.package.name}] của bạn. Trạng thái hiện tại: Đang bảo lưu (FROZEN). Hạn sử dụng dự kiến đến ngày ${newEndDate.toLocaleDateString('vi-VN')}.`
     }).catch((e) => console.error('Lỗi gửi push cho user:', e));
 
     return {
       success: true,
-      message: `Đã chuyển trạng thái sang BẢO LƯU thành công và cộng thêm ${freezeDays} ngày cho hội viên ${membership.user.fullName}!`,
+      message: `Đã chuyển trạng thái sang BẢO LƯU thành công cho hội viên ${membership.user.fullName} (${freezeDays} ngày)!`,
       data: {
         membershipId: updated.id,
         packageName: membership.package.name,
@@ -1178,6 +1164,7 @@ export class StaffService {
 
   /**
    * Kích hoạt lại / Mở bảo lưu gói tập tại quầy
+   * Tính toán lại ngày kết thúc chính xác theo số ngày thực tế đã dừng (thu hồi ngày dư thừa nếu mở sớm)
    */
   static async unfreezeMembershipAtDesk(params: {
     membershipId: number;
@@ -1203,10 +1190,53 @@ export class StaffService {
       throw new Error('Chỉ có thể kích hoạt lại gói đang ở trạng thái BẢO LƯU (FROZEN).');
     }
 
+    // Tra cứu log bảo lưu gần nhất để tính toán số ngày thực tế hội viên đã dừng
+    const lastFreezeLog = await prisma.actionLog.findFirst({
+      where: {
+        action: 'MEMBERSHIP_FREEZE_BY_STAFF',
+        details: { contains: `"membershipId":${membership.id}` }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    let adjustedEndDate = new Date(membership.endDate);
+    let actualFrozenDays = 0;
+    let unusedDays = 0;
+
+    if (lastFreezeLog?.details) {
+      try {
+        const parsed = JSON.parse(lastFreezeLog.details);
+        if (parsed.frozenAt && parsed.freezeDays) {
+          const frozenAt = new Date(parsed.frozenAt);
+          const now = new Date();
+          // Số ngày thực tế hội viên đã dừng (tính tròn ngày, tối thiểu 1 ngày)
+          actualFrozenDays = Math.max(1, Math.ceil((now.getTime() - frozenAt.getTime()) / 86400000));
+          const totalFreezeDays = Number(parsed.freezeDays);
+
+          // Nếu mở sớm trước khi hết hạn bảo lưu: thu hồi số ngày chưa dùng
+          if (actualFrozenDays < totalFreezeDays) {
+            unusedDays = totalFreezeDays - actualFrozenDays;
+            adjustedEndDate = new Date(membership.endDate.getTime() - unusedDays * 86400000);
+
+            if (parsed.originalEndDate) {
+              const orig = new Date(parsed.originalEndDate);
+              const minValidEndDate = new Date(orig.getTime() + actualFrozenDays * 86400000);
+              if (adjustedEndDate < minValidEndDate) {
+                adjustedEndDate = minValidEndDate;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi phân tích log bảo lưu:', err);
+      }
+    }
+
     const updated = await prisma.membership.update({
       where: { id: membership.id },
       data: {
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        endDate: adjustedEndDate
       }
     });
 
@@ -1214,23 +1244,34 @@ export class StaffService {
       data: {
         userId: staffId,
         action: 'MEMBERSHIP_UNFREEZE_BY_STAFF',
-        details: `Lễ tân ID ${staffId} đã mở lại gói bảo lưu [${membership.package.name}] cho hội viên ${membership.user.fullName}.${notes ? ` Ghi chú: ${notes}` : ''}`
+        details: JSON.stringify({
+          type: 'UNFREEZE',
+          membershipId: membership.id,
+          actualFrozenDays,
+          unusedDaysRecovered: unusedDays,
+          adjustedEndDate: adjustedEndDate.toISOString(),
+          notes: notes || null
+        })
       }
     });
 
     createUserNotification({
       userId: membership.userId,
       title: 'Gói tập đã được kích hoạt lại',
-      message: `Quầy lễ tân đã mở lại gói tập [${membership.package.name}] của bạn. Trạng thái hiện tại: Đang hoạt động (ACTIVE).`
+      message: `Quầy lễ tân đã mở lại gói tập [${membership.package.name}] của bạn (Thực tế đã bảo lưu ${actualFrozenDays} ngày). Hạn dùng mới: ${adjustedEndDate.toLocaleDateString('vi-VN')}.`
     }).catch((e) => console.error('Lỗi gửi push cho user:', e));
 
     return {
       success: true,
-      message: `Đã mở lại gói bảo lưu và kích hoạt lại trạng thái hoạt động cho hội viên ${membership.user.fullName}!`,
+      message: unusedDays > 0
+        ? `Đã mở lại gói bảo lưu cho hội viên ${membership.user.fullName}! (Mở sớm: Bảo lưu thực tế ${actualFrozenDays} ngày, thu hồi ${unusedDays} ngày dư, hạn mới: ${adjustedEndDate.toLocaleDateString('vi-VN')})`
+        : `Đã mở lại gói bảo lưu và kích hoạt lại trạng thái hoạt động cho hội viên ${membership.user.fullName}! Hạn dùng: ${adjustedEndDate.toLocaleDateString('vi-VN')}`,
       data: {
         membershipId: updated.id,
         packageName: membership.package.name,
         status: 'ACTIVE',
+        actualFrozenDays,
+        unusedDaysRecovered: unusedDays,
         endDate: updated.endDate
       }
     };

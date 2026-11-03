@@ -151,8 +151,12 @@ function TabLayoutContent() {
           screenOptions={{ headerShown: false }}
           tabBar={({ state, emitter, navigateToTab }) => {
             const open = (route: typeof state.routes[number]) => {
-              const event = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-              if (!event.defaultPrevented && state.routes[state.index]?.key !== route.key) navigateToTab(route.key);
+              const event = emitter?.emit
+                ? emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true })
+                : { defaultPrevented: false };
+              if (!event?.defaultPrevented && state.routes[state.index]?.key !== route.key) {
+                navigateToTab(route.key);
+              }
               if (route.name === 'notifications') void refreshUnreadCount();
             };
 
