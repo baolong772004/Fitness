@@ -43,52 +43,61 @@ export default function MemberQr() {
 
   return (
     <View style={{ flex: 1, backgroundColor: aura.darkCoffee }}>
-      {/* 1. Header trên cùng: Cách an toàn tuyệt đối khỏi tai thỏ, Dynamic Island và thanh trạng thái hệ thống */}
-      <View
-        style={{
-          paddingTop: insets.top + 8,
-          paddingBottom: 10,
-          paddingHorizontal: 16,
-          backgroundColor: aura.espresso,
-          borderBottomWidth: 1,
-          borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        {/* Nút Quay lại: Bo tròn 38x38 chỉ icon '<', hitSlop 12, đồng bộ toàn app */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Quay lại"
-          onPress={() => {
-            if (router.canGoBack()) router.back();
-            else router.push('/(tabs)');
+      {/* 1. Header trên cùng: Invert sang màu sáng, bo cong đáy, wrapper màu darkCoffee */}
+      <View style={{ backgroundColor: aura.darkCoffee }}>
+        <View
+          style={{
+            paddingTop: insets.top + 8,
+            paddingBottom: 12,
+            paddingHorizontal: 16,
+            backgroundColor: aura.white,
+            borderBottomLeftRadius: 22,
+            borderBottomRightRadius: 22,
+            borderBottomWidth: 1,
+            borderBottomColor: 'rgba(0, 0, 0, 0.06)',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+            elevation: 3,
           }}
-          hitSlop={12}
-          style={styles.headerIconBtn}
         >
-          <Ionicons name="chevron-back" size={20} color="#fff" />
-        </Pressable>
+          {/* Nút Quay lại: Bo tròn 38x38 chỉ icon '<', hitSlop 12, đồng bộ toàn app */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Quay lại"
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.push('/(tabs)');
+            }}
+            hitSlop={12}
+            style={styles.headerIconBtn}
+          >
+            <Ionicons name="chevron-back" size={20} color={aura.darkCoffee} />
+          </Pressable>
 
-        {/* Tiêu đề chính giữa */}
-        <Text style={styles.headerTitle}>Mã QR Check-in</Text>
+          {/* Tiêu đề chính giữa */}
+          <Text style={styles.headerTitle}>Mã QR Check-in</Text>
 
-        {/* Nút Hướng dẫn: Bo tròn dễ bấm, hitSlop 12, không bao giờ bị đè bởi icon pin */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Hướng dẫn check-in"
-          onPress={() => {
-            Alert.alert(
-              'Hướng dẫn Điểm danh Check-in',
-              '1. Đưa mã QR này trước máy quét tại cổng vào hoặc cho nhân viên quầy lễ tân.\n2. Mã có hiệu lực trong 60 giây và tự động làm mới để đảm bảo tính bảo mật.\n3. Sau khi quét thành công, hệ thống sẽ tự động ghi nhận lượt tập của bạn.'
-            );
-          }}
-          hitSlop={12}
-          style={styles.headerIconBtn}
-        >
-          <Ionicons name="bulb-outline" size={20} color="#fff" />
-        </Pressable>
+          {/* Nút Hướng dẫn: Bo tròn dễ bấm, hitSlop 12 */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Hướng dẫn check-in"
+            onPress={() => {
+              Alert.alert(
+                'Hướng dẫn Điểm danh Check-in',
+                '1. Đưa mã QR này trước máy quét tại cổng vào hoặc cho nhân viên quầy lễ tân.\n2. Mã có hiệu lực trong 60 giây và tự động làm mới để đảm bảo tính bảo mật.\n3. Sau khi quét thành công, hệ thống sẽ tự động ghi nhận lượt tập của bạn.'
+              );
+            }}
+            hitSlop={12}
+            style={styles.headerIconBtn}
+          >
+            <Ionicons name="bulb-outline" size={20} color={aura.darkCoffee} />
+          </Pressable>
+        </View>
       </View>
 
       {/* 2. Thanh chuyển đổi phân đoạn [Lịch tập | Check in | PT] */}
@@ -255,7 +264,7 @@ export default function MemberQr() {
 
 const styles = StyleSheet.create({
   headerTitle: {
-    color: '#fff',
+    color: aura.darkCoffee,
     fontSize: 17,
     fontWeight: '900',
     letterSpacing: 0.5,
@@ -264,11 +273,11 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    backgroundColor: '#F3ECE5',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.22)',
+    borderColor: '#E8D5C4',
   },
   segmentedContainer: {
     flexDirection: 'row',
