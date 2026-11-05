@@ -7,6 +7,7 @@ import { CoachPtAssessments } from './CoachPtAssessments';
 import { CoachSharedExerciseAnalyses } from './CoachSharedExerciseAnalyses';
 import type { PtTrainingAssessment } from '../../services/api/workoutLog.api';
 import { CoachAvailabilityGrid } from './CoachAvailabilityGrid';
+import { CoachChatPage } from './CoachChatPage';
 import { StaffPage } from '@/components/staff/StaffKit';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,7 +36,7 @@ interface CoachDashboardProps {
   onTabChange: (tab: string) => void;
 }
 
-export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => {
+export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTabChange }) => {
   const currentUser = api.auth.getCurrentUser();
   const [profile, setProfile] = useState<CoachProfile | null>(null);
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
@@ -59,13 +60,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
   const [bodyFat, setBodyFat] = useState('');
   const [muscleMass, setMuscleMass] = useState('');
   const [qr, setQr] = useState<{ booking: ApiBooking; image: string } | null>(null);
-  const [chatBooking, setChatBooking] = useState<ApiBooking | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [canSend, setCanSend] = useState(false);
-  const [draft, setDraft] = useState('');
-  const [chatLoading, setChatLoading] = useState(false);
-  const [chatError, setChatError] = useState('');
-  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [activeChatMemberId, setActiveChatMemberId] = useState<number | null>(null);
   const [finishBooking, setFinishBooking] = useState<ApiBooking | null>(null);
   const [sessionNotes, setSessionNotes] = useState('');
   const [exerciseName, setExerciseName] = useState('');
@@ -137,11 +132,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
     void api.workouts.getMemberProgress(selectedMemberId)
       .then(setProgress).catch(error => setNotice(errorText(error)));
   }, [selectedMemberId]);
-  useEffect(() => {
-    if (chatBooking && !chatLoading) {
-      chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight });
-    }
-  }, [chatBooking?.id, chatLoading, messages.length]);
+
 
   const run = async (action: () => Promise<unknown>, success: string, refresh = true) => {
     setBusy(true);
@@ -173,40 +164,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
     }
   };
 
-  const openChat = async (booking: ApiBooking) => {
-    setChatBooking(booking);
-    setMessages([]);
-    setDraft('');
-    setCanSend(false);
-    setChatError('');
-    setChatLoading(true);
-    try {
-      const result = await api.pt.getBookingMessages(booking.id);
-      setMessages(result.data);
-      setCanSend(result.canSend);
-    } catch (error) {
-      setChatError(errorText(error));
-    } finally {
-      setChatLoading(false);
-    }
-  };
 
-  const sendMessage = async () => {
-    if (!chatBooking || !canSend || busy || !draft.trim()) return;
-    setBusy(true);
-    setChatError('');
-    try {
-      await api.pt.sendBookingMessage(chatBooking.id, draft.trim());
-      setDraft('');
-      const result = await api.pt.getBookingMessages(chatBooking.id);
-      setMessages(result.data);
-      setCanSend(result.canSend);
-    } catch (error) {
-      setChatError(errorText(error));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const saveSession = async () => {
     if (!finishBooking) return;
@@ -342,7 +300,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
                   <div className="flex flex-wrap items-start justify-between gap-2"><div><strong>{booking.member?.fullName || `Hội viên #${booking.memberId}`}</strong><p className="text-sm text-muted-foreground">{gymTime(booking.startTime)}–{gymTime(booking.endTime)} · {booking.ptCreditAllocation?.batch?.level ? `PT ${booking.ptCreditAllocation.batch.level}` : booking.membership?.package?.name || 'PT lịch sử'}</p></div><Badge variant="outline">{statusText[booking.status] || booking.status}</Badge></div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {booking.status === 'CONFIRMED' && <Button size="sm" disabled={!canQr || busy} onClick={() => void run(async () => { const result = await api.pt.generateSessionQr(booking.id); setQr({ booking, image: result.data.qrCodeImage }); }, 'Đã tạo mã QR. Hội viên dùng ứng dụng để quét.', false)}><QrCode className="size-4" /> Tạo QR</Button>}
-                    {['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && Date.now() < new Date(booking.endTime).getTime() && <Button size="sm" variant="outline" onClick={() => void openChat(booking)}><MessageSquare className="size-4" /> Nhắn tin</Button>}
+                    {['CONFIRMED', 'IN_PROGRESS'].includes(booking.status) && Date.now() < new Date(booking.endTime).getTime() && <Button size="sm" variant="outline" onClick={() => { setActiveChatMemberId(booking.memberId); onTabChange('messages'); }}><MessageSquare className="size-4" /> Nhắn tin</Button>}
                     {canAbsence && <Button size="sm" variant="outline" onClick={() => { setAbsenceReason(''); setAbsenceBooking(booking); }}>Báo vắng</Button>}
                     {booking.status === 'IN_PROGRESS' && <Button size="sm" onClick={() => { setFinishBooking(booking); setSessionNotes(''); }}>Kết thúc buổi</Button>}
                     {booking.status === 'COMPLETED' && !booking.sessionResult && <Button size="sm" variant="outline" onClick={() => { setFinishBooking(booking); setSessionNotes(''); }}>Ghi nhật ký</Button>}
@@ -383,6 +341,16 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
           </CardContent>
         </Card>}
 
+        {activeTab === 'messages' && (
+          <CoachChatPage
+            initialMemberId={activeChatMemberId}
+            onViewTraineeProfile={(memberId) => {
+              setSelectedMemberId(memberId);
+              onTabChange('trainees');
+            }}
+          />
+        )}
+
         {activeTab === 'trainees' && <div className="space-y-5"><CoachSharedExerciseAnalyses /><div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
           <Card><CardHeader><CardTitle className="flex items-center gap-2"><UserRound className="size-5" /> Học viên PT phụ trách</CardTitle></CardHeader><CardContent className="space-y-2">
             {trainees.length === 0 && <p className="text-sm text-muted-foreground">Chưa có học viên nào được phân gói PT.</p>}
@@ -392,7 +360,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
             </button>)}
           </CardContent></Card>
           <Card><CardHeader><CardTitle>{selectedTrainee ? `Tiến độ: ${selectedTrainee.user.fullName}` : 'Chọn học viên để xem tiến độ'}</CardTitle></CardHeader><CardContent className="space-y-4">
-            {selectedTrainee && <>{bookings.find(booking => booking.memberId === selectedTrainee.userId && ['PACKAGE_PURCHASE', 'SINGLE_PURCHASE'].includes(booking.ptCreditAllocation?.batch.source ?? '')) && <Button variant="outline" onClick={() => { const booking = bookings.find(item => item.memberId === selectedTrainee.userId && ['PACKAGE_PURCHASE', 'SINGLE_PURCHASE'].includes(item.ptCreditAllocation?.batch.source ?? '')); if (booking) void openChat(booking); }}><MessageSquare className="size-4" /> Chat hỗ trợ học viên Paid</Button>}<CoachPtAssessments trainee={selectedTrainee} assessments={progress?.assessments ?? []} workoutLogs={progress?.workoutLogs ?? []} reviewEverySessions={selectedTrainee.level === 'BEGINNER' || selectedTrainee.level === 'INTERMEDIATE' || selectedTrainee.level === 'ADVANCED' ? progress?.trainingPolicy?.[selectedTrainee.level]?.reviewEverySessions : undefined} busy={busy || !progress} onSave={saveAssessment} /><div className="space-y-2"><h3 className="text-sm font-semibold">Chỉ số InBody gần đây</h3>
+            {selectedTrainee && <>{bookings.find(booking => booking.memberId === selectedTrainee.userId && ['PACKAGE_PURCHASE', 'SINGLE_PURCHASE'].includes(booking.ptCreditAllocation?.batch.source ?? '')) && <Button variant="outline" onClick={() => { setActiveChatMemberId(selectedTrainee.userId); onTabChange('messages'); }}><MessageSquare className="size-4" /> Chat hỗ trợ học viên Paid</Button>}<CoachPtAssessments trainee={selectedTrainee} assessments={progress?.assessments ?? []} workoutLogs={progress?.workoutLogs ?? []} reviewEverySessions={selectedTrainee.level === 'BEGINNER' || selectedTrainee.level === 'INTERMEDIATE' || selectedTrainee.level === 'ADVANCED' ? progress?.trainingPolicy?.[selectedTrainee.level]?.reviewEverySessions : undefined} busy={busy || !progress} onSave={saveAssessment} /><div className="space-y-2"><h3 className="text-sm font-semibold">Chỉ số InBody gần đây</h3>
               {!progress && <p className="text-sm text-muted-foreground">Đang tải tiến độ...</p>}
               {progress?.inbodyLogs.length === 0 && <p className="text-sm text-muted-foreground">Chưa có chỉ số InBody.</p>}
               {progress?.inbodyLogs.map(log => <div key={log.id} className="rounded-lg border p-2 text-sm">{gymDay(log.loggedAt)} · {log.weight} kg · Mỡ {log.bodyFat ?? '—'}% · Cơ {log.muscleMass ?? '—'} kg</div>)}
@@ -452,58 +420,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab }) => 
         </DialogContent>
       </Dialog>
       <Dialog open={!!qr} onOpenChange={open => { if (!open) setQr(null); }}><DialogContent><DialogHeader><DialogTitle>Mã QR buổi PT</DialogTitle></DialogHeader><div className="grid justify-items-center gap-3 py-4">{qr && <><p className="text-sm">{qr.booking.member?.fullName} · {gymTime(qr.booking.startTime)}</p><img src={qr.image} alt="Mã QR điểm danh PT" className="size-56" /><p className="text-xs text-muted-foreground">Mã có hiệu lực 90 giây. Hội viên quét bằng ứng dụng mobile.</p></>}</div></DialogContent></Dialog>
-      <Dialog open={!!chatBooking} onOpenChange={open => { if (!open) setChatBooking(null); }}>
-        <DialogContent className="grid h-[min(680px,calc(100dvh-2rem))] w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-2xl border-border/70 bg-card p-0 shadow-2xl sm:max-w-xl">
-          <DialogHeader className="border-b border-border/70 px-5 py-5 pr-12 text-left sm:px-6 sm:pr-12">
-            <div className="flex items-center gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary" aria-hidden="true">
-                {chatBooking?.member?.fullName?.trim().charAt(0).toUpperCase() || 'H'}
-              </div>
-              <div className="min-w-0">
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Hội thoại PT</p>
-                <DialogTitle className="truncate text-lg leading-tight">{chatBooking?.member?.fullName || 'Hội viên'}</DialogTitle>
-                {chatBooking && <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarDays className="size-3.5" aria-hidden="true" /> Buổi tập {new Date(chatBooking.startTime).toLocaleDateString('vi-VN', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric' })} · {gymTime(chatBooking.startTime)}–{gymTime(chatBooking.endTime)}</p>}
-              </div>
-            </div>
-          </DialogHeader>
-
-          <div ref={chatScrollRef} role="log" aria-label="Lịch sử tin nhắn PT" className="min-h-0 space-y-4 overflow-y-auto overscroll-contain bg-muted/40 px-4 py-5 sm:px-6">
-            {chatLoading ? (
-              <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground"><LoaderCircle className="size-6 animate-spin text-primary" aria-hidden="true" />Đang tải tin nhắn...</div>
-            ) : messages.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-                <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><MessageSquare className="size-7" aria-hidden="true" /></div>
-                <div><p className="font-semibold">Chưa có tin nhắn</p><p className="mt-1 text-sm text-muted-foreground">Bắt đầu cuộc trò chuyện với hội viên tại đây.</p></div>
-              </div>
-            ) : messages.map((message, index) => {
-              const isMine = Number(message.senderId) === Number(currentUser?.id);
-              const showDay = index === 0 || gymDay(message.createdAt) !== gymDay(messages[index - 1].createdAt);
-              return <React.Fragment key={message.id}>
-                {showDay && <div className="flex items-center gap-3 py-1"><span className="h-px flex-1 bg-border/70" /><span className="text-[11px] font-medium text-muted-foreground">{new Date(message.createdAt).toLocaleDateString('vi-VN', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric' })}</span><span className="h-px flex-1 bg-border/70" /></div>}
-                <div className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] space-y-1 sm:max-w-[75%] ${isMine ? 'text-right' : 'text-left'}`}>
-                    {!isMine && <p className="px-1 text-xs font-medium text-muted-foreground">{message.sender.fullName}</p>}
-                    <div className={`inline-block max-w-full whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-left text-sm leading-relaxed shadow-sm ${isMine ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md border border-border/70 bg-card text-foreground'}`}>{message.content}</div>
-                    <p className="px-1 text-[11px] text-muted-foreground">{gymTime(message.createdAt)}</p>
-                  </div>
-                </div>
-              </React.Fragment>;
-            })}
-          </div>
-
-          <div className="border-t border-border/70 bg-card px-4 py-4 sm:px-6">
-            {chatError && <p role="alert" className="mb-3 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{chatError}</p>}
-            {canSend ? (
-              <form className="flex items-center gap-2" onSubmit={event => { event.preventDefault(); void sendMessage(); }}>
-                <Input aria-label="Nhập tin nhắn" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Viết tin nhắn cho hội viên..." maxLength={1000} className="h-11 rounded-xl bg-background px-4" />
-                <Button type="submit" disabled={busy || !draft.trim()} className="h-11 shrink-0 rounded-xl px-4"><SendHorizontal className="size-4" aria-hidden="true" /><span className="hidden sm:inline">Gửi</span><span className="sr-only sm:hidden">Gửi tin nhắn</span></Button>
-              </form>
-            ) : !chatLoading && (chatError ? (
-              <Button variant="outline" className="w-full" onClick={() => { if (chatBooking) void openChat(chatBooking); }}>Thử tải lại tin nhắn</Button>
-            ) : <p className="text-center text-sm text-muted-foreground">Đã hết thời gian nhắn tin của buổi PT.</p>)}
-          </div>
-        </DialogContent>
-      </Dialog>
+      
       <Dialog open={!!finishBooking} onOpenChange={open => { if (!open) setFinishBooking(null); }}><DialogContent><DialogHeader><DialogTitle>{finishBooking?.status === 'COMPLETED' ? 'Ghi nhật ký buổi PT' : 'Kết thúc buổi PT'}</DialogTitle></DialogHeader><div className="space-y-3"><Textarea rows={4} placeholder="Nhận xét buổi tập" value={sessionNotes} onChange={e => setSessionNotes(e.target.value)} /><div className="grid grid-cols-3 gap-2"><Input placeholder="Bài tập" value={exerciseName} onChange={e => setExerciseName(e.target.value)} /><Input type="number" placeholder="Số hiệp" value={sets} onChange={e => setSets(e.target.value)} /><Input type="number" placeholder="Số lần" value={reps} onChange={e => setReps(e.target.value)} /></div><p className="text-xs text-muted-foreground">Kết thúc buổi sẽ trừ 1 lượt PT. Nhật ký có thể ghi sau nếu chưa có nội dung.</p></div><DialogFooter><Button disabled={busy} onClick={() => void saveSession()}>{finishBooking?.status === 'COMPLETED' ? 'Lưu nhật ký' : 'Kết thúc và lưu'}</Button></DialogFooter></DialogContent></Dialog>
       <Dialog open={!!absenceBooking} onOpenChange={open => { if (!open) setAbsenceBooking(null); }}><DialogContent><DialogHeader><DialogTitle>Coach báo vắng buổi PT</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">Hội viên được đặt học bù trong 7 ngày và không bị trừ buổi.</p><Textarea rows={3} placeholder="Lý do báo vắng" value={absenceReason} onChange={e => setAbsenceReason(e.target.value)} /><DialogFooter><Button disabled={busy} onClick={() => { if (!absenceBooking) return; void run(() => api.pt.markAbsent(absenceBooking.id, absenceReason), 'Đã báo vắng và cấp quyền học bù.').then(saved => { if (saved) setAbsenceBooking(null); }); }}>Xác nhận báo vắng</Button></DialogFooter></DialogContent></Dialog>
     </StaffPage>

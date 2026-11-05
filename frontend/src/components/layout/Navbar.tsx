@@ -25,7 +25,8 @@ import {
   GripVertical,
   Wrench,
   Layers,
-  Bell
+  Bell,
+  MessageSquare
 } from 'lucide-react';
 import { AuraLogo } from '../common/AuraLogo';
 import { api, ApiNotification } from '../../services/api';
@@ -79,6 +80,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<ApiNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -110,11 +112,31 @@ export const Navbar: React.FC<NavbarProps> = ({
   const loadNotifications = async () => {
     if (!currentUser || !api.auth.getToken()) return;
     try {
-      const res = await api.notifications.getMyNotifications({ limit: 8 });
-      setNotifications(res.data || []);
-      setUnreadCount(res.unreadCount || 0);
+      const res = await api.notifications.getMyNotifications({ limit: 12 });
+      let list = res.data || [];
+      // Đối với role coach, các thông báo về tin nhắn được hiển thị riêng biệt ở nút "Tin nhắn"
+      if (currentRole === 'coach') {
+        list = list.filter(item => !item.title.toLowerCase().includes('tin nhắn'));
+        const unread = list.filter(item => !item.isRead).length;
+        setNotifications(list);
+        setUnreadCount(unread);
+      } else {
+        setNotifications(list);
+        setUnreadCount(res.unreadCount || 0);
+      }
     } catch {
       // A notification failure must not interrupt normal navigation.
+    }
+  };
+
+  const loadUnreadMessages = async () => {
+    if (currentRole !== 'coach' || !currentUser || !api.auth.getToken()) return;
+    try {
+      const res = await api.pt.getPtConversations();
+      const total = (res.data || []).reduce((acc: number, c: any) => acc + (c.unreadCount || 0), 0);
+      setUnreadMessageCount(total);
+    } catch {
+      // Silently fail
     }
   };
 
@@ -123,7 +145,27 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (!currentUser || !api.auth.getToken()) return;
     const timer = window.setInterval(loadNotifications, 60000);
     return () => window.clearInterval(timer);
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentRole]);
+
+  useEffect(() => {
+    if (currentRole !== 'coach' || !currentUser || !api.auth.getToken()) return;
+    loadUnreadMessages();
+    const timer = window.setInterval(loadUnreadMessages, 15000);
+
+    const handleChatUpdated = (e: any) => {
+      if (e.detail?.unreadCount !== undefined) {
+        setUnreadMessageCount(e.detail.unreadCount);
+      } else {
+        loadUnreadMessages();
+      }
+    };
+    window.addEventListener('aura:chat-updated', handleChatUpdated);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('aura:chat-updated', handleChatUpdated);
+    };
+  }, [currentRole, currentUser?.id, activeTab]);
 
   const handleNotificationClick = async (notification: ApiNotification) => {
     if (!notification.isRead) {
@@ -369,16 +411,102 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {currentUser && (
-        <div style={{ padding: isCollapsed ? '8px 10px 2px' : '10px 14px 2px', position: 'relative' }}>
+        <div style={{ padding: isCollapsed ? '8px 10px 2px' : '10px 14px 2px', position: 'relative', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <button
             type="button"
             onClick={() => { setShowNotifications(open => !open); loadNotifications(); }}
             title="Thông báo"
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'space-between', gap: 8, padding: '9px 10px', border: '1px solid var(--aura-border)', borderRadius: 'var(--radius-sm)', background: showNotifications ? 'var(--color-primary-light)' : 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isCollapsed ? 'center' : 'space-between',
+              gap: 8,
+              padding: '9px 10px',
+              border: showNotifications ? '1px solid var(--color-primary)' : '1px solid var(--aura-border)',
+              borderRadius: 'var(--radius-sm)',
+              background: showNotifications ? 'var(--color-primary-light)' : 'var(--bg-card)',
+              color: showNotifications ? 'var(--color-primary)' : 'var(--text-primary)',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 700,
+              position: 'relative',
+              transition: 'all 0.15s ease'
+            }}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Bell size={16} /><span style={{ display: isCollapsed ? 'none' : 'inline' }}>Thông báo</span></span>
-            {unreadCount > 0 && <span style={{ minWidth: 18, height: 18, padding: '0 5px', display: 'grid', placeItems: 'center', borderRadius: 9, background: 'var(--color-danger)', color: '#fff', fontSize: 10 }}>{unreadCount > 99 ? '99+' : unreadCount}</span>}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Bell size={16} />
+              <span style={{ display: isCollapsed ? 'none' : 'inline' }}>Thông báo</span>
+            </span>
+            {unreadCount > 0 && (
+              <span style={{
+                minWidth: 18,
+                height: 18,
+                padding: '0 5px',
+                display: 'grid',
+                placeItems: 'center',
+                borderRadius: 9,
+                background: 'var(--color-danger)',
+                color: '#fff',
+                fontSize: 10,
+                fontWeight: 700,
+                ...(isCollapsed ? { position: 'absolute', top: 2, right: 4 } : {})
+              }}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </button>
+
+          {currentRole === 'coach' && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowNotifications(false);
+                handleTabClick('messages');
+              }}
+              title="Tin nhắn"
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: isCollapsed ? 'center' : 'space-between',
+                gap: 8,
+                padding: '9px 10px',
+                border: activeTab === 'messages' ? '1px solid var(--color-primary)' : '1px solid var(--aura-border)',
+                borderRadius: 'var(--radius-sm)',
+                background: activeTab === 'messages' ? 'var(--color-primary-light)' : 'var(--bg-card)',
+                color: activeTab === 'messages' ? 'var(--color-primary)' : 'var(--text-primary)',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 700,
+                position: 'relative',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <MessageSquare size={16} />
+                <span style={{ display: isCollapsed ? 'none' : 'inline' }}>Tin nhắn</span>
+              </span>
+              {unreadMessageCount > 0 && (
+                <span style={{
+                  minWidth: 18,
+                  height: 18,
+                  padding: '0 5px',
+                  display: 'grid',
+                  placeItems: 'center',
+                  borderRadius: 9,
+                  background: 'var(--color-danger)',
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  ...(isCollapsed ? { position: 'absolute', top: 2, right: 4 } : {})
+                }}>
+                  {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                </span>
+              )}
+            </button>
+          )}
+
           {showNotifications && (
             <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: isCollapsed ? 'calc(100% + 8px)' : 14, width: 320, maxWidth: 'calc(100vw - 100px)', zIndex: 500, padding: 10, background: 'var(--bg-panel)', border: '1px solid var(--aura-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px 10px' }}><strong style={{ fontSize: 13 }}>Thông báo</strong><button type="button" onClick={markAllNotificationsRead} disabled={!unreadCount} style={{ border: 0, background: 'transparent', color: 'var(--color-primary)', cursor: unreadCount ? 'pointer' : 'default', fontSize: 11, fontWeight: 700 }}>Đọc tất cả</button></div>

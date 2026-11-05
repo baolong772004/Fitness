@@ -106,12 +106,6 @@ export async function sendPairChatMessage(req: AuthRequest, res: Response) {
     const message = await createPtPairChatMessage(memberId, coachId, userId, content, explicitBookingId);
     emitPtChatMessage(memberId, coachId, message);
 
-    await createUserNotification({
-      userId: partnerId,
-      title: `Tin nhắn mới từ ${message.sender.fullName}`,
-      message: content.length > 100 ? `${content.slice(0, 100)}…` : content,
-    });
-
     return res.status(201).json({ success: true, data: message });
   } catch (error) {
     return handleError(res, error);
@@ -173,16 +167,6 @@ export async function sendPtChatMessage(req: AuthRequest, res: Response) {
 
     const message = await createPtChatMessage(bookingId, userId, content);
     emitPtChatMessage(access.pair.memberId, access.pair.coachId, message);
-    const recipientId = userId === access.booking.memberId
-      ? access.booking.coachId
-      : access.booking.memberId;
-    if (recipientId) {
-      await createUserNotification({
-        userId: recipientId,
-        title: `Tin nhắn mới từ ${message.sender.fullName}`,
-        message: content.length > 100 ? `${content.slice(0, 100)}…` : content,
-      });
-    }
     return res.status(201).json({ success: true, data: message });
   } catch (error) {
     return handleError(res, error);

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { aura, dateLabel, timeLabel } from '../../lib/theme';
@@ -18,6 +19,7 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 }
 
 export default function BookingHub() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const coach = ['COACH', 'TRAINER'].includes(user?.role || '');
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
@@ -75,7 +77,36 @@ export default function BookingHub() {
   };
 
   return (
-    <Page loading={loading} refresh={user ? () => void load() : undefined}>
+    <View style={{ flex: 1, backgroundColor: aura.cream }}>
+      {/* Header an toàn tuyệt đối khỏi tai thỏ / status bar, bo cong đáy giống HomeHeader */}
+      <View style={{ backgroundColor: aura.cream }}>
+        <View
+          style={{
+            paddingTop: insets.top + 8,
+            paddingBottom: 11,
+            paddingHorizontal: 16,
+            backgroundColor: aura.espresso,
+            borderBottomLeftRadius: 22,
+            borderBottomRightRadius: 22,
+            borderBottomWidth: 1,
+            borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.15,
+            shadowRadius: 6,
+            elevation: 4,
+            zIndex: 99,
+          }}
+        >
+          <Text style={{ fontSize: 18, fontWeight: '900', color: '#fff', letterSpacing: 0.4 }}>
+            {coach ? 'Lịch dạy của Coach' : 'Đặt lịch & Lớp học'}
+          </Text>
+        </View>
+      </View>
+
+      <Page loading={loading} refresh={user ? () => void load() : undefined}>
       {/* 1. Header Hero Banner */}
       <LinearGradient
         colors={[aura.espresso, aura.darkCoffee, aura.caramel]}
@@ -335,6 +366,7 @@ export default function BookingHub() {
       {/* Khoảng đệm dưới cùng */}
       <View style={{ height: 24 }} />
     </Page>
+    </View>
   );
 }
 

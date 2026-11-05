@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,7 +7,15 @@ import { api } from '../lib/api';
 import { aura, dateLabel, money } from '../lib/theme';
 import { Button, Card, Empty, Page, Pill, Section, showError } from '../components/ui';
 
-const statusNames: Record<string, string> = { ACTIVE: 'Đang hoạt động', PENDING: 'Chờ thanh toán', PENDING_ACTIVATION: 'Chờ kích hoạt', EXPIRED: 'Đã hết hạn', CANCELLED: 'Đã hủy', COMPLETED: 'Đã hoàn thành' };
+const statusNames: Record<string, string> = {
+  ACTIVE: 'Đang hoạt động',
+  FROZEN: 'Đang bảo lưu',
+  PENDING: 'Chờ thanh toán',
+  PENDING_ACTIVATION: 'Chờ kích hoạt',
+  EXPIRED: 'Đã hết hạn',
+  CANCELLED: 'Đã hủy',
+  COMPLETED: 'Đã hoàn thành',
+};
 
 export default function Subscriptions() {
   const [rows, setRows] = useState<any[]>([]); const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null); const [renewingId, setRenewingId] = useState<number | null>(null);
@@ -33,15 +41,99 @@ export default function Subscriptions() {
     <Section title="Gói tập đang sở hữu" icon="card-outline" />
     {error && rows.length === 0 && <><Empty title="Chưa tải được danh sách gói" message={error} icon="wifi-outline" /><Button secondary title="Thử lại" onPress={() => void load()} /></>}
     {!error && rows.length === 0 && !loading && <Empty title="Bạn chưa có gói tập" message="Khám phá gói Aura phù hợp với mục tiêu của bạn." />}
-    {rows.map(sub => { const pkg = sub.package; const pt = pkg?.type === 'PT'; const status = String(sub.status || ''); const active = status === 'ACTIVE'; const statusColor = active ? aura.green : ['PENDING', 'PENDING_ACTIVATION'].includes(status) ? aura.caramel : '#B3261E'; return <Card key={String(sub.id)} style={{ padding: 16 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}><View style={{ width: 42, height: 42, backgroundColor: aura.latte, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }}><Ionicons name={pt ? 'fitness-outline' : 'ribbon-outline'} size={22} color={aura.caramel} /></View><View style={{ flex: 1 }}><Text numberOfLines={1} style={{ color: aura.ink, fontSize: 15, fontWeight: '900' }}>{pkg?.name || 'Gói tập Aura'}</Text><Text style={{ color: aura.muted, fontSize: 11 }}>{pt ? 'Huấn luyện cá nhân' : 'Hội viên'}</Text></View><Pill text={statusNames[status] || status} color={statusColor} /></View>
-      <View style={{ height: 1, backgroundColor: aura.border, marginVertical: 13 }} />
-      <View style={{ flexDirection: 'row' }}><View style={{ flex: 1 }}><Text style={{ color: aura.muted, fontSize: 10, fontWeight: '800' }}>BẮT ĐẦU</Text><Text style={{ color: aura.ink, fontWeight: '800', marginTop: 3 }}>{dateLabel(sub.startDate)}</Text></View><View style={{ flex: 1 }}><Text style={{ color: aura.muted, fontSize: 10, fontWeight: '800' }}>KẾT THÚC</Text><Text style={{ color: aura.ink, fontWeight: '800', marginTop: 3 }}>{dateLabel(sub.endDate)}</Text></View></View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 13 }}><Ionicons name={pt ? 'barbell-outline' : 'time-outline'} size={17} color={aura.caramel} /><Text style={{ color: aura.darkCoffee, fontSize: 12, fontWeight: '700', marginLeft: 7, flex: 1 }}>{pt ? `Còn ${sub.remainingSessions ?? 0} buổi PT` : Number(sub.remainingSessions) > 0 ? `Buổi PT tặng kèm: ${sub.remainingSessions}` : 'Ra vào phòng tập theo thời hạn gói'}</Text>{pkg?.price != null && <Text style={{ color: aura.darkCoffee, fontSize: 12, fontWeight: '900' }}>{money(pkg.price)}</Text>}</View>
-      {pt && sub.coach?.fullName && <Text style={{ color: aura.muted, fontSize: 11, marginTop: 5 }}>Coach {sub.coach.fullName}</Text>}
-      {pt && active && sub.coachId && <View style={{ marginTop: 14 }}><Button icon="calendar-outline" disabled={Number(sub.availableSessions ?? sub.remainingSessions ?? 0) <= 0} title={Number(sub.availableSessions ?? sub.remainingSessions ?? 0) <= 0 ? 'Gói PT chưa có buổi khả dụng' : `Đặt lịch với ${sub.coach?.fullName || 'Coach'}`} onPress={() => router.push({ pathname: '/pt-book', params: { subscription: JSON.stringify(sub) } })} /></View>}
-      {!pt && ['ACTIVE', 'EXPIRED'].includes(status) && <View style={{ marginTop: 14 }}><Button icon="refresh-outline" loading={renewingId === Number(sub.id)} disabled={renewingId != null} title={renewingId === Number(sub.id) ? 'Đang tạo đơn...' : 'Gia hạn gói tập'} onPress={() => renew(sub)} /></View>}
-    </Card>; })}
+    {rows.map(sub => {
+      const pkg = sub.package;
+      const pt = pkg?.type === 'PT';
+      const status = String(sub.status || '');
+      const active = status === 'ACTIVE';
+      const isFrozen = status === 'FROZEN';
+      const statusColor = active
+        ? aura.green
+        : isFrozen
+        ? '#0288D1'
+        : ['PENDING', 'PENDING_ACTIVATION'].includes(status)
+        ? aura.caramel
+        : '#B3261E';
+
+      return (
+        <Card key={String(sub.id)} style={{ padding: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
+            <View style={{ width: 42, height: 42, backgroundColor: isFrozen ? '#E1F5FE' : aura.latte, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name={isFrozen ? 'pause-circle' : pt ? 'fitness-outline' : 'ribbon-outline'} size={22} color={isFrozen ? '#0288D1' : aura.caramel} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text numberOfLines={1} style={{ color: aura.ink, fontSize: 15, fontWeight: '900' }}>
+                {pkg?.name || 'Gói tập Aura'}
+              </Text>
+              <Text style={{ color: aura.muted, fontSize: 11 }}>
+                {pt ? 'Huấn luyện cá nhân' : 'Hội viên'}
+              </Text>
+            </View>
+            <Pill text={statusNames[status] || status} color={statusColor} />
+          </View>
+
+          <View style={{ height: 1, backgroundColor: aura.border, marginVertical: 13 }} />
+
+          <View style={{ flexDirection: 'row' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: aura.muted, fontSize: 10, fontWeight: '800' }}>BẮT ĐẦU</Text>
+              <Text style={{ color: aura.ink, fontWeight: '800', marginTop: 3 }}>{dateLabel(sub.startDate)}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: aura.muted, fontSize: 10, fontWeight: '800' }}>
+                {isFrozen ? 'HẠN DỰ KIẾN (SAU BẢO LƯU)' : 'KẾT THÚC'}
+              </Text>
+              <Text style={{ color: isFrozen ? '#0288D1' : aura.ink, fontWeight: '800', marginTop: 3 }}>
+                {dateLabel(sub.endDate)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 13 }}>
+            <Ionicons name={pt ? 'barbell-outline' : 'time-outline'} size={17} color={aura.caramel} />
+            <Text style={{ color: aura.darkCoffee, fontSize: 12, fontWeight: '700', marginLeft: 7, flex: 1 }}>
+              {isFrozen
+                ? 'Gói đang tạm dừng bảo lưu thời gian sử dụng'
+                : pt
+                ? `Còn ${sub.remainingSessions ?? 0} buổi PT`
+                : Number(sub.remainingSessions) > 0
+                ? `Buổi PT tặng kèm: ${sub.remainingSessions}`
+                : 'Ra vào phòng tập theo thời hạn gói'}
+            </Text>
+            {pkg?.price != null && <Text style={{ color: aura.darkCoffee, fontSize: 12, fontWeight: '900' }}>{money(pkg.price)}</Text>}
+          </View>
+
+          {isFrozen && (
+            <View style={{ marginTop: 12, backgroundColor: '#E1F5FE', borderWidth: 1, borderColor: '#B3E5FC', borderRadius: 12, padding: 11, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+              <Ionicons name="information-circle-outline" size={20} color="#0288D1" />
+              <Text style={{ color: '#01579B', fontSize: 11.5, flex: 1, lineHeight: 17, fontWeight: '600' }}>
+                Gói tập của bạn đang được bảo lưu. Khi sẵn sàng đi tập trở lại, bạn chỉ cần liên hệ quầy lễ tân để kích hoạt mở lại gói ngay nhé!
+              </Text>
+            </View>
+          )}
+
+          {!isFrozen && !pt && active && (
+            <Pressable
+              onPress={() =>
+                Alert.alert(
+                  'Chính sách Bảo lưu gói tập',
+                  'Để bảo lưu gói tập, hội viên vui lòng liên hệ trực tiếp tại quầy lễ tân phòng tập hoặc gửi yêu cầu hỗ trợ qua ứng dụng để được hỗ trợ gia hạn thời gian bảo lưu phù hợp.'
+                )
+              }
+              style={{ marginTop: 10, alignSelf: 'flex-start' }}
+            >
+              <Text style={{ color: aura.caramel, fontSize: 11.5, fontWeight: '700' }}>
+                ❄️ Chính sách bảo lưu gói tập ›
+              </Text>
+            </Pressable>
+          )}
+
+          {pt && sub.coach?.fullName && <Text style={{ color: aura.muted, fontSize: 11, marginTop: 5 }}>Coach {sub.coach.fullName}</Text>}
+          {pt && active && sub.coachId && <View style={{ marginTop: 14 }}><Button icon="calendar-outline" disabled={Number(sub.availableSessions ?? sub.remainingSessions ?? 0) <= 0} title={Number(sub.availableSessions ?? sub.remainingSessions ?? 0) <= 0 ? 'Gói PT chưa có buổi khả dụng' : `Đặt lịch với ${sub.coach?.fullName || 'Coach'}`} onPress={() => router.push({ pathname: '/pt-book', params: { subscription: JSON.stringify(sub) } })} /></View>}
+          {!pt && ['ACTIVE', 'EXPIRED'].includes(status) && <View style={{ marginTop: 14 }}><Button icon="refresh-outline" loading={renewingId === Number(sub.id)} disabled={renewingId != null} title={renewingId === Number(sub.id) ? 'Đang tạo đơn...' : 'Gia hạn gói tập'} onPress={() => renew(sub)} /></View>}
+        </Card>
+      );
+    })}
     <Button secondary title="Xem thêm gói tập" onPress={() => router.push('/packages')} />
   </Page>;
 }

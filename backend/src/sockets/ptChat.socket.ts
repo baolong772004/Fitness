@@ -92,6 +92,8 @@ export function configurePtChatSocket(httpServer: HttpServer) {
 
 export function emitPtChatMessage(memberId: number, coachId: number, message: unknown) {
   chatIo?.to(ptChatPairRoom(memberId, coachId)).emit('message:new', message);
+  chatIo?.to(`user:${memberId}`).emit('chat:message', message);
+  chatIo?.to(`user:${coachId}`).emit('chat:message', message);
 }
 
 export function emitPtChatRead(memberId: number, coachId: number, ids: number[], readAt: Date) {

@@ -242,6 +242,6 @@ export function startPtNoShowWorker() {
 
   void scan();
   const timer = setInterval(() => void scan(), SCAN_INTERVAL_MS);
-  timer.unref();
+  (timer as any).unref?.();
   return () => clearInterval(timer);
 }

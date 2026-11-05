@@ -8,7 +8,7 @@ export const SOCKET_URL = API_URL.replace(/\/api$/, '');
 const TOKEN_KEY = 'aura_access_token';
 const USER_KEY = 'aura_user';
 
-export type User = { id: number; fullName: string; email: string; role: string; phone?: string | null; balance?: number; mustChangePassword?: boolean };
+export type User = { id: number; fullName: string; email: string; role: string; phone?: string | null; balance?: number; mustChangePassword?: boolean; avatar?: string | null; gender?: string | null; dateOfBirth?: string | null; height?: number | null; weight?: number | null; status?: string | null; };
 export type Session = { token: string; user: User };
 
 let accessToken: string | null = null;
@@ -140,27 +140,25 @@ export const api = {
   readAllNotifications: () => request('PATCH', '/notifications/read-all'),
   progress: (memberId: number) => get(`/workouts/progress/${memberId}`),
   workoutPlanRevisions: (planId: number) => get(`/workouts/student-plans/${planId}/revisions`),
-  // Payment history
   paymentHistory: (page = 1) => get(`/payments/history?page=${page}&limit=10`),
-  // Booking history (all types)
-  bookingHistory: (page = 1, type?: string) => get(`/member/my-schedule?page=${page}&limit=10${type ? `&type=${type}` : ''}&includeCompleted=true`),
-  // Workout sessions history
+  bookingHistory: (page = 1, type?: string) => get(`/member/my-schedule?page=${page}&limit=10${type ? `&type=${type}` : ''}`),
   workoutSessions: (page = 1) => get(`/workouts/sessions?page=${page}&limit=10`),
-  // Ratings
   submitRating: (bookingId: number, rating: number, comment: string, targetType: 'COACH' | 'CLASS') =>
     post('/ratings', { bookingId, rating, comment, targetType }),
   myRatings: () => get('/ratings/my-ratings'),
   coachRatings: (coachId: number) => get(`/ratings/coach/${coachId}`),
-  // Support
   supportTickets: () => get('/support/tickets'),
   createSupportTicket: (subject: string, message: string, category: string) =>
     post('/support/tickets', { subject, message, category }),
-  // Notification settings
   notificationSettings: () => get('/notifications/settings'),
   updateNotificationSettings: (settings: Record<string, boolean>) =>
     request('PATCH', '/notifications/settings', settings),
-  // Profile update
+  coachMe: () => get('/pt/coach/me'),
+  coachTrainees: () => get('/pt/coach/trainees'),
+  coachPlans: () => get('/pt/coach/plans'),
+  classCheckInQr: (scheduleId: number) => get(`/group-classes/schedules/${scheduleId}/check-in-qr`),
+  classAttendees: (scheduleId: number) => get(`/group-classes/schedules/${scheduleId}/attendees`),
+  myProfile: () => get('/users/me'),
   updateProfile: (data: { fullName?: string; phone?: string; dateOfBirth?: string; gender?: string; height?: number; weight?: number }) =>
-    request('PATCH', '/auth/profile', data),
-  myProfile: () => get('/auth/profile'),
+    request('PUT', '/users/me', data),
 };

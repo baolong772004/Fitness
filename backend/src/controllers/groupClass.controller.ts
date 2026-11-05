@@ -104,6 +104,22 @@ export const bookGroupClass = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Vui lòng cung cấp scheduleId' });
     }
 
+    // Kiểm tra xem hội viên có đang trong thời gian BẢO LƯU (FROZEN) không
+    const frozenMembership = await prisma.membership.findFirst({
+      where: {
+        userId,
+        status: 'FROZEN',
+        package: { type: 'MEMBERSHIP' }
+      },
+      include: { package: true }
+    });
+    if (frozenMembership) {
+      return res.status(400).json({
+        success: false,
+        message: `Gói tập [${frozenMembership.package.name}] của bạn hiện đang ở trạng thái BẢO LƯU. Vui lòng mở lại gói tập tại quầy trước khi đăng ký lớp học!`
+      });
+    }
+
     // 1. Kiểm tra lịch lớp học
     const schedule = await prisma.groupClassSchedule.findUnique({
       where: { id: Number(scheduleId) },
