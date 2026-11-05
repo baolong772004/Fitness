@@ -140,18 +140,25 @@ export const api = {
   readAllNotifications: () => request('PATCH', '/notifications/read-all'),
   progress: (memberId: number) => get(`/workouts/progress/${memberId}`),
   workoutPlanRevisions: (planId: number) => get(`/workouts/student-plans/${planId}/revisions`),
+  paymentHistory: (page = 1) => get(`/payments/history?page=${page}&limit=10`),
+  bookingHistory: (page = 1, type?: string) => get(`/member/my-schedule?page=${page}&limit=10${type ? `&type=${type}` : ''}`),
+  workoutSessions: (page = 1) => get(`/workouts/sessions?page=${page}&limit=10`),
+  submitRating: (bookingId: number, rating: number, comment: string, targetType: 'COACH' | 'CLASS') =>
+    post('/ratings', { bookingId, rating, comment, targetType }),
+  myRatings: () => get('/ratings/my-ratings'),
+  coachRatings: (coachId: number) => get(`/ratings/coach/${coachId}`),
+  supportTickets: () => get('/support/tickets'),
+  createSupportTicket: (subject: string, message: string, category: string) =>
+    post('/support/tickets', { subject, message, category }),
+  notificationSettings: () => get('/notifications/settings'),
+  updateNotificationSettings: (settings: Record<string, boolean>) =>
+    request('PATCH', '/notifications/settings', settings),
   coachMe: () => get('/pt/coach/me'),
   coachTrainees: () => get('/pt/coach/trainees'),
   coachPlans: () => get('/pt/coach/plans'),
   classCheckInQr: (scheduleId: number) => get(`/group-classes/schedules/${scheduleId}/check-in-qr`),
   classAttendees: (scheduleId: number) => get(`/group-classes/schedules/${scheduleId}/attendees`),
-  bookingHistory: (page = 1, type?: string) => get(`/member/my-schedule?page=${page}&limit=10${type ? `&type=${type}` : ''}`),
-  paymentHistory: (page = 1) => get(`/payments/history?page=${page}&limit=10`),
   myProfile: () => get('/users/me'),
-  updateProfile: (data: any) => request('PUT', '/users/me', data),
-  submitRating: (bookingId: number, rating: number, comment?: string, targetType?: string) => post(`/pt/booking/${bookingId}/rate`, { rating, comment, targetType }),
-  notificationSettings: () => get('/notifications/settings'),
-  updateNotificationSettings: (settings: any) => request('PUT', '/notifications/settings', settings),
-  supportTickets: () => get('/support/tickets'),
-  createSupportTicket: (subject: string, message: string, category?: string) => post('/support/tickets', { subject, message, category }),
+  updateProfile: (data: { fullName?: string; phone?: string; dateOfBirth?: string; gender?: string; height?: number; weight?: number }) =>
+    request('PUT', '/users/me', data),
 };

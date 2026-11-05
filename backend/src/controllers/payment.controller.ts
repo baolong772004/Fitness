@@ -80,7 +80,6 @@ export class PaymentController {
       return res.status(500).json({ success: false, message: 'Không thể tải lịch sử thanh toán' });
     }
   }
-
   static async createPtRenewalCheckout(req: AuthRequest, res: Response) {
     const userId = req.user?.userId;
     const batchId = Number(req.body?.batchId);
