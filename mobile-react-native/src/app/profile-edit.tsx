@@ -50,8 +50,8 @@ export default function ProfileEdit() {
       if (p.phone) setPhone(String(p.phone));
       if (p.dateOfBirth) setDateOfBirth(String(p.dateOfBirth).split('T')[0]);
       if (p.gender) setGender(String(p.gender) === 'MALE' ? 'Nam' : String(p.gender) === 'FEMALE' ? 'Nữ' : 'Khác');
-      if (p.height) setHeight(String(p.height));
-      if (p.weight) setWeight(String(p.weight));
+      if (p.height && Number(p.height) > 0) setHeight(String(p.height)); else setHeight('');
+      if (p.weight && Number(p.weight) > 0) setWeight(String(p.weight)); else setWeight('');
     } catch {
       // fall back to auth user data
     } finally {

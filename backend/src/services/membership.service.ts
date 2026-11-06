@@ -46,14 +46,53 @@ export async function reconcileGymMembershipStates(tx: Prisma.TransactionClient,
         package: { type: 'MEMBERSHIP' },
         endDate: { gte: now },
       },
-      select: { id: true, startDate: true },
+      select: { id: true, startDate: true, package: { select: { durationDays: true } } },
       orderBy: [{ activationOrder: 'asc' }, { startDate: 'asc' }, { id: 'asc' }],
     });
-    if (next && next.startDate <= now) {
-      await tx.membership.updateMany({
-        where: { id: next.id, status: 'PENDING_ACTIVATION' },
-        data: { status: 'ACTIVE', activatedAt: now },
-      });
+    if (next) {
+      if (next.startDate <= now) {
+        await tx.membership.updateMany({
+          where: { id: next.id, status: 'PENDING_ACTIVATION' },
+          data: { status: 'ACTIVE', activatedAt: now },
+        });
+      } else {
+        // Gói trước đó đã kết thúc sớm hoặc bị hủy khiến hội viên không còn gói nào active.
+        // Tự động kích hoạt ngay gói chờ và tịnh tiến lại startDate = now, endDate = now + durationDays
+        const durationDays = next.package?.durationDays || 30;
+        const newEndDate = new Date(now.getTime() + durationDays * 86400000);
+        await tx.membership.updateMany({
+          where: { id: next.id, status: 'PENDING_ACTIVATION' },
+          data: {
+            status: 'ACTIVE',
+            startDate: now,
+            endDate: newEndDate,
+            activatedAt: now,
+          },
+        });
+
+        // Đồng thời tịnh tiến lại ngày cho các gói PENDING_ACTIVATION tiếp theo phía sau (nếu có)
+        const subsequent = await tx.membership.findMany({
+          where: {
+            userId,
+            id: { not: next.id },
+            status: 'PENDING_ACTIVATION',
+            package: { type: 'MEMBERSHIP' },
+          },
+          orderBy: [{ activationOrder: 'asc' }, { startDate: 'asc' }, { id: 'asc' }],
+          include: { package: true },
+        });
+        let runningEnd = newEndDate;
+        for (const sub of subsequent) {
+          const subDuration = sub.package?.durationDays || 30;
+          const subStart = new Date(runningEnd.getTime() + 1);
+          const subEnd = new Date(subStart.getTime() + subDuration * 86400000);
+          await tx.membership.update({
+            where: { id: sub.id },
+            data: { startDate: subStart, endDate: subEnd },
+          });
+          runningEnd = subEnd;
+        }
+      }
     }
 }
 
@@ -137,6 +176,60 @@ export async function autoUnfreezeExpiredFreezes() {
   }
 }
 
+/**
+ * Tự động hủy các đơn thanh toán PENDING quá thời gian quy định (mặc định 30 phút)
+ * nhằm giải phóng các đơn treo và hủy membership PENDING đi kèm
+ */
+export async function cancelStalePendingPayments(staleMinutes = 30) {
+  try {
+    const cutoff = new Date(Date.now() - staleMinutes * 60 * 1000);
+    const stalePayments = await prisma.payment.findMany({
+      where: {
+        status: 'PENDING',
+        createdAt: { lt: cutoff },
+      },
+      select: {
+        id: true,
+        orderCode: true,
+        membershipId: true,
+        userId: true,
+      },
+      take: 50,
+    });
+
+    if (stalePayments.length === 0) return;
+
+    const { markPaymentFailed } = await import('./payment.service.js');
+
+    for (const payment of stalePayments) {
+      try {
+        if (payment.orderCode) {
+          await markPaymentFailed(payment.orderCode);
+        } else {
+          // Fallback nếu không có orderCode
+          await prisma.$transaction(async (tx) => {
+            await lockGymMember(tx, payment.userId);
+            const updated = await tx.payment.updateMany({
+              where: { id: payment.id, status: 'PENDING' },
+              data: { status: 'FAILED' },
+            });
+            if (updated.count > 0 && payment.membershipId) {
+              await tx.membership.updateMany({
+                where: { id: payment.membershipId, status: 'PENDING' },
+                data: { status: 'CANCELLED' },
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.error(`Lỗi hủy đơn PENDING treo cho payment ${payment.id}:`, err);
+      }
+    }
+  } catch (error) {
+    console.error('Lỗi khi quét và hủy đơn PENDING quá hạn (cancelStalePendingPayments):', error);
+  }
+}
+
 export function startGymMembershipWorker() {
   const scanIntervalMs = 60 * 1000;
   let running = false;
@@ -148,7 +241,10 @@ export function startGymMembershipWorker() {
       // 1. Quét và tự động mở lại các gói bảo lưu đã hết hạn
       await autoUnfreezeExpiredFreezes();
 
-      // 2. Quét đồng bộ kích hoạt / hết hạn gói Gym Access
+      // 2. Quét và tự động hủy các đơn PENDING treo quá 30 phút
+      await cancelStalePendingPayments(30);
+
+      // 3. Quét đồng bộ kích hoạt / hết hạn gói Gym Access
       let cursor = 0;
       while (true) {
         const candidates = await prisma.membership.groupBy({

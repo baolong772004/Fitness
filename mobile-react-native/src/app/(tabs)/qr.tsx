@@ -1,9 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { api } from '../../lib/api';
+import { io } from 'socket.io-client';
+import { api, sessionStore, SOCKET_URL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { aura } from '../../lib/theme';
 import { Button, Page } from '../../components/ui';
@@ -15,8 +16,10 @@ export default function MemberQr() {
   const { user } = useAuth();
   const [section, setSection] = useState(1);
   const [qr, setQr] = useState<string | null>(null);
+  const [membership, setMembership] = useState<{ id?: number; packageName?: string; status?: string; endDate?: string; remainingDays?: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checkInSuccessAlert, setCheckInSuccessAlert] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -25,12 +28,36 @@ export default function MemberQr() {
     try {
       const result = await api.gymQr();
       setQr(result.data?.qrCodeImage || null);
+      setMembership(result.data?.membership || null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Không thể tải mã QR.');
     } finally {
       setLoading(false);
     }
   }, [user]);
+
+  // Kết nối Socket để lắng nghe thông báo check-in thành công hoặc mở bảo lưu theo thời gian thực
+  useEffect(() => {
+    const token = sessionStore.token();
+    if (!user || !token) return;
+    const socket = io(SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'] });
+    socket.on('notification:new', (notification: any) => {
+      const title = String(notification?.title || '').toLowerCase();
+      const message = String(notification?.message || '');
+      // Khi có sự kiện check-in hoặc mở bảo lưu: reload lại trạng thái gói và QR ngay lập tức
+      if (title.includes('điểm danh') || title.includes('check-in') || title.includes('bảo lưu') || title.includes('kích hoạt')) {
+        void load();
+        if (title.includes('từ chối') || (title.includes('bảo lưu') && !title.includes('mở') && !title.includes('kích hoạt'))) {
+          Alert.alert('Từ chối vào cổng', message || 'Gói tập của bạn đang ở trạng thái BẢO LƯU. Vui lòng liên hệ quầy lễ tân.');
+        } else if (title.includes('thành công')) {
+          setCheckInSuccessAlert(message || 'Điểm danh vào cổng thành công! Chúc bạn tập luyện vui vẻ.');
+        }
+      }
+    });
+    return () => {
+      socket.disconnect();
+    };
+  }, [user, load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -149,7 +176,67 @@ export default function MemberQr() {
         {section === 2 && <PtJourney embedded />}
 
         {section === 1 && (
-          <View style={styles.ticketCard}>
+          <View>
+            {membership?.status === 'FROZEN' && (
+              <View
+                style={{
+                  backgroundColor: '#FFFBEB',
+                  borderWidth: 1.5,
+                  borderColor: '#F59E0B',
+                  borderRadius: 16,
+                  padding: 14,
+                  marginBottom: 14,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <Ionicons name="pause-circle" size={28} color="#D97706" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#B45309', fontWeight: '900', fontSize: 13.5 }}>
+                    GÓI TẬP ĐANG BẢO LƯU (FROZEN)
+                  </Text>
+                  <Text style={{ color: '#78350F', fontSize: 12, marginTop: 2, lineHeight: 17 }}>
+                    Gói [{membership.packageName}] đang tạm dừng đến ngày {new Date(membership.endDate!).toLocaleDateString('vi-VN')}.
+                  </Text>
+                  <Text style={{ color: '#92400E', fontSize: 11, marginTop: 4, fontWeight: '700' }}>
+                    💡 Vui lòng mở lại gói bảo lưu tại quầy lễ tân để kích hoạt check-in vào phòng tập.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Banner Check-in Thành Công theo thời gian thực */}
+            {checkInSuccessAlert && (
+              <View
+                style={{
+                  backgroundColor: '#ECFDF5',
+                  borderWidth: 1.5,
+                  borderColor: '#10B981',
+                  borderRadius: 16,
+                  padding: 14,
+                  marginBottom: 14,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <Ionicons name="checkmark-circle" size={28} color="#059669" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#065F46', fontWeight: '900', fontSize: 13.5 }}>
+                    ĐIỂM DANH THÀNH CÔNG!
+                  </Text>
+                  <Text style={{ color: '#047857', fontSize: 12, marginTop: 2, lineHeight: 17 }}>
+                    {checkInSuccessAlert}
+                  </Text>
+                </View>
+                <Pressable onPress={() => setCheckInSuccessAlert(null)} hitSlop={12}>
+                  <Ionicons name="close" size={20} color="#065F46" />
+                </Pressable>
+              </View>
+            )}
+
+            <View style={styles.ticketCard}>
             <View style={{ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View
                 style={{
@@ -167,7 +254,18 @@ export default function MemberQr() {
                 <Text style={{ color: aura.darkCoffee, fontSize: 18, fontWeight: '900' }}>
                   {user?.fullName || 'Hội viên Aura'}
                 </Text>
-                <Text style={{ color: aura.ink, fontSize: 12 }}>Thẻ hội viên Aura Fitness</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                  <Text style={{ color: aura.ink, fontSize: 12 }}>Thẻ hội viên Aura Fitness</Text>
+                  {membership?.status === 'FROZEN' ? (
+                    <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 7, paddingVertical: 1.5, borderRadius: 6, borderWidth: 1, borderColor: '#FDE68A' }}>
+                      <Text style={{ color: '#D97706', fontSize: 10, fontWeight: '900' }}>BẢO LƯU</Text>
+                    </View>
+                  ) : membership?.status === 'ACTIVE' ? (
+                    <View style={{ backgroundColor: '#DCFCE7', paddingHorizontal: 7, paddingVertical: 1.5, borderRadius: 6, borderWidth: 1, borderColor: '#BBF7D0' }}>
+                      <Text style={{ color: '#16A34A', fontSize: 10, fontWeight: '900' }}>HOẠT ĐỘNG</Text>
+                    </View>
+                  ) : null}
+                </View>
               </View>
             </View>
 
@@ -215,8 +313,10 @@ export default function MemberQr() {
                 )}
               </View>
 
-              <Text style={{ color: aura.ink, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 17 }}>
-                {qr ? 'Mã có hiệu lực 1 phút · Tự cập nhật' : 'Mở mã QR để nhân viên quét điểm danh'}
+              <Text style={{ color: membership?.status === 'FROZEN' ? '#D97706' : aura.ink, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 17 }}>
+                {membership?.status === 'FROZEN'
+                  ? 'Gói đang bảo lưu · Không thể điểm danh vào cổng'
+                  : qr ? 'Mã có hiệu lực 1 phút · Tự cập nhật' : 'Mở mã QR để nhân viên quét điểm danh'}
               </Text>
               {qr && (
                 <Text
@@ -247,6 +347,7 @@ export default function MemberQr() {
               </Text>
             </View>
           </View>
+        </View>
         )}
 
         {section === 1 && (

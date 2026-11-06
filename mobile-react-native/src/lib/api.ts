@@ -12,6 +12,16 @@ export type User = { id: number; fullName: string; email: string; role: string; 
 export type Session = { token: string; user: User };
 
 let accessToken: string | null = null;
+type UnauthorizedListener = () => void;
+const unauthorizedListeners = new Set<UnauthorizedListener>();
+
+export const onUnauthorized = (listener: UnauthorizedListener) => {
+  unauthorizedListeners.add(listener);
+  return () => {
+    unauthorizedListeners.delete(listener);
+  };
+};
+
 export const sessionStore = {
   async restore(): Promise<Session | null> {
     const [token, rawUser] = await Promise.all([SecureStore.getItemAsync(TOKEN_KEY), SecureStore.getItemAsync(USER_KEY)]);
@@ -45,6 +55,12 @@ export async function request<T = any>(method: Method, path: string, body?: unkn
   } catch {
     throw new Error(`Không kết nối được máy chủ ${API_URL}. Điện thoại thật cần EXPO_PUBLIC_API_BASE_URL là IP LAN của máy tính.`);
   }
+  if (response.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/register') && !path.startsWith('/auth/google')) {
+    unauthorizedListeners.forEach((fn) => {
+      try { fn(); } catch {}
+    });
+  }
+
   const raw = await response.text();
   let json: any;
   try { json = raw ? JSON.parse(raw) : {}; } catch { json = {}; }
@@ -55,6 +71,7 @@ const get = <T = any>(path: string) => request<T>('GET', path);
 const post = <T = any>(path: string, body: unknown = {}) => request<T>('POST', path, body);
 
 export const api = {
+  verifySession: () => get('/auth/verify-session'),
   coachAvailability: async () => (await get('/pt/coach/availability')).data as {
     calendar: { openTime: string; closeTime: string; slotMinutes: number; breakMinutes: number };
     slots: { startTime: string; endTime: string; startMinute: number; endMinute: number }[];

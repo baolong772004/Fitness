@@ -193,12 +193,12 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
               userId: membership.userId,
               id: { not: membership.id },
               package: { type: 'MEMBERSHIP' },
-              status: { in: ['ACTIVE', 'PENDING_ACTIVATION'] },
+              status: { in: ['ACTIVE', 'PENDING_ACTIVATION', 'FROZEN'] },
               endDate: { gte: now },
             },
             select: { id: true, startDate: true, endDate: true, status: true },
           });
-          const otherActive = otherMemberships.filter(item => item.status === 'ACTIVE' && item.startDate <= now);
+          const otherActive = otherMemberships.filter(item => ['ACTIVE', 'FROZEN'].includes(item.status) && item.startDate <= now);
 
           if (membership.status !== 'PENDING_ACTIVATION' && (otherActive.length > 0 || membership.status !== 'ACTIVE')) {
             const latestEnd = otherMemberships.reduce((latest, item) => laterDate(latest, item.endDate), now);
@@ -267,7 +267,7 @@ export async function markPaymentPaid(orderCode: bigint, paidAmount: number) {
               userId: membership.userId,
               id: { not: membership.id },
               package: { type: 'MEMBERSHIP' },
-              status: { in: ['ACTIVE', 'PENDING_ACTIVATION'] },
+              status: { in: ['ACTIVE', 'PENDING_ACTIVATION', 'FROZEN'] },
               endDate: { gte: now },
             },
             select: { endDate: true },

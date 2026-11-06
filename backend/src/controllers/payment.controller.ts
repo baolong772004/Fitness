@@ -312,18 +312,22 @@ export class PaymentController {
       const result = await prisma.$transaction(async (tx) => {
         await lockGymMember(tx, userId);
         await reconcileGymMembershipStates(tx, userId, new Date());
+        const now = new Date();
         const matchingMemberships = await tx.membership.findMany({
           where: {
             userId,
             packageId: gymPackage.id,
-            status: { in: ['ACTIVE', 'PENDING', 'PENDING_ACTIVATION', 'EXPIRED'] },
+            status: { in: ['ACTIVE', 'PENDING', 'PENDING_ACTIVATION', 'FROZEN'] },
           },
-          select: { id: true, status: true, remainingSessions: true },
+          select: { id: true, status: true, remainingSessions: true, endDate: true },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         });
+        const activeOrFrozen = matchingMemberships.find(item =>
+          (item.status === 'ACTIVE' && item.endDate >= now) || item.status === 'FROZEN'
+        );
         const existingMembership = matchingMemberships.find(item => item.status === 'PENDING')
           ?? matchingMemberships.find(item => item.status === 'PENDING_ACTIVATION')
-          ?? matchingMemberships[0];
+          ?? activeOrFrozen;
         const blocksPurchase = existingMembership &&
           (gymPackage.type !== 'PT' || existingMembership.status === 'PENDING');
         if (blocksPurchase) return { blocked: existingMembership, subscription: null };
@@ -363,7 +367,9 @@ export class PaymentController {
             ? `Bạn đã sở hữu gói ${gymPackage.name} đang chờ kích hoạt. Gói này sẽ tự động kích hoạt khi đến lượt sử dụng.`
             : result.blocked.status === 'PENDING'
               ? `Bạn đã có đơn mua gói ${gymPackage.name} đang chờ thanh toán. Vui lòng hoàn tất đơn đó hoặc liên hệ hỗ trợ để hủy.`
-            : 'Bạn đã có gói tập này. Vui lòng gia hạn membership hiện tại.',
+              : result.blocked.status === 'FROZEN'
+                ? `Gói tập ${gymPackage.name} của bạn hiện đang được BẢO LƯU. Vui lòng mở lại gói tại quầy lễ tân trước khi mua mới hoặc gia hạn.`
+                : 'Bạn đã có gói tập này đang hoạt động. Vui lòng gia hạn membership hiện tại nếu muốn gia tăng thời gian sử dụng.',
           subscriptionId: result.blocked.id,
           status: result.blocked.status,
         });
@@ -515,6 +521,12 @@ export class PaymentController {
           }
           if (result.result === 'PAID_REVIEW') {
             console.error(`Paid Gym renewal requires refund review for order ${webhookData.orderCode}`);
+          }
+        } else if (webhookData && (req.body.code !== '00' || req.body.success === false || req.body.desc === 'CANCELLED')) {
+          // Bắt sự kiện người dùng hủy thanh toán hoặc thanh toán thất bại từ PayOS Webhook
+          if (Number.isSafeInteger(webhookData.orderCode)) {
+            await markPaymentFailed(BigInt(webhookData.orderCode));
+            console.log(`PayOS webhook ghi nhận hủy/thất bại và đã giải phóng đơn hàng ${webhookData.orderCode}`);
           }
         }
       }

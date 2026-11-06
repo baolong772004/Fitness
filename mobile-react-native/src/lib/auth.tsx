@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { api, sessionStore, type Session, type User } from './api';
+import { api, onUnauthorized, sessionStore, type Session, type User } from './api';
 import { SOCKET_URL } from './api';
 import { io, Socket } from 'socket.io-client';
 
@@ -99,15 +99,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refreshUnreadCount, refreshUnreadChatCount]);
 
+  const signOut = useCallback(async () => {
+    await sessionStore.clear();
+    setUser(null);
+    setUnreadCount(0);
+    setUnreadChatCount(0);
+    setInAppBanner(null);
+  }, []);
+
+  // Lắng nghe sự kiện 401 Unauthorized từ bất kỳ API call nào để tự động đăng xuất
   useEffect(() => {
-    sessionStore.restore().then(session => {
-      setUser(session?.user ?? null);
-      if (session) {
-        void refreshUnreadCount();
-        void refreshUnreadChatCount();
+    const unsubscribe = onUnauthorized(() => {
+      void signOut();
+    });
+    return unsubscribe;
+  }, [signOut]);
+
+  useEffect(() => {
+    sessionStore.restore().then(async (session) => {
+      if (!session) {
+        setUser(null);
+        return;
+      }
+      setUser(session.user);
+      void refreshUnreadCount();
+      void refreshUnreadChatCount();
+
+      // Kiểm tra tính hợp lệ của token trong nền khi mở ứng dụng
+      try {
+        await api.verifySession();
+      } catch (err: any) {
+        if (err?.message?.includes('401') || err?.message?.includes('hết hạn') || err?.message?.includes('TOKEN_EXPIRED')) {
+          await signOut();
+        }
       }
     }).finally(() => setReady(true));
-  }, [refreshUnreadCount, refreshUnreadChatCount]);
+  }, [refreshUnreadCount, refreshUnreadChatCount, signOut]);
 
   // Socket kết nối realtime cho thông báo và tin nhắn
   useEffect(() => {
@@ -179,14 +206,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await accept(session);
     return session.user;
   }, [accept]);
-
-  const signOut = useCallback(async () => {
-    await sessionStore.clear();
-    setUser(null);
-    setUnreadCount(0);
-    setUnreadChatCount(0);
-    setInAppBanner(null);
-  }, []);
 
   const completePasswordChange = useCallback(async () => {
     const token = sessionStore.token();

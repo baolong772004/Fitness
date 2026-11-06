@@ -3,6 +3,7 @@ import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import jwt from 'jsonwebtoken';
 import QRCode from 'qrcode';
+import { refreshGymMembershipStates } from '../services/membership.service.js';
 
 
 
@@ -104,22 +105,6 @@ export const bookGroupClass = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Vui lòng cung cấp scheduleId' });
     }
 
-    // Kiểm tra xem hội viên có đang trong thời gian BẢO LƯU (FROZEN) không
-    const frozenMembership = await prisma.membership.findFirst({
-      where: {
-        userId,
-        status: 'FROZEN',
-        package: { type: 'MEMBERSHIP' }
-      },
-      include: { package: true }
-    });
-    if (frozenMembership) {
-      return res.status(400).json({
-        success: false,
-        message: `Gói tập [${frozenMembership.package.name}] của bạn hiện đang ở trạng thái BẢO LƯU. Vui lòng mở lại gói tập tại quầy trước khi đăng ký lớp học!`
-      });
-    }
-
     // 1. Kiểm tra lịch lớp học
     const schedule = await prisma.groupClassSchedule.findUnique({
       where: { id: Number(scheduleId) },
@@ -130,10 +115,105 @@ export const bookGroupClass = async (req: AuthRequest, res: Response) => {
     }
 
     // 2. Kiểm tra lớp đã bắt đầu hoặc đã qua thời gian đăng ký chưa
-    if (new Date() >= new Date(schedule.startTime)) {
+    const now = new Date();
+    const scheduleStartTime = new Date(schedule.startTime);
+    if (now >= scheduleStartTime) {
       return res.status(400).json({
         success: false,
         message: 'Lớp học đã bắt đầu hoặc đã kết thúc, không thể đăng ký',
+      });
+    }
+
+    // 3. Tự động đồng bộ trạng thái gói tập gần nhất của hội viên
+    try {
+      await refreshGymMembershipStates(Number(userId));
+    } catch {
+      // Bỏ qua nếu có xung đột khóa đồng thời, tiếp tục truy vấn DB
+    }
+
+    // 4. Kiểm tra xem hội viên có gói tập nào đang BẢO LƯU (FROZEN) không
+    const frozenMembership = await prisma.membership.findFirst({
+      where: {
+        userId: Number(userId),
+        status: 'FROZEN',
+        package: { type: 'MEMBERSHIP' }
+      },
+      include: { package: true }
+    });
+    if (frozenMembership) {
+      return res.status(400).json({
+        success: false,
+        message: `Gói tập [${frozenMembership.package.name}] của bạn hiện đang ở trạng thái BẢO LƯU (đến ngày ${new Date(frozenMembership.endDate).toLocaleDateString('vi-VN')}). Vui lòng mở lại gói tập tại quầy trước khi đăng ký lớp học!`
+      });
+    }
+
+    // 5. Kiểm tra điều kiện gói Gym ACTIVE còn hiệu lực tại thời điểm diễn ra lớp
+    const activeGymMembership = await prisma.membership.findFirst({
+      where: {
+        userId: Number(userId),
+        status: 'ACTIVE',
+        startDate: { lte: scheduleStartTime },
+        endDate: { gte: scheduleStartTime },
+        package: { type: 'MEMBERSHIP' }
+      },
+      include: { package: true }
+    });
+
+    if (!activeGymMembership) {
+      // Kiểm tra xem có gói ACTIVE nào nhưng sẽ hết hạn trước buổi học không
+      const currentActive = await prisma.membership.findFirst({
+        where: {
+          userId: Number(userId),
+          status: 'ACTIVE',
+          package: { type: 'MEMBERSHIP' }
+        },
+        include: { package: true },
+        orderBy: { endDate: 'desc' }
+      });
+
+      if (currentActive && new Date(currentActive.endDate) < scheduleStartTime) {
+        return res.status(400).json({
+          success: false,
+          message: `Gói tập [${currentActive.package.name}] của bạn sẽ hết hạn vào ngày ${new Date(currentActive.endDate).toLocaleDateString('vi-VN')}, trước thời điểm diễn ra lớp học (${scheduleStartTime.toLocaleDateString('vi-VN')}). Vui lòng gia hạn gói tập để tham gia!`
+        });
+      }
+
+      const expiredMembership = await prisma.membership.findFirst({
+        where: {
+          userId: Number(userId),
+          status: 'EXPIRED',
+          package: { type: 'MEMBERSHIP' }
+        },
+        include: { package: true },
+        orderBy: { endDate: 'desc' }
+      });
+
+      if (expiredMembership) {
+        return res.status(400).json({
+          success: false,
+          message: `Gói tập [${expiredMembership.package.name}] của bạn đã hết hạn vào ngày ${new Date(expiredMembership.endDate).toLocaleDateString('vi-VN')}. Vui lòng gia hạn gói tập trước khi đăng ký lớp học nhóm!`
+        });
+      }
+
+      const pendingMembership = await prisma.membership.findFirst({
+        where: {
+          userId: Number(userId),
+          status: 'PENDING_ACTIVATION',
+          package: { type: 'MEMBERSHIP' }
+        },
+        include: { package: true }
+      });
+
+      if (pendingMembership) {
+        return res.status(400).json({
+          success: false,
+          message: `Gói tập [${pendingMembership.package.name}] của bạn đang ở trạng thái CHỜ KÍCH HOẠT. Vui lòng check-in kích hoạt gói tại phòng tập trước khi đăng ký lớp!`
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: 'Bạn chưa có gói hội viên Gym đang hoạt động (ACTIVE). Vui lòng đăng ký gói tập để tham gia các lớp học nhóm!'
       });
     }
 
@@ -155,44 +235,69 @@ export const bookGroupClass = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    if (existingBooking && existingBooking.status === 'BOOKED') {
+    if (existingBooking && ['BOOKED', 'CHECKED_IN'].includes(existingBooking.status)) {
       return res.status(400).json({
         success: false,
-        message: 'Bạn đã đăng ký lớp học này trước đó rồi',
+        message: existingBooking.status === 'CHECKED_IN'
+          ? 'Bạn đã điểm danh tham gia lớp học này rồi'
+          : 'Bạn đã đăng ký lớp học này trước đó rồi',
       });
     }
 
-    // 5. Thực hiện Transaction: Đăng ký + Tăng bookedCount + Cập nhật FULL nếu chạm trần
+    // 5. Thực hiện Transaction chống Overbooking:
+    // Cập nhật có điều kiện bookedCount: { lt: schedule.capacity } và increment: 1
     const result = await prisma.$transaction(async (tx) => {
-      let booking;
-      if (existingBooking) {
-         // Nếu đã hủy trước đó thì cập nhật lại trạng thái
-         booking = await tx.groupClassBooking.update({
-            where: { id: existingBooking.id },
-            data: { status: 'BOOKED' }
-         });
-      } else {
-         // 5a. Tạo bản ghi Booking
-         booking = await tx.groupClassBooking.create({
-           data: {
-             scheduleId: Number(scheduleId),
-             userId: Number(userId),
-             status: 'BOOKED',
-           },
-         });
-      }
-
-      // 5b. Tăng số người đã đăng ký
-      const newBookedCount = schedule.bookedCount + 1;
-      const isFull = newBookedCount >= schedule.capacity;
-
-      const updatedSchedule = await tx.groupClassSchedule.update({
-        where: { id: Number(scheduleId) },
+      // 5a. Kiểm tra và tăng bookedCount có điều kiện nguyên tử (Atomic Conditional Update)
+      const updateResult = await tx.groupClassSchedule.updateMany({
+        where: {
+          id: Number(scheduleId),
+          bookedCount: { lt: schedule.capacity },
+          status: 'OPEN',
+        },
         data: {
-          bookedCount: newBookedCount,
-          status: isFull ? 'FULL' : 'OPEN',
+          bookedCount: { increment: 1 },
         },
       });
+
+      if (updateResult.count === 0) {
+        throw new Error('OVERBOOKING_FULL');
+      }
+
+      // 5b. Tạo hoặc cập nhật lại bản ghi Booking
+      let booking;
+      if (existingBooking) {
+        // Chỉ cập nhật lại nếu booking đang ở trạng thái CANCELLED
+        const claimed = await tx.groupClassBooking.updateMany({
+          where: { id: existingBooking.id, status: 'CANCELLED' },
+          data: { status: 'BOOKED' },
+        });
+        if (claimed.count !== 1) {
+          throw new Error('ALREADY_BOOKED');
+        }
+        booking = await tx.groupClassBooking.findUniqueOrThrow({ where: { id: existingBooking.id } });
+      } else {
+        // 5a. Tạo bản ghi Booking
+        booking = await tx.groupClassBooking.create({
+          data: {
+            scheduleId: Number(scheduleId),
+            userId: Number(userId),
+            status: 'BOOKED',
+          },
+        });
+      }
+
+      // 5c. Lấy dữ liệu mới nhất sau khi tăng và cập nhật FULL nếu vừa chạm trần
+      const updatedSchedule = await tx.groupClassSchedule.findUnique({
+        where: { id: Number(scheduleId) },
+      });
+
+      if (updatedSchedule && updatedSchedule.bookedCount >= updatedSchedule.capacity) {
+        await tx.groupClassSchedule.update({
+          where: { id: Number(scheduleId) },
+          data: { status: 'FULL' },
+        });
+        updatedSchedule.status = 'FULL';
+      }
 
       return { booking, updatedSchedule };
     });
@@ -203,6 +308,12 @@ export const bookGroupClass = async (req: AuthRequest, res: Response) => {
       data: result,
     });
   } catch (error: any) {
+    if (error.message === 'OVERBOOKING_FULL') {
+      return res.status(400).json({
+        success: false,
+        message: 'Rất tiếc! Lớp học này vừa HẾT CHỖ (FULL)',
+      });
+    }
     console.error('Lỗi bookGroupClass:', error);
     return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi đăng ký lớp' });
   }
@@ -250,22 +361,34 @@ export const cancelGroupClass = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Thực hiện Transaction: Cập nhật Cancelled + Giảm bookedCount + Cập nhật OPEN
+    // Thực hiện Transaction chống Race Condition: Cập nhật Cancelled có điều kiện nguyên tử + Giảm bookedCount + Cập nhật OPEN
     const result = await prisma.$transaction(async (tx) => {
-      const updatedBooking = await tx.groupClassBooking.update({
-        where: { id: bookingId },
+      // 1. Chỉ cập nhật CANCELLED nếu booking đang ở trạng thái BOOKED
+      const claimed = await tx.groupClassBooking.updateMany({
+        where: { id: bookingId, status: 'BOOKED', userId },
         data: { status: 'CANCELLED' },
       });
+      if (claimed.count !== 1) {
+        throw new Error('ALREADY_CANCELLED_OR_PROCESSED');
+      }
 
-      const schedule = booking.schedule;
-      const newBookedCount = Math.max(0, schedule.bookedCount - 1);
-      
-      const updatedSchedule = await tx.groupClassSchedule.update({
-        where: { id: schedule.id },
-        data: {
-          bookedCount: newBookedCount,
-          status: 'OPEN', // Chắc chắn mở lại trạng thái OPEN
+      const scheduleId = booking.schedule.id;
+
+      // 2. Giảm bookedCount có điều kiện: chỉ giảm nếu bookedCount > 0 và mở lại OPEN
+      await tx.groupClassSchedule.updateMany({
+        where: {
+          id: scheduleId,
+          bookedCount: { gt: 0 },
         },
+        data: {
+          bookedCount: { decrement: 1 },
+          status: 'OPEN', // Chắc chắn mở lại trạng thái OPEN khi có chỗ trống
+        },
+      });
+
+      const updatedBooking = await tx.groupClassBooking.findUniqueOrThrow({ where: { id: bookingId } });
+      const updatedSchedule = await tx.groupClassSchedule.findUnique({
+        where: { id: scheduleId },
       });
 
       return { updatedBooking, updatedSchedule };
@@ -277,6 +400,9 @@ export const cancelGroupClass = async (req: AuthRequest, res: Response) => {
       data: result,
     });
   } catch (error: any) {
+    if (error?.message === 'ALREADY_CANCELLED_OR_PROCESSED') {
+      return res.status(409).json({ success: false, message: 'Lịch học đã được hủy hoặc xử lý trước đó.' });
+    }
     console.error('Lỗi cancelGroupClass:', error);
     return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi hủy lịch' });
   }

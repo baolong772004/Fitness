@@ -294,8 +294,9 @@ export function PtMasterCalendar() {
                         max={60}
                         step={5}
                         className="text-xs"
-                        value={calendar.breakMinutes}
-                        onChange={e => setCalendar(c => ({ ...c, breakMinutes: Number(e.target.value) }))}
+                        placeholder="0"
+                        value={calendar.breakMinutes === 0 ? '' : calendar.breakMinutes}
+                        onChange={e => setCalendar(c => ({ ...c, breakMinutes: e.target.value === '' ? 0 : Number(e.target.value) }))}
                       />
                     </div>
                   </div>

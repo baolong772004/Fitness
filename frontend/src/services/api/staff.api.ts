@@ -33,8 +33,8 @@ export interface StaffLoginResponse {
 
 export interface ScanQrCheckInResponse {
   success: boolean;
-  status: 'SUCCESS' | 'EXPIRED' | 'ANTI_PASSBACK' | 'INVALID_QR' | 'BLOCKED' | 'NOT_FOUND' | 'SERVER_ERROR';
-  color: 'GREEN' | 'RED';
+  status: 'SUCCESS' | 'EXPIRED' | 'ANTI_PASSBACK' | 'INVALID_QR' | 'BLOCKED' | 'NOT_FOUND' | 'SERVER_ERROR' | 'FROZEN';
+  color: 'GREEN' | 'RED' | 'YELLOW';
   message: string;
   data: {
     checkInId?: number;
@@ -46,10 +46,17 @@ export interface ScanQrCheckInResponse {
       gender?: string;
     };
     membership?: {
-      id: number;
+      id?: number;
       packageName: string;
       endDate: string;
       remainingDays: number;
+      status?: string;
+    };
+    frozenMembership?: {
+      id?: number;
+      packageName: string;
+      endDate: string;
+      remainingDays?: number;
     };
     expiredMembership?: {
       packageName: string;
@@ -83,6 +90,12 @@ export interface LookupMemberResponse {
     };
     hasActiveGymAccess: boolean;
     isFrozen?: boolean;
+    recentCheckIn?: {
+      checkInTime: string;
+      timeDisplay: string;
+      minutesAgo: number;
+      waitRemaining: number;
+    } | null;
     frozenMembership?: {
       id: number;
       packageName: string;
@@ -254,7 +267,7 @@ export const staffApi = {
   lookupMember: (phone: string) =>
     request<LookupMemberResponse>(`/staff/checkin/lookup-member?phone=${encodeURIComponent(phone)}`),
 
-  manualCheckIn: (data: { memberId: number; notes?: string }) =>
+  manualCheckIn: (data: { memberId: number; notes?: string; overrideAntiPassback?: boolean }) =>
     request<{ success: boolean; message: string; data: any }>('/staff/checkin/manual', {
       method: 'POST',
       body: JSON.stringify(data)
