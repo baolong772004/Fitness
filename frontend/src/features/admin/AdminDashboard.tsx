@@ -1721,8 +1721,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="number"
                     step="50000"
                     required
-                    value={newHourlyRate}
-                    onChange={(e) => setNewHourlyRate(parseInt(e.target.value) || 250000)}
+                    placeholder="250000"
+                    value={newHourlyRate === 0 ? '' : newHourlyRate}
+                    onChange={(e) => setNewHourlyRate(e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0)}
                   />
                 </Field>
 
@@ -1732,8 +1733,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     min="30"
                     max="80"
                     required
-                    value={newCommission}
-                    onChange={(e) => setNewCommission(parseInt(e.target.value) || 50)}
+                    placeholder="50"
+                    value={newCommission === 0 ? '' : newCommission}
+                    onChange={(e) => setNewCommission(e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0)}
                   />
                 </Field>
               </div>
@@ -1936,8 +1938,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="number"
                     min="1"
                     required
-                    value={newPackageForm.durationDays}
-                    onChange={(e) => setNewPackageForm({ ...newPackageForm, durationDays: parseInt(e.target.value) || 30 })}
+                    placeholder="30"
+                    value={newPackageForm.durationDays === 0 ? '' : newPackageForm.durationDays}
+                    onChange={(e) => setNewPackageForm({ ...newPackageForm, durationDays: e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0 })}
                   />
                 </Field>
               </div>
@@ -1948,8 +1951,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="number"
                     step="50000"
                     required
-                    value={newPackageForm.price}
-                    onChange={(e) => setNewPackageForm({ ...newPackageForm, price: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                    value={newPackageForm.price === 0 ? '' : newPackageForm.price}
+                    onChange={(e) => setNewPackageForm({ ...newPackageForm, price: e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0 })}
                   />
                 </Field>
 
@@ -1958,9 +1962,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="number"
                     min={newPackageForm.type === 'PT' ? 1 : 0}
                     required={newPackageForm.type === 'PT'}
-                    value={newPackageForm.type === 'PT' ? newPackageForm.totalPtSessions : newPackageForm.trialPtSessions}
+                    placeholder="0"
+                    value={
+                      newPackageForm.type === 'PT'
+                        ? (newPackageForm.totalPtSessions === 0 ? '' : newPackageForm.totalPtSessions)
+                        : (newPackageForm.trialPtSessions === 0 ? '' : newPackageForm.trialPtSessions)
+                    }
                     onChange={(e) => {
-                      const value = parseInt(e.target.value, 10) || 0;
+                      const value = e.target.value === '' ? ('' as any) : parseInt(e.target.value, 10) || 0;
                       setNewPackageForm(current => current.type === 'PT'
                         ? { ...current, totalPtSessions: value }
                         : { ...current, trialPtSessions: value });
@@ -2024,8 +2033,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="number"
                     min="1"
                     required
-                    value={editPackageForm.durationDays}
-                    onChange={(e) => setEditPackageForm({ ...editPackageForm, durationDays: parseInt(e.target.value) || 30 })}
+                    placeholder="30"
+                    value={editPackageForm.durationDays === 0 ? '' : editPackageForm.durationDays}
+                    onChange={(e) => setEditPackageForm({ ...editPackageForm, durationDays: e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0 })}
                   />
                 </Field>
               </div>
@@ -2036,8 +2046,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="number"
                     step="50000"
                     required
-                    value={editPackageForm.price}
-                    onChange={(e) => setEditPackageForm({ ...editPackageForm, price: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                    value={editPackageForm.price === 0 ? '' : editPackageForm.price}
+                    onChange={(e) => setEditPackageForm({ ...editPackageForm, price: e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0 })}
                   />
                 </Field>
 
@@ -2046,9 +2057,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="number"
                     min={editPackageForm.type === 'PT' ? 1 : 0}
                     required={editPackageForm.type === 'PT'}
-                    value={editPackageForm.type === 'PT' ? editPackageForm.totalPtSessions : editPackageForm.trialPtSessions}
+                    placeholder="0"
+                    value={
+                      editPackageForm.type === 'PT'
+                        ? (editPackageForm.totalPtSessions === 0 ? '' : editPackageForm.totalPtSessions)
+                        : (editPackageForm.trialPtSessions === 0 ? '' : editPackageForm.trialPtSessions)
+                    }
                     onChange={(e) => {
-                      const val = parseInt(e.target.value) || 0;
+                      const val = e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0;
                       if (editPackageForm.type === 'PT') {
                         setEditPackageForm({ ...editPackageForm, totalPtSessions: val });
                       } else {
@@ -2362,8 +2378,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="number"
                   min="1"
                   required
-                  value={roomForm.capacity}
-                  onChange={(e) => setRoomForm({ ...roomForm, capacity: parseInt(e.target.value) || 20 })}
+                  placeholder="20"
+                  value={roomForm.capacity === 0 ? '' : roomForm.capacity}
+                  onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0 })}
                 />
               </Field>
             </div>
@@ -2452,8 +2469,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   min="15"
                   max="180"
                   required
-                  value={classForm.durationMin}
-                  onChange={(e) => setClassForm({ ...classForm, durationMin: parseInt(e.target.value) || 60 })}
+                  placeholder="60"
+                  value={classForm.durationMin === 0 ? '' : classForm.durationMin}
+                  onChange={(e) => setClassForm({ ...classForm, durationMin: e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0 })}
                 />
               </Field>
               <Field label="Mô Tả Lớp">
@@ -2550,8 +2568,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   min="5"
                   max="100"
                   required
-                  value={scheduleForm.capacity}
-                  onChange={(e) => setScheduleForm({ ...scheduleForm, capacity: parseInt(e.target.value) || 20 })}
+                  placeholder="20"
+                  value={scheduleForm.capacity === 0 ? '' : scheduleForm.capacity}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, capacity: e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0 })}
                 />
               </Field>
             </div>

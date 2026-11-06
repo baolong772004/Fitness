@@ -169,7 +169,7 @@ export class StaffController {
    */
   static async manualCheckIn(req: StaffShiftRequest, res: Response) {
     try {
-      const { memberId, notes } = req.body;
+      const { memberId, notes, overrideAntiPassback } = req.body;
       const staffId = req.user!.userId;
       const shiftId = req.shift?.id;
 
@@ -184,7 +184,8 @@ export class StaffController {
         memberId: Number(memberId),
         staffId,
         shiftId,
-        notes
+        notes,
+        overrideAntiPassback: Boolean(overrideAntiPassback)
       });
 
       return res.status(200).json(result);

@@ -382,26 +382,50 @@ export function CoachHomeView() {
               )}
             </View>
 
-            {/* Nút hành động nổi bật: TẠO QR ĐIỂM DANH */}
+            {/* Nút hành động nổi bật: KẾT THÚC BUỔI TẬP (khi đang tập) hoặc TẠO QR ĐIỂM DANH */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 }}>
-              <Pressable
-                onPress={() => openPtQr(nextSession)}
-                style={{
-                  flex: 1,
-                  backgroundColor: '#fff',
-                  borderRadius: 14,
-                  paddingVertical: 12,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexDirection: 'row',
-                  gap: 8,
-                }}
-              >
-                <Ionicons name="qr-code" size={18} color={aura.darkCoffee} />
-                <Text style={{ color: aura.darkCoffee, fontSize: 13, fontWeight: '900' }}>
-                  TẠO QR ĐIỂM DANH
-                </Text>
-              </Pressable>
+              {nextSession.status === 'IN_PROGRESS' ? (
+                <Pressable
+                  onPress={() => {
+                    setFinishBooking(nextSession);
+                    setFinishModalVisible(true);
+                  }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#2E7D32',
+                    borderRadius: 14,
+                    paddingVertical: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'row',
+                    gap: 8,
+                  }}
+                >
+                  <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '900' }}>
+                    KẾT THÚC BUỔI TẬP
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => openPtQr(nextSession)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#fff',
+                    borderRadius: 14,
+                    paddingVertical: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'row',
+                    gap: 8,
+                  }}
+                >
+                  <Ionicons name="qr-code" size={18} color={aura.darkCoffee} />
+                  <Text style={{ color: aura.darkCoffee, fontSize: 13, fontWeight: '900' }}>
+                    TẠO QR ĐIỂM DANH
+                  </Text>
+                </Pressable>
+              )}
 
               <Pressable
                 onPress={() => router.push({ pathname: '/pt-chat', params: { memberId: String(nextSession.memberId) } })}
@@ -544,6 +568,27 @@ export function CoachHomeView() {
 
                   {/* Nút thao tác của từng ca */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', borderTopWidth: 1, borderColor: '#F0E8DF', paddingTop: 10 }}>
+                    {b.status === 'IN_PROGRESS' && (
+                      <Pressable
+                        onPress={() => {
+                          setFinishBooking(b);
+                          setFinishModalVisible(true);
+                        }}
+                        style={{
+                          backgroundColor: '#2E7D32',
+                          borderRadius: 10,
+                          paddingVertical: 7,
+                          paddingHorizontal: 12,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                        }}
+                      >
+                        <Ionicons name="checkmark-circle-outline" size={14} color="#fff" />
+                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Kết thúc buổi</Text>
+                      </Pressable>
+                    )}
+
                     {canQr && (
                       <Pressable
                         onPress={() => openPtQr(b)}

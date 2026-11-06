@@ -2,7 +2,10 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { createUserNotification } from './notification.service.js';
-import { grantPtCredit } from './ptWallet.service.js';
+import { grantPtCredit, releasePtCredit } from './ptWallet.service.js';
+import { closePtChatRoom, emitCoachScheduleChanged } from '../sockets/ptChat.socket.js';
+import { lockGymMember } from './gymMembershipLock.service.js';
+import { reconcileGymMembershipStates } from './membership.service.js';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
@@ -251,33 +254,54 @@ export class StaffService {
     });
 
     if (recentSuccessCheckIn) {
-      const minutesAgo = Math.floor((now.getTime() - recentSuccessCheckIn.checkInTime.getTime()) / 60000);
-      const waitRemaining = antiPassbackWindowMinutes - minutesAgo;
+      // Kiểm tra xem hội viên có vừa được mở bảo lưu SAU thời điểm check-in gần nhất không
+      const memberMemberships = await prisma.membership.findMany({
+        where: { userId: member.id },
+        select: { id: true }
+      });
+      const mIds = memberMemberships.map((m) => m.id);
 
-      // Ghi nhận lần vi phạm Anti-Passback
-      await prisma.checkIn.create({
-        data: {
-          memberId: member.id,
-          staffId,
-          shiftId,
-          method: 'QR_CODE',
-          status: 'FAILED',
-          rejectReason: `Cảnh báo Anti-Passback: Khách vừa check-in lúc ${recentSuccessCheckIn.checkInTime.toLocaleTimeString('vi-VN')} (cách đây ${minutesAgo} phút)`
+      const recentUnfreezeLog = await prisma.actionLog.findFirst({
+        where: {
+          action: 'MEMBERSHIP_UNFREEZE_BY_STAFF',
+          createdAt: { gt: recentSuccessCheckIn.checkInTime },
+          OR: [
+            { details: { contains: `"memberId":${member.id}` } },
+            ...mIds.map((id) => ({ details: { contains: `"membershipId":${id}` } }))
+          ]
         }
       });
 
-      return {
-        success: false,
-        status: 'ANTI_PASSBACK',
-        color: 'RED',
-        message: `CẢNH BÁO ANTI-PASSBACK: Thẻ/Mã đã được check-in lúc ${recentSuccessCheckIn.checkInTime.toLocaleTimeString('vi-VN')} (cách đây ${minutesAgo} phút). Vui lòng đợi ${waitRemaining} phút nữa hoặc xác minh khuôn mặt.`,
-        data: {
-          member,
-          recentCheckInTime: recentSuccessCheckIn.checkInTime,
-          minutesAgo,
-          waitRemaining
-        }
-      };
+      // Nếu không có sự kiện mở bảo lưu sau lần check-in thì mới áp dụng chặn Anti-Passback
+      if (!recentUnfreezeLog) {
+        const minutesAgo = Math.floor((now.getTime() - recentSuccessCheckIn.checkInTime.getTime()) / 60000);
+        const waitRemaining = antiPassbackWindowMinutes - minutesAgo;
+
+        // Ghi nhận lần vi phạm Anti-Passback
+        await prisma.checkIn.create({
+          data: {
+            memberId: member.id,
+            staffId,
+            shiftId,
+            method: 'QR_CODE',
+            status: 'FAILED',
+            rejectReason: `Cảnh báo Anti-Passback: Khách vừa check-in lúc ${recentSuccessCheckIn.checkInTime.toLocaleTimeString('vi-VN')} (cách đây ${minutesAgo} phút)`
+          }
+        });
+
+        return {
+          success: false,
+          status: 'ANTI_PASSBACK',
+          color: 'RED',
+          message: `CẢNH BÁO ANTI-PASSBACK: Thẻ/Mã đã được check-in lúc ${recentSuccessCheckIn.checkInTime.toLocaleTimeString('vi-VN')} (cách đây ${minutesAgo} phút). Vui lòng đợi ${waitRemaining} phút nữa hoặc xác minh khuôn mặt.`,
+          data: {
+            member,
+            recentCheckInTime: recentSuccessCheckIn.checkInTime,
+            minutesAgo,
+            waitRemaining
+          }
+        };
+      }
     }
 
     // 4. Soát gói Gym Access còn hạn
@@ -317,6 +341,14 @@ export class StaffService {
           }
         });
 
+        // Bắn thông báo Push riêng biệt cho trường hợp FROZEN
+        createUserNotification({
+          userId: member.id,
+          title: 'Điểm danh từ chối - Gói đang bảo lưu',
+          message: `Lượt quét mã QR lúc ${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} bị từ chối do gói [${frozenMembership.package.name}] đang trong thời gian BẢO LƯU (đến ngày ${frozenMembership.endDate.toLocaleDateString('vi-VN')}). Vui lòng liên hệ quầy lễ tân để mở lại gói trước khi vào phòng tập!`,
+        }).catch((e) => console.error('Lỗi gửi push cho user:', e));
+
+        const remainingFrozenDays = Math.max(0, Math.ceil((frozenMembership.endDate.getTime() - now.getTime()) / 86400000));
         return {
           success: false,
           status: 'FROZEN',
@@ -324,9 +356,17 @@ export class StaffService {
           message: `Gói [${frozenMembership.package.name}] đang trong thời gian BẢO LƯU đến ngày ${frozenMembership.endDate.toLocaleDateString('vi-VN')}. Từ chối vào cổng!`,
           data: {
             member,
-            frozenMembership: {
+            membership: {
               packageName: frozenMembership.package.name,
-              endDate: frozenMembership.endDate
+              endDate: frozenMembership.endDate,
+              remainingDays: remainingFrozenDays,
+              status: 'FROZEN'
+            },
+            frozenMembership: {
+              id: frozenMembership.id,
+              packageName: frozenMembership.package.name,
+              endDate: frozenMembership.endDate,
+              remainingDays: remainingFrozenDays
             },
             suggestion: 'Hội viên cần mở lại gói bảo lưu tại quầy lễ tân nếu muốn tập luyện.'
           }
@@ -442,6 +482,13 @@ export class StaffService {
       Math.ceil((activeMembership.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     );
 
+    // Tự động bắn thông báo Push Notification xác nhận check-in thành công cho Hội viên
+    createUserNotification({
+      userId: member.id,
+      title: 'Điểm danh vào cổng thành công',
+      message: `Chào mừng ${member.fullName}! Bạn đã check-in thành công lúc ${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}. Gói [${activeMembership.package.name}] còn lại ${remainingDays} ngày tập. Chúc bạn có buổi tập tràn đầy năng lượng!`,
+    }).catch((e) => console.error('Lỗi gửi push cho member:', e));
+
     return {
       success: true,
       status: 'SUCCESS',
@@ -512,6 +559,49 @@ export class StaffService {
         m.status === 'FROZEN'
     );
 
+    // Kiểm tra lượt check-in thành công trong vòng 30 phút gần nhất (Anti-Passback)
+    const antiPassbackWindowMinutes = 30;
+    const antiPassbackThreshold = new Date(now.getTime() - antiPassbackWindowMinutes * 60 * 1000);
+    const recentSuccessCheckIn = await prisma.checkIn.findFirst({
+      where: {
+        memberId: member.id,
+        status: 'SUCCESS',
+        checkInTime: { gte: antiPassbackThreshold }
+      },
+      orderBy: { checkInTime: 'desc' }
+    });
+
+    let recentCheckIn = null;
+    if (recentSuccessCheckIn) {
+      // Bỏ qua cảnh báo nếu hội viên vừa được mở bảo lưu SAU lần check-in gần nhất
+      const memberMemberships = await prisma.membership.findMany({
+        where: { userId: member.id },
+        select: { id: true }
+      });
+      const mIds = memberMemberships.map((m) => m.id);
+
+      const recentUnfreezeLog = await prisma.actionLog.findFirst({
+        where: {
+          action: 'MEMBERSHIP_UNFREEZE_BY_STAFF',
+          createdAt: { gt: recentSuccessCheckIn.checkInTime },
+          OR: [
+            { details: { contains: `"memberId":${member.id}` } },
+            ...mIds.map((id) => ({ details: { contains: `"membershipId":${id}` } }))
+          ]
+        }
+      });
+
+      if (!recentUnfreezeLog) {
+        const minutesAgo = Math.floor((now.getTime() - recentSuccessCheckIn.checkInTime.getTime()) / 60000);
+        recentCheckIn = {
+          checkInTime: recentSuccessCheckIn.checkInTime.toISOString(),
+          timeDisplay: recentSuccessCheckIn.checkInTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+          minutesAgo,
+          waitRemaining: Math.max(1, antiPassbackWindowMinutes - minutesAgo)
+        };
+      }
+    }
+
     return {
       member: {
         id: member.id,
@@ -525,6 +615,7 @@ export class StaffService {
       },
       hasActiveGymAccess: !!activeMembership,
       isFrozen: !!frozenMembership,
+      recentCheckIn,
       frozenMembership: frozenMembership
         ? {
             id: frozenMembership.id,
@@ -560,8 +651,9 @@ export class StaffService {
     staffId: number;
     shiftId?: number;
     notes?: string;
+    overrideAntiPassback?: boolean;
   }) {
-    const { memberId, staffId, shiftId, notes } = params;
+    const { memberId, staffId, shiftId, notes, overrideAntiPassback } = params;
 
     const member = await prisma.user.findUnique({
       where: { id: memberId },
@@ -585,11 +677,39 @@ export class StaffService {
       orderBy: { checkInTime: 'desc' }
     });
 
+    let antiPassbackOverrideNote: string | null = null;
     if (recent) {
-      const minutesAgo = Math.floor((now.getTime() - recent.checkInTime.getTime()) / 60000);
-      throw new Error(
-        `Cảnh báo Anti-Passback: Hội viên đã check-in cách đây ${minutesAgo} phút (lúc ${recent.checkInTime.toLocaleTimeString('vi-VN')}).`
-      );
+      // Bỏ qua cảnh báo nếu hội viên vừa được mở bảo lưu SAU lần check-in gần nhất
+      const memberMemberships = await prisma.membership.findMany({
+        where: { userId: member.id },
+        select: { id: true }
+      });
+      const mIds = memberMemberships.map((m) => m.id);
+
+      const recentUnfreezeLog = await prisma.actionLog.findFirst({
+        where: {
+          action: 'MEMBERSHIP_UNFREEZE_BY_STAFF',
+          createdAt: { gt: recent.checkInTime },
+          OR: [
+            { details: { contains: `"memberId":${member.id}` } },
+            ...mIds.map((id) => ({ details: { contains: `"membershipId":${id}` } }))
+          ]
+        }
+      });
+
+      if (!recentUnfreezeLog) {
+        const minutesAgo = Math.floor((now.getTime() - recent.checkInTime.getTime()) / 60000);
+        const waitRemaining = Math.max(1, 30 - minutesAgo);
+
+        // Nếu không có xác nhận ghi đè từ lễ tân -> Chặn Anti-Passback và yêu cầu xác nhận
+        if (!overrideAntiPassback) {
+          throw new Error(
+            `Cảnh báo Anti-Passback: Hội viên đã check-in lúc ${recent.checkInTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} (cách đây ${minutesAgo} phút). Vui lòng đợi ${waitRemaining} phút nữa hoặc tích chọn 'Ghi đè Anti-Passback' sau khi đối chiếu ảnh chân dung!`
+          );
+        }
+
+        antiPassbackOverrideNote = `[Ghi đè Anti-Passback: Khách vừa check-in ${minutesAgo} phút trước lúc ${recent.checkInTime.toLocaleTimeString('vi-VN')}, lễ tân xác thực ảnh chân dung]`;
+      }
     }
 
     // Kiểm tra gói
@@ -625,6 +745,14 @@ export class StaffService {
             rejectReason: `Gói [${frozenMembership.package.name}] đang trong thời gian BẢO LƯU.`
           }
         });
+
+        // Bắn thông báo Push riêng biệt cho trường hợp FROZEN khi check-in thủ công
+        createUserNotification({
+          userId: member.id,
+          title: 'Điểm danh từ chối - Gói đang bảo lưu',
+          message: `Lượt check-in tại quầy lúc ${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} bị từ chối do gói [${frozenMembership.package.name}] đang BẢO LƯU (đến ngày ${frozenMembership.endDate.toLocaleDateString('vi-VN')}). Lễ tân cần thao tác Mở lại gói bảo lưu trước khi check-in!`,
+        }).catch((e) => console.error('Lỗi gửi push cho user:', e));
+
         throw new Error(`Gói tập [${frozenMembership.package.name}] đang BẢO LƯU đến ngày ${frozenMembership.endDate.toLocaleDateString('vi-VN')}. Vui lòng kích hoạt/mở lại gói bảo lưu trước khi check-in.`);
       }
 
@@ -682,15 +810,27 @@ export class StaffService {
         shiftId,
         method: 'MANUAL',
         status: 'SUCCESS',
-        rejectReason: notes ? `Ghi chú: ${notes}` : null
+        rejectReason: [notes ? `Ghi chú: ${notes}` : null, antiPassbackOverrideNote].filter(Boolean).join(' | ') || null
       }
     });
+
+    const manualRemainingDays = Math.max(
+      0,
+      Math.ceil((activeMembership.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    );
+
+    // Bắn thông báo xác nhận Check-in thủ công cho Hội viên
+    createUserNotification({
+      userId: member.id,
+      title: 'Điểm danh vào cổng thành công',
+      message: `Quầy lễ tân đã xác nhận check-in thủ công cho bạn lúc ${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}. Gói [${activeMembership.package.name}] còn lại ${manualRemainingDays} ngày tập. Chúc bạn tập luyện vui vẻ!`,
+    }).catch((e) => console.error('Lỗi gửi push cho member:', e));
 
     return {
       success: true,
       status: 'SUCCESS',
       color: 'GREEN',
-      message: `Xác nhận vào thành công cho hội viên ${member.fullName}!`,
+      message: `Xác nhận vào thành công cho hội viên ${member.fullName}!${antiPassbackOverrideNote ? ' (Đã xác minh đối chiếu ảnh chân dung)' : ''}`,
       data: {
         checkInId: checkInRecord.id,
         member,
@@ -824,49 +964,136 @@ export class StaffService {
       });
     }
 
-    // 4. Kích hoạt Membership ngay lập tức
-    const startDate = new Date();
-    const endDate = new Date(startDate.getTime() + pkg.durationDays * 86400000);
-
-    // 5. Ghi nhận giao dịch Payment
+    // 4. Ghi nhận giao dịch Payment & Kích hoạt/Xếp hàng Membership
     const generatedOrderCode = BigInt(Date.now() + Math.floor(Math.random() * 1000));
     const transactionNo = paymentMethod === 'POS'
       ? traceRefNo!.trim()
       : `CASH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
 
-    const { membership, payment } = await prisma.$transaction(async tx => {
-      const membership = await tx.membership.create({ data: {
-        userId: member!.id, packageId: pkg.id, startDate, endDate,
-        remainingSessions: null, status: 'ACTIVE', coachId: consultantStaffId || null,
-      } });
-      const payment = await tx.payment.create({ data: {
-        userId: member!.id, membershipId: membership.id, amount: pkg.price,
-        method: paymentMethod === 'CASH' ? 'CASH' : 'POS_CARD', status: 'COMPLETED',
-        orderCode: generatedOrderCode, transactionNo, staffId, shiftId,
-        consultantId: consultantStaffId || null,
-        traceRefNo: paymentMethod === 'POS' ? traceRefNo!.trim() : null,
-        cashReceived: cashReceived ? cashReceived : null,
-        cashChange: cashChange > 0 ? cashChange : null,
-        note: `Đăng ký gói Walk-in tại quầy [${pkg.name}]`,
-      } });
-      if (pkg.trialPtSessions > 0) await grantPtCredit(tx, { memberId: member!.id,
-        level: 'TRIAL', source: 'MEMBERSHIP_GIFT', count: pkg.trialPtSessions,
-        membershipId: membership.id });
-      if (paymentMethod === 'CASH') await tx.staffShift.update({ where: { id: shiftId },
-        data: { systemCashAmount: { increment: pkg.price } } });
-      await tx.actionLog.create({ data: {
-        userId: staffId, action: 'WALK_IN_REGISTRATION',
-        details: `Lễ tân ID ${staffId} đăng ký gói [${pkg.name}] cho khách Walk-in ${member!.fullName} (${member!.phone}). Hình thức: ${paymentMethod}. Số tiền: ${packagePrice.toLocaleString('vi-VN')} đ.`,
-      } });
-      return { membership, payment };
+    const { membership, payment, isQueued } = await prisma.$transaction(async tx => {
+      // 4a. Khóa an toàn đồng thời cho user
+      await lockGymMember(tx, member!.id);
+
+      // 4b. Đồng bộ trạng thái các gói tập gym hiện tại
+      const now = new Date();
+      await reconcileGymMembershipStates(tx, member!.id, now);
+
+      // 4c. Tính toán xếp hàng PENDING_ACTIVATION nếu khách đã có gói active hoặc bảo lưu
+      const isGym = pkg.type === 'MEMBERSHIP';
+      let startDate = now;
+      let status = 'ACTIVE';
+      let activationOrder: number | null = null;
+      let activatedAt: Date | null = now;
+      let isQueued = false;
+
+      if (isGym) {
+        const lastOrder = await tx.membership.aggregate({
+          where: { userId: member!.id, isGymMembership: true },
+          _max: { activationOrder: true },
+        });
+        activationOrder = (lastOrder._max.activationOrder ?? 0) + 1;
+
+        const existingGymMemberships = await tx.membership.findMany({
+          where: {
+            userId: member!.id,
+            package: { type: 'MEMBERSHIP' },
+            status: { in: ['ACTIVE', 'PENDING_ACTIVATION', 'FROZEN'] },
+            endDate: { gte: now },
+          },
+          select: { endDate: true },
+        });
+
+        const latestEnd = existingGymMemberships.reduce((latest, item) => (item.endDate > latest ? item.endDate : latest), now);
+        if (latestEnd > now) {
+          startDate = new Date(latestEnd.getTime() + 1);
+          status = 'PENDING_ACTIVATION';
+          activatedAt = null;
+          isQueued = true;
+        }
+      }
+
+      const endDate = new Date(startDate.getTime() + pkg.durationDays * 86400000);
+
+      // 4d. Tạo bản ghi Membership
+      const membership = await tx.membership.create({
+        data: {
+          userId: member!.id,
+          packageId: pkg.id,
+          startDate,
+          endDate,
+          remainingSessions: null,
+          status,
+          isGymMembership: isGym,
+          activationOrder,
+          activatedAt,
+          coachId: consultantStaffId || null,
+        }
+      });
+
+      // 4e. Tạo bản ghi Payment
+      const payment = await tx.payment.create({
+        data: {
+          userId: member!.id,
+          membershipId: membership.id,
+          amount: pkg.price,
+          method: paymentMethod === 'CASH' ? 'CASH' : 'POS_CARD',
+          status: 'COMPLETED',
+          orderCode: generatedOrderCode,
+          transactionNo,
+          staffId,
+          shiftId,
+          consultantId: consultantStaffId || null,
+          traceRefNo: paymentMethod === 'POS' ? traceRefNo!.trim() : null,
+          cashReceived: cashReceived ? cashReceived : null,
+          cashChange: cashChange > 0 ? cashChange : null,
+          note: `Đăng ký gói Walk-in tại quầy [${pkg.name}]`,
+        }
+      });
+
+      // 4f. Tặng Trial PT sessions nếu gói có quyền lợi
+      if (pkg.trialPtSessions > 0) {
+        await grantPtCredit(tx, {
+          memberId: member!.id,
+          level: 'TRIAL',
+          source: 'MEMBERSHIP_GIFT',
+          count: pkg.trialPtSessions,
+          membershipId: membership.id,
+          startAt: startDate,
+          endAt: endDate,
+          activatedAt: status === 'ACTIVE' ? now : null
+        });
+      }
+
+      // 4g. Ghi nhận tiền mặt vào quỹ ca
+      if (paymentMethod === 'CASH') {
+        await tx.staffShift.update({
+          where: { id: shiftId },
+          data: { systemCashAmount: { increment: pkg.price } }
+        });
+      }
+
+      // 4h. Ghi action log
+      await tx.actionLog.create({
+        data: {
+          userId: staffId,
+          action: 'WALK_IN_REGISTRATION',
+          details: `Lễ tân ID ${staffId} đăng ký gói [${pkg.name}] cho khách Walk-in ${member!.fullName} (${member!.phone}). Trạng thái: ${status}${isQueued ? ' (Xếp hàng chờ kích hoạt)' : ''}. Hình thức: ${paymentMethod}. Số tiền: ${packagePrice.toLocaleString('vi-VN')} đ.`,
+        }
+      });
+
+      return { membership, payment, isQueued };
     });
 
-    // 8. Sinh link SMS hướng dẫn tải App
+    // 5. Sinh link SMS hướng dẫn tải App
     const smsLink = `https://gymfitness.app/download?phone=${encodeURIComponent(normalizedPhone)}&welcome=1`;
+
+    const successMessage = isQueued
+      ? `Đăng ký gói Walk-in [${pkg.name}] thành công! Do khách đã có gói tập đang hoạt động, gói mới được xếp hàng chờ kích hoạt từ ngày ${new Date(membership.startDate).toLocaleDateString('vi-VN')}.`
+      : `Kích hoạt gói Walk-in [${pkg.name}] thành công!`;
 
     return {
       success: true,
-      message: 'Kích hoạt gói Walk-in thành công!',
+      message: successMessage,
       data: {
         member: {
           id: member.id,
@@ -877,9 +1104,10 @@ export class StaffService {
         membership: {
           id: membership.id,
           packageName: pkg.name,
-          startDate,
-          endDate,
-          status: membership.status
+          startDate: membership.startDate,
+          endDate: membership.endDate,
+          status: membership.status,
+          isQueued
         },
         payment: {
           id: payment.id,
@@ -996,9 +1224,86 @@ export class StaffService {
 
     const now = new Date();
 
-    // Cập nhật Payment và kích hoạt Membership
-    const updatedPayment = await prisma.$transaction(async (tx) => {
-      // 1. Cập nhật Payment
+    // Cập nhật Payment và kích hoạt / xếp hàng Membership
+    const { updatedPayment, isQueued, membershipStartDate } = await prisma.$transaction(async (tx) => {
+      // 1. Khóa an toàn đồng thời cho user
+      await lockGymMember(tx, payment.userId);
+
+      // 2. Đồng bộ trạng thái các gói tập gym hiện tại
+      const now = new Date();
+      await reconcileGymMembershipStates(tx, payment.userId, now);
+
+      let isQueued = false;
+      let membershipStartDate = now;
+
+      // 3. Kích hoạt hoặc Xếp hàng Membership PENDING_ACTIVATION
+      if (payment.membershipId && payment.membership) {
+        const pkg = payment.membership.package;
+        const isGym = pkg?.type === 'MEMBERSHIP';
+        const durationDays = pkg?.durationDays || 30;
+
+        let startDate = now;
+        let status = 'ACTIVE';
+        let activationOrder: number | null = null;
+        let activatedAt: Date | null = now;
+
+        if (isGym) {
+          const lastOrder = await tx.membership.aggregate({
+            where: { userId: payment.userId, isGymMembership: true },
+            _max: { activationOrder: true },
+          });
+          activationOrder = (lastOrder._max.activationOrder ?? 0) + 1;
+
+          const existingGymMemberships = await tx.membership.findMany({
+            where: {
+              userId: payment.userId,
+              id: { not: payment.membershipId },
+              package: { type: 'MEMBERSHIP' },
+              status: { in: ['ACTIVE', 'PENDING_ACTIVATION', 'FROZEN'] },
+              endDate: { gte: now },
+            },
+            select: { endDate: true },
+          });
+
+          const latestEnd = existingGymMemberships.reduce((latest, item) => (item.endDate > latest ? item.endDate : latest), now);
+          if (latestEnd > now) {
+            startDate = new Date(latestEnd.getTime() + 1);
+            status = 'PENDING_ACTIVATION';
+            activatedAt = null;
+            isQueued = true;
+          }
+        }
+
+        const endDate = new Date(startDate.getTime() + durationDays * 86400000);
+        membershipStartDate = startDate;
+
+        await tx.membership.update({
+          where: { id: payment.membershipId },
+          data: {
+            status,
+            startDate,
+            endDate,
+            isGymMembership: isGym,
+            activationOrder,
+            activatedAt,
+          }
+        });
+
+        if (pkg && pkg.trialPtSessions > 0) {
+          await grantPtCredit(tx, {
+            memberId: payment.userId,
+            level: 'TRIAL',
+            source: 'MEMBERSHIP_GIFT',
+            count: pkg.trialPtSessions,
+            membershipId: payment.membershipId,
+            startAt: startDate,
+            endAt: endDate,
+            activatedAt: status === 'ACTIVE' ? now : null
+          });
+        }
+      }
+
+      // 4. Cập nhật Payment
       const p = await tx.payment.update({
         where: { id: payment.id },
         data: {
@@ -1016,28 +1321,7 @@ export class StaffService {
         }
       });
 
-      // 2. Kích hoạt Membership
-      if (payment.membershipId && payment.membership) {
-        const durationDays = payment.membership.package?.durationDays || 30;
-        const startDate = now;
-        const endDate = new Date(now.getTime() + durationDays * 86400000);
-
-        await tx.membership.update({
-          where: { id: payment.membershipId },
-          data: {
-            status: 'ACTIVE',
-            startDate,
-            endDate
-          }
-        });
-        if (payment.membership.package.trialPtSessions > 0) {
-          await grantPtCredit(tx, { memberId: payment.userId, level: 'TRIAL',
-            source: 'MEMBERSHIP_GIFT', count: payment.membership.package.trialPtSessions,
-            membershipId: payment.membershipId });
-        }
-      }
-
-      // 3. Nếu là Tiền mặt: ghi nhận vào quỹ ca trực
+      // 5. Nếu là Tiền mặt: ghi nhận vào quỹ ca trực
       if (paymentMethod === 'CASH') {
         await tx.staffShift.update({
           where: { id: shiftId },
@@ -1047,19 +1331,35 @@ export class StaffService {
         });
       }
 
-      return p;
+      // 6. Ghi action log
+      await tx.actionLog.create({
+        data: {
+          userId: staffId,
+          action: 'OFFLINE_PAYMENT_PROCESSED',
+          details: `Lễ tân ID ${staffId} thu tiền hóa đơn ID ${payment.id} cho khách ${payment.user.fullName} (${payment.user.phone}). Hình thức: ${paymentMethod}. Số tiền: ${amount.toLocaleString('vi-VN')} đ.${isQueued ? ' Gói xếp hàng PENDING_ACTIVATION.' : ''}`
+        }
+      });
+
+      return { updatedPayment: p, isQueued, membershipStartDate };
     });
 
     // Bắn thông báo cho Member
+    const pkgName = payment.membership?.package?.name || 'Tập gym';
+    const notifyMessage = isQueued
+      ? `Hóa đơn ${amount.toLocaleString('vi-VN')} đ cho gói [${pkgName}] đã được thanh toán tại quầy! Do bạn đang có gói tập hoạt động, gói mới đã được xếp hàng chờ kích hoạt từ ngày ${membershipStartDate.toLocaleDateString('vi-VN')}.`
+      : `Hóa đơn ${amount.toLocaleString('vi-VN')} đ cho gói [${pkgName}] đã được thanh toán thành công tại quầy lễ tân!`;
+
     createUserNotification({
       userId: payment.userId,
       title: 'Thanh toán tại quầy thành công',
-      message: `Hóa đơn ${amount.toLocaleString('vi-VN')} đ cho gói [${payment.membership?.package?.name || 'Tập gym'}] đã được thanh toán thành công tại quầy lễ tân!`
+      message: notifyMessage
     }).catch((e) => console.error('Lỗi gửi push cho user:', e));
 
     return {
       success: true,
-      message: 'Thanh toán thành công và gói tập đã được kích hoạt trên App!',
+      message: isQueued
+        ? `Thanh toán thành công! Khách đã có gói hoạt động, gói mới [${pkgName}] được xếp hàng chờ kích hoạt từ ngày ${membershipStartDate.toLocaleDateString('vi-VN')}.`
+        : 'Thanh toán thành công và gói tập đã được kích hoạt trên App!',
       data: {
         paymentId: updatedPayment.id,
         amount,
@@ -1067,7 +1367,8 @@ export class StaffService {
         cashReceived: actualCashReceived,
         cashChange: change,
         traceRefNo: updatedPayment.traceRefNo,
-        transactionNo: updatedPayment.transactionNo
+        transactionNo: updatedPayment.transactionNo,
+        isQueued
       }
     };
   }
@@ -1111,45 +1412,191 @@ export class StaffService {
     const currentEndDate = new Date(membership.endDate);
     const newEndDate = new Date(currentEndDate.getTime() + freezeDays * 86400000);
     const now = new Date();
+    const freezeUntil = new Date(now.getTime() + freezeDays * 86400000);
 
-    const updated = await prisma.membership.update({
-      where: { id: membership.id },
-      data: {
-        status: 'FROZEN',
-        endDate: newEndDate
+    // Dùng Transaction để đảm bảo tính toàn vẹn: Cập nhật FROZEN + Tự động hoàn hủy các buổi PT & lớp nhóm trong kỳ bảo lưu
+    const { updated, cancelledPtBookings, cancelledClassBookings } = await prisma.$transaction(async (tx) => {
+      // 1. Cập nhật trạng thái Membership sang FROZEN và lùi ngày kết thúc
+      const updated = await tx.membership.update({
+        where: { id: membership.id },
+        data: {
+          status: 'FROZEN',
+          endDate: newEndDate,
+        },
+      });
+
+      // 2. Quét các buổi PT sắp tới của hội viên rơi vào thời gian bảo lưu (từ now đến freezeUntil)
+      const upcomingPtBookings = await tx.booking.findMany({
+        where: {
+          memberId: membership.userId,
+          type: 'PT',
+          status: { in: ['CONFIRMED', 'UPCOMING', 'PENDING'] },
+          startTime: { gte: now, lte: freezeUntil },
+        },
+        include: {
+          ptCreditAllocation: true,
+        },
+      });
+
+      // Hủy từng buổi PT và giải phóng Credit giữ chỗ (hoàn lại cho ví hội viên)
+      for (const pt of upcomingPtBookings) {
+        await tx.booking.update({
+          where: { id: pt.id },
+          data: {
+            status: 'CANCELLED',
+            cancelledBy: 'SYSTEM_FREEZE',
+            absenceReason: `Hệ thống tự động hủy do hội viên bảo lưu gói tập [${membership.package.name}] (${freezeDays} ngày)`,
+            sessionQrToken: null,
+          },
+        });
+
+        // Nếu buổi PT này giữ chỗ Credit từ ví (Wallet), giải phóng credit về lại ví
+        if (pt.ptCreditAllocation?.status === 'HELD') {
+          await releasePtCredit(tx, pt.id, {
+            kind: 'PROTECTED_CANCEL',
+            actorId: staffId,
+            note: `Hội viên bảo lưu gói tập [${membership.package.name}] ${freezeDays} ngày`,
+          });
+        }
       }
+
+      // 3. Quét các buổi Lớp học nhóm (Group Class) sắp tới của hội viên rơi vào thời gian bảo lưu
+      const upcomingClassBookings = await tx.groupClassBooking.findMany({
+        where: {
+          userId: membership.userId,
+          status: 'BOOKED',
+          schedule: {
+            startTime: { gte: now, lte: freezeUntil },
+          },
+        },
+        include: {
+          schedule: {
+            include: { groupClass: true },
+          },
+        },
+      });
+
+      // Hủy từng lượt đăng ký lớp nhóm và hoàn trả slot cho lịch học
+      for (const cb of upcomingClassBookings) {
+        await tx.groupClassBooking.update({
+          where: { id: cb.id },
+          data: { status: 'CANCELLED' },
+        });
+
+        await tx.groupClassSchedule.update({
+          where: { id: cb.scheduleId },
+          data: {
+            bookedCount: { decrement: 1 },
+            status: 'OPEN',
+          },
+        });
+      }
+
+      // 4. Lùi ngày startDate và endDate của các gói PENDING_ACTIVATION đang xếp hàng phía sau
+      const queuedMemberships = await tx.membership.findMany({
+        where: {
+          userId: membership.userId,
+          id: { not: membership.id },
+          package: { type: 'MEMBERSHIP' },
+          status: 'PENDING_ACTIVATION',
+        },
+        select: { id: true, startDate: true, endDate: true },
+      });
+      for (const q of queuedMemberships) {
+        await tx.membership.update({
+          where: { id: q.id },
+          data: {
+            startDate: new Date(q.startDate.getTime() + freezeDays * 86400000),
+            endDate: new Date(q.endDate.getTime() + freezeDays * 86400000),
+          },
+        });
+      }
+
+      // 5. Cập nhật lùi hạn endAt của các lô PT Credit gắn liền với gói bảo lưu
+      const ptBatches = await tx.ptCreditBatch.findMany({
+        where: {
+          membershipId: membership.id,
+          endAt: { not: null },
+        },
+        select: { id: true, endAt: true },
+      });
+      for (const batch of ptBatches) {
+        if (batch.endAt) {
+          await tx.ptCreditBatch.update({
+            where: { id: batch.id },
+            data: {
+              endAt: new Date(batch.endAt.getTime() + freezeDays * 86400000),
+            },
+          });
+        }
+      }
+
+      // 6. Ghi log kiểm toán dạng JSON có cấu trúc để phục vụ tự động unfreeze và truy vết
+      const freezePayload = {
+        type: 'FREEZE',
+        membershipId: membership.id,
+        userId: membership.userId,
+        freezeDays,
+        frozenAt: now.toISOString(),
+        originalEndDate: currentEndDate.toISOString(),
+        projectedEndDate: newEndDate.toISOString(),
+        cancelledPtBookingsCount: upcomingPtBookings.length,
+        cancelledPtBookingIds: upcomingPtBookings.map((b) => b.id),
+        cancelledClassBookingsCount: upcomingClassBookings.length,
+        cancelledClassBookingIds: upcomingClassBookings.map((b) => b.id),
+        reason,
+      };
+
+      await tx.actionLog.create({
+        data: {
+          userId: staffId,
+          action: 'MEMBERSHIP_FREEZE_BY_STAFF',
+          details: JSON.stringify(freezePayload),
+        },
+      });
+
+      return {
+        updated,
+        cancelledPtBookings: upcomingPtBookings,
+        cancelledClassBookings: upcomingClassBookings,
+      };
     });
 
-    // Ghi log kiểm toán dạng JSON có cấu trúc để phục vụ tự động unfreeze và hoàn ngày khi mở sớm
-    const freezePayload = {
-      type: 'FREEZE',
-      membershipId: membership.id,
-      userId: membership.userId,
-      freezeDays,
-      frozenAt: now.toISOString(),
-      originalEndDate: currentEndDate.toISOString(),
-      projectedEndDate: newEndDate.toISOString(),
-      reason
-    };
-
-    await prisma.actionLog.create({
-      data: {
-        userId: staffId,
-        action: 'MEMBERSHIP_FREEZE_BY_STAFF',
-        details: JSON.stringify(freezePayload)
+    // 5. Bên ngoài transaction: Bắn socket cập nhật lịch cho HLV và gửi push notification
+    for (const pt of cancelledPtBookings) {
+      if (pt.coachId) {
+        closePtChatRoom(pt.id);
+        emitCoachScheduleChanged(pt.coachId);
+        createUserNotification({
+          userId: pt.coachId,
+          title: 'Lịch PT đã hủy (Hội viên bảo lưu)',
+          message: `Buổi PT lúc ${pt.startTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ngày ${pt.startTime.toLocaleDateString('vi-VN')} với hội viên ${membership.user.fullName} đã tự động hủy do hội viên bảo lưu gói tập.`,
+        }).catch((e) => console.error('Lỗi gửi push cho Coach:', e));
       }
-    });
+    }
 
-    // Bắn thông báo cho Member
+    // Tạo thông báo chi tiết cho Member
+    let cancellationNotice = '';
+    if (cancelledPtBookings.length > 0 || cancelledClassBookings.length > 0) {
+      const parts: string[] = [];
+      if (cancelledPtBookings.length > 0) parts.push(`hoàn lại ${cancelledPtBookings.length} ca PT`);
+      if (cancelledClassBookings.length > 0) parts.push(`hủy ${cancelledClassBookings.length} lớp học nhóm`);
+      cancellationNotice = ` Hệ thống đã tự động ${parts.join(' và ')} trong thời gian bảo lưu để tránh trừ lượt vắng.`;
+    }
+
     createUserNotification({
       userId: membership.userId,
       title: 'Gói tập đã được bảo lưu thành công',
-      message: `Quầy lễ tân đã hỗ trợ bảo lưu ${freezeDays} ngày cho gói [${membership.package.name}] của bạn. Trạng thái hiện tại: Đang bảo lưu (FROZEN). Hạn sử dụng dự kiến đến ngày ${newEndDate.toLocaleDateString('vi-VN')}.`
+      message: `Quầy lễ tân đã hỗ trợ bảo lưu ${freezeDays} ngày cho gói [${membership.package.name}] của bạn. Trạng thái hiện tại: Đang bảo lưu (FROZEN). Hạn sử dụng dự kiến đến ngày ${newEndDate.toLocaleDateString('vi-VN')}.${cancellationNotice}`,
     }).catch((e) => console.error('Lỗi gửi push cho user:', e));
 
     return {
       success: true,
-      message: `Đã chuyển trạng thái sang BẢO LƯU thành công cho hội viên ${membership.user.fullName} (${freezeDays} ngày)!`,
+      message: `Đã chuyển trạng thái sang BẢO LƯU thành công cho hội viên ${membership.user.fullName} (${freezeDays} ngày)!${
+        cancelledPtBookings.length > 0 || cancelledClassBookings.length > 0
+          ? ` (Đã tự động hoàn trả ${cancelledPtBookings.length} ca PT & ${cancelledClassBookings.length} lớp nhóm trong kỳ bảo lưu)`
+          : ''
+      }`,
       data: {
         membershipId: updated.id,
         packageName: membership.package.name,
@@ -1157,8 +1604,10 @@ export class StaffService {
         newEndDate: updated.endDate,
         freezeDays,
         status: 'FROZEN',
-        reason
-      }
+        cancelledPtCount: cancelledPtBookings.length,
+        cancelledClassCount: cancelledClassBookings.length,
+        reason,
+      },
     };
   }
 
@@ -1209,22 +1658,23 @@ export class StaffService {
         if (parsed.frozenAt && parsed.freezeDays) {
           const frozenAt = new Date(parsed.frozenAt);
           const now = new Date();
-          // Số ngày thực tế hội viên đã dừng (tính tròn ngày, tối thiểu 1 ngày)
-          actualFrozenDays = Math.max(1, Math.ceil((now.getTime() - frozenAt.getTime()) / 86400000));
           const totalFreezeDays = Number(parsed.freezeDays);
 
-          // Nếu mở sớm trước khi hết hạn bảo lưu: thu hồi số ngày chưa dùng
-          if (actualFrozenDays < totalFreezeDays) {
-            unusedDays = totalFreezeDays - actualFrozenDays;
-            adjustedEndDate = new Date(membership.endDate.getTime() - unusedDays * 86400000);
+          // Tính số ngày lịch thực tế đã trôi qua theo múi giờ Việt Nam (UTC+7)
+          const vnStart = new Date(frozenAt.getTime() + 7 * 3600000).toISOString().slice(0, 10);
+          const vnNow = new Date(now.getTime() + 7 * 3600000).toISOString().slice(0, 10);
+          const calendarDays = Math.max(0, Math.round((Date.parse(vnNow) - Date.parse(vnStart)) / 86400000));
 
-            if (parsed.originalEndDate) {
-              const orig = new Date(parsed.originalEndDate);
-              const minValidEndDate = new Date(orig.getTime() + actualFrozenDays * 86400000);
-              if (adjustedEndDate < minValidEndDate) {
-                adjustedEndDate = minValidEndDate;
-              }
-            }
+          // Số ngày thực tế tính từ 0 (nếu mở trong cùng ngày thì tính 0 ngày, không cộng dôi ngày vào hạn)
+          actualFrozenDays = Math.min(totalFreezeDays, calendarDays);
+          unusedDays = Math.max(0, totalFreezeDays - actualFrozenDays);
+
+          if (parsed.originalEndDate) {
+            const orig = new Date(parsed.originalEndDate);
+            adjustedEndDate = new Date(orig.getTime() + actualFrozenDays * 86400000);
+          } else {
+            // Fallback nếu không có originalEndDate trong log cũ
+            adjustedEndDate = new Date(membership.endDate.getTime() - unusedDays * 86400000);
           }
         }
       } catch (err) {
@@ -1232,38 +1682,88 @@ export class StaffService {
       }
     }
 
-    const updated = await prisma.membership.update({
-      where: { id: membership.id },
-      data: {
-        status: 'ACTIVE',
-        endDate: adjustedEndDate
-      }
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const updated = await tx.membership.update({
+        where: { id: membership.id },
+        data: {
+          status: 'ACTIVE',
+          endDate: adjustedEndDate
+        }
+      });
 
-    await prisma.actionLog.create({
-      data: {
-        userId: staffId,
-        action: 'MEMBERSHIP_UNFREEZE_BY_STAFF',
-        details: JSON.stringify({
-          type: 'UNFREEZE',
-          membershipId: membership.id,
-          actualFrozenDays,
-          unusedDaysRecovered: unusedDays,
-          adjustedEndDate: adjustedEndDate.toISOString(),
-          notes: notes || null
-        })
+      // Nếu mở bảo lưu sớm hơn dự kiến (unusedDays > 0), tịnh tiến sớm lại cho các gói PENDING_ACTIVATION
+      if (unusedDays > 0) {
+        const queuedMemberships = await tx.membership.findMany({
+          where: {
+            userId: membership.userId,
+            id: { not: membership.id },
+            package: { type: 'MEMBERSHIP' },
+            status: 'PENDING_ACTIVATION',
+          },
+          select: { id: true, startDate: true, endDate: true },
+        });
+        for (const q of queuedMemberships) {
+          await tx.membership.update({
+            where: { id: q.id },
+            data: {
+              startDate: new Date(q.startDate.getTime() - unusedDays * 86400000),
+              endDate: new Date(q.endDate.getTime() - unusedDays * 86400000),
+            },
+          });
+        }
+
+        // Tịnh tiến lại endAt cho các lô PT Credit của gói này
+        const ptBatches = await tx.ptCreditBatch.findMany({
+          where: {
+            membershipId: membership.id,
+            endAt: { not: null },
+          },
+          select: { id: true, endAt: true },
+        });
+        for (const batch of ptBatches) {
+          if (batch.endAt) {
+            await tx.ptCreditBatch.update({
+              where: { id: batch.id },
+              data: {
+                endAt: new Date(batch.endAt.getTime() - unusedDays * 86400000),
+              },
+            });
+          }
+        }
       }
+
+      await tx.actionLog.create({
+        data: {
+          userId: staffId,
+          action: 'MEMBERSHIP_UNFREEZE_BY_STAFF',
+          details: JSON.stringify({
+            type: 'UNFREEZE',
+            membershipId: membership.id,
+            memberId: membership.userId,
+            actualFrozenDays,
+            unusedDaysRecovered: unusedDays,
+            adjustedEndDate: adjustedEndDate.toISOString(),
+            notes: notes || null
+          })
+        }
+      });
+
+      return updated;
     });
 
     createUserNotification({
       userId: membership.userId,
       title: 'Gói tập đã được kích hoạt lại',
-      message: `Quầy lễ tân đã mở lại gói tập [${membership.package.name}] của bạn (Thực tế đã bảo lưu ${actualFrozenDays} ngày). Hạn dùng mới: ${adjustedEndDate.toLocaleDateString('vi-VN')}.`
+      message: `Quầy lễ tân đã mở lại gói tập [${membership.package.name}] của bạn${
+        actualFrozenDays > 0 ? ` (Thực tế đã bảo lưu ${actualFrozenDays} ngày)` : ' (Mở lại trong ngày, hạn dùng giữ nguyên)'
+      }. Hạn dùng mới: ${adjustedEndDate.toLocaleDateString('vi-VN')}.`
     }).catch((e) => console.error('Lỗi gửi push cho user:', e));
 
     return {
       success: true,
-      message: unusedDays > 0
+      message: actualFrozenDays === 0
+        ? `Đã mở lại gói bảo lưu cho hội viên ${membership.user.fullName}! (Mở lại trong ngày: Bảo lưu thực tế 0 ngày, thu hồi ${unusedDays} ngày dư, hạn dùng giữ nguyên: ${adjustedEndDate.toLocaleDateString('vi-VN')})`
+        : unusedDays > 0
         ? `Đã mở lại gói bảo lưu cho hội viên ${membership.user.fullName}! (Mở sớm: Bảo lưu thực tế ${actualFrozenDays} ngày, thu hồi ${unusedDays} ngày dư, hạn mới: ${adjustedEndDate.toLocaleDateString('vi-VN')})`
         : `Đã mở lại gói bảo lưu và kích hoạt lại trạng thái hoạt động cho hội viên ${membership.user.fullName}! Hạn dùng: ${adjustedEndDate.toLocaleDateString('vi-VN')}`,
       data: {

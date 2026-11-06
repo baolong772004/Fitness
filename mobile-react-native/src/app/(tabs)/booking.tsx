@@ -51,7 +51,13 @@ export default function BookingHub() {
 
   const today = Date.now();
   const active = subscriptions.find(
-    row => row.package?.type === 'MEMBERSHIP' && row.status === 'ACTIVE' && new Date(row.endDate).getTime() >= today
+    row => (row.package?.type === 'MEMBERSHIP' || row.isGymMembership) && row.status === 'ACTIVE' && new Date(row.endDate).getTime() >= today
+  );
+  const frozen = subscriptions.find(
+    row => (row.package?.type === 'MEMBERSHIP' || row.isGymMembership) && row.status === 'FROZEN'
+  );
+  const queued = subscriptions.find(
+    row => (row.package?.type === 'MEMBERSHIP' || row.isGymMembership) && row.status === 'PENDING_ACTIVATION'
   );
 
   // Sắp xếp tìm ca tập sắp tới gần nhất
@@ -139,6 +145,42 @@ export default function BookingHub() {
           </Text>
         </Pressable>
       </LinearGradient>
+
+      {/* Banner thông báo gói đang bảo lưu (FROZEN) */}
+      {!coach && frozen && (
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginTop: 14,
+            marginBottom: 2,
+            backgroundColor: '#FFFBEB',
+            borderWidth: 1.5,
+            borderColor: '#F59E0B',
+            borderRadius: 16,
+            padding: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            shadowColor: '#D97706',
+            shadowOpacity: 0.08,
+            shadowRadius: 4,
+            elevation: 2,
+          }}
+        >
+          <Ionicons name="pause-circle" size={30} color="#D97706" />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#B45309', fontWeight: '900', fontSize: 13.5 }}>
+              GÓI TẬP ĐANG BẢO LƯU (FROZEN)
+            </Text>
+            <Text style={{ color: '#78350F', fontSize: 12, marginTop: 2, lineHeight: 17 }}>
+              Gói [{frozen.package?.name || 'Hội viên'}] đang tạm dừng đến ngày {dateLabel(frozen.endDate)}.
+            </Text>
+            <Text style={{ color: '#92400E', fontSize: 11, marginTop: 4, fontWeight: '700' }}>
+              💡 Vui lòng liên hệ quầy lễ tân để mở lại gói trước khi đặt lịch hoặc điểm danh.
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* 2. Lịch tập sắp tới (Upcoming Session Card) */}
       <SectionHeading
@@ -295,35 +337,71 @@ export default function BookingHub() {
           {/* Thẻ Hội Viên Hiện Tại */}
           {user && (
             <Pressable
-              onPress={() => router.push(active ? '/subscriptions' : '/packages')}
-              style={({ pressed }) => [styles.membershipCard, pressed && { opacity: 0.92 }]}
+              onPress={() => router.push(active || frozen || queued ? '/subscriptions' : '/packages')}
+              style={({ pressed }) => [
+                styles.membershipCard,
+                frozen && { backgroundColor: '#FFFBEB', borderColor: '#F59E0B' },
+                pressed && { opacity: 0.92 }
+              ]}
               accessibilityRole="button"
             >
               <View style={styles.membershipTop}>
-                <View style={styles.membershipBadgeIcon}>
+                <View style={[
+                  styles.membershipBadgeIcon,
+                  active && { backgroundColor: '#DCFCE7' },
+                  frozen && { backgroundColor: '#FEF3C7' },
+                  !active && !frozen && queued && { backgroundColor: '#EFF6FF' }
+                ]}>
                   <Ionicons
-                    name={active ? 'checkmark-circle' : 'card-outline'}
+                    name={active ? 'checkmark-circle' : frozen ? 'pause-circle' : queued ? 'time-outline' : 'card-outline'}
                     size={20}
-                    color={active ? '#2E7D32' : aura.darkCoffee}
+                    color={active ? '#16A34A' : frozen ? '#D97706' : queued ? '#2563EB' : aura.darkCoffee}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.membershipName}>
-                    {active?.package?.name || 'Chưa có gói hội viên'}
-                  </Text>
-                  <Text style={styles.membershipValidity}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[styles.membershipName, frozen && { color: '#B45309' }]}>
+                      {active?.package?.name || frozen?.package?.name || queued?.package?.name || 'Chưa có gói hội viên'}
+                    </Text>
+                    {frozen && (
+                      <View style={{ backgroundColor: '#FDE68A', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 5 }}>
+                        <Text style={{ color: '#B45309', fontSize: 10, fontWeight: '900' }}>BẢO LƯU</Text>
+                      </View>
+                    )}
+                    {!active && !frozen && queued && (
+                      <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 5 }}>
+                        <Text style={{ color: '#1D4ED8', fontSize: 10, fontWeight: '900' }}>CHỜ KÍCH HOẠT</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.membershipValidity, frozen && { color: '#78350F' }]}>
                     {active
                       ? `Đang hoạt động · Hạn dùng đến ${dateLabel(active.endDate)}`
+                      : frozen
+                      ? `Đang bảo lưu (FROZEN) · Hạn dự kiến đến ${dateLabel(frozen.endDate)}`
+                      : queued
+                      ? `Chờ kích hoạt · Bắt đầu từ ${dateLabel(queued.startDate)}`
                       : 'Đăng ký gói hội viên để vào phòng tập và nhận quyền lợi PT trải nghiệm.'}
                   </Text>
+                  {frozen && (
+                    <Text style={{ color: '#92400E', fontSize: 11, marginTop: 4, fontWeight: '700' }}>
+                      💡 Gói đang tạm dừng. Mở lại bảo lưu tại quầy lễ tân để đặt lịch lớp học hoặc điểm danh vào cổng.
+                    </Text>
+                  )}
                 </View>
               </View>
 
-              <View style={styles.membershipBottom}>
-                <Text style={styles.membershipLinkText}>
-                  {active ? 'Xem chi tiết quyền lợi & Check-in' : 'Chọn gói hội viên'}
+              <View style={[styles.membershipBottom, frozen && { borderTopColor: '#FDE68A' }]}>
+                <Text style={[styles.membershipLinkText, frozen && { color: '#B45309' }]}>
+                  {active
+                    ? 'Xem chi tiết quyền lợi & Check-in'
+                    : frozen
+                    ? 'Xem chi tiết gói đang bảo lưu'
+                    : queued
+                    ? 'Xem chi tiết gói chờ kích hoạt'
+                    : 'Chọn gói hội viên'}
                 </Text>
-                <Ionicons name="arrow-forward" size={14} color={aura.darkCoffee} />
+                <Ionicons name="arrow-forward" size={14} color={frozen ? '#B45309' : aura.darkCoffee} />
               </View>
             </Pressable>
           )}

@@ -9,7 +9,7 @@ export const verifiedGymPayment: Prisma.PaymentWhereInput = { OR: [
 export function activePaidGymMembershipWhere(userId: number, now: Date): Prisma.MembershipWhereInput {
   return {
     userId,
-    status: 'ACTIVE',
+    status: { in: ['ACTIVE', 'FROZEN'] },
     startDate: { lte: now },
     endDate: { gt: now },
     package: { type: 'MEMBERSHIP' },

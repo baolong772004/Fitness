@@ -21,6 +21,7 @@ import {
   Dumbbell,
   Camera,
   ShieldCheck,
+  ShieldAlert,
   RefreshCw,
   AlertCircle,
   Wrench,
@@ -37,6 +38,7 @@ import {
   Flame,
   Bell,
   MapPin,
+  PauseCircle,
   X
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -77,6 +79,7 @@ export const ReceptionistDashboard: React.FC<ReceptionistDashboardProps> = ({
   const [manualPhoneInput, setManualPhoneInput] = useState('');
   const [manualLookupData, setManualLookupData] = useState<any | null>(null);
   const [manualNote, setManualNote] = useState('');
+  const [overrideAntiPassback, setOverrideAntiPassback] = useState(false);
   const [isSearchingMember, setIsSearchingMember] = useState(false);
   const [checkInLogList, setCheckInLogList] = useState<any[]>([]);
 
@@ -121,12 +124,15 @@ interface StaffConsultant {
   const [offlinePayMethod, setOfflinePayMethod] = useState<'CASH' | 'POS'>('CASH');
   const [offlineCashReceived, setOfflineCashReceived] = useState<string>('');
   const [offlineTraceRefNo, setOfflineTraceRefNo] = useState<string>('');
+  const [offlinePaySubmitting, setOfflinePaySubmitting] = useState(false);
 
   // 3.3 Bảo lưu tại quầy
   const [freezePhoneSearch, setFreezePhoneSearch] = useState('');
   const [freezeMemberData, setFreezeMemberData] = useState<any | null>(null);
   const [freezeDays, setFreezeDays] = useState(30);
   const [freezeReason, setFreezeReason] = useState('');
+  const [freezeSubmitting, setFreezeSubmitting] = useState(false);
+  const [unfreezeSubmitting, setUnfreezeSubmitting] = useState(false);
 
   // =========================================================================
   // GIAI ĐOẠN 4: VẬN HÀNH THIẾT BỊ & TIẾP NHẬN YÊU CẦU
@@ -360,6 +366,9 @@ interface StaffConsultant {
             setCheckInLogList(shiftRes.data.checkIns);
           }
         }
+      } else if (res.status === 'FROZEN') {
+        soundEffects.playErrorBeep();
+        toast.warning(res.message, 'Gói Đang Bảo Lưu');
       } else if (res.status === 'ANTI_PASSBACK') {
         soundEffects.playErrorBeep();
         toast.error(res.message, 'Cảnh Báo Anti-Passback');
@@ -384,6 +393,7 @@ interface StaffConsultant {
     if (!manualPhoneInput.trim()) return;
     setIsSearchingMember(true);
     setManualLookupData(null);
+    setOverrideAntiPassback(false);
 
     try {
       const res = await api.staff.lookupMember(manualPhoneInput.trim());
@@ -403,7 +413,8 @@ interface StaffConsultant {
     try {
       const res = await api.staff.manualCheckIn({
         memberId: manualLookupData.member.id,
-        notes: manualNote || 'Check-in thủ công đối chiếu ảnh chân dung'
+        notes: manualNote || 'Check-in thủ công đối chiếu ảnh chân dung',
+        overrideAntiPassback
       });
       soundEffects.playSuccessBeep();
       toast.success(res.message, 'Check-in Thủ Công');
@@ -424,6 +435,7 @@ interface StaffConsultant {
         }
       });
       setManualLookupData(null);
+      setOverrideAntiPassback(false);
       setManualPhoneInput('');
       setManualNote('');
 
@@ -534,7 +546,8 @@ interface StaffConsultant {
 
   // Xác nhận thanh toán hóa đơn chờ tại quầy
   const handleProcessOfflinePay = async () => {
-    if (!selectedPaymentId) return;
+    if (!selectedPaymentId || offlinePaySubmitting) return;
+    setOfflinePaySubmitting(true);
     try {
       const res = await api.staff.processOfflinePayment({
         paymentId: selectedPaymentId,
@@ -556,6 +569,8 @@ interface StaffConsultant {
     } catch (err: any) {
       soundEffects.playErrorBeep();
       toast.error(err.message, 'Lỗi Thanh Toán');
+    } finally {
+      setOfflinePaySubmitting(false);
     }
   };
 
@@ -579,12 +594,13 @@ interface StaffConsultant {
 
   // Xác nhận bảo lưu gói
   const handleConfirmFreeze = async () => {
-    if (!freezeMemberData?.activeMembership?.id) return;
+    if (!freezeMemberData?.activeMembership?.id || freezeSubmitting) return;
     if (!freezeReason.trim()) {
       toast.warning('Vui lòng nhập lý do bảo lưu gói.');
       return;
     }
 
+    setFreezeSubmitting(true);
     try {
       const res = await api.staff.freezeMembership({
         membershipId: freezeMemberData.activeMembership.id,
@@ -608,14 +624,17 @@ interface StaffConsultant {
     } catch (err: any) {
       soundEffects.playErrorBeep();
       toast.error(err.message, 'Lỗi Bảo Lưu');
+    } finally {
+      setFreezeSubmitting(false);
     }
   };
 
   // Kích hoạt lại / Mở gói bảo lưu
   const handleConfirmUnfreeze = async () => {
     const membershipId = freezeMemberData?.frozenMembership?.id;
-    if (!membershipId) return;
+    if (!membershipId || unfreezeSubmitting) return;
 
+    setUnfreezeSubmitting(true);
     try {
       const res = await api.staff.unfreezeMembership({
         membershipId,
@@ -624,19 +643,26 @@ interface StaffConsultant {
 
       soundEffects.playSuccessBeep();
       toast.success(res.message, 'Mở Bảo Lưu Thành Công');
-      // Tải lại thông tin hội viên ngay lập tức để cập nhật giao diện sang trạng thái ACTIVE
-      if (freezePhoneSearch.trim()) {
+      // Tải lại thông tin hội viên ngay lập tức để cập nhật đồng bộ cả tab POS và tab Check-in sang trạng thái ACTIVE
+      const targetPhone = freezePhoneSearch.trim() || manualPhoneInput.trim();
+      if (targetPhone) {
         try {
-          const refreshed = await api.staff.lookupMember(freezePhoneSearch.trim());
+          const refreshed = await api.staff.lookupMember(targetPhone);
           setFreezeMemberData(refreshed.data);
+          setManualLookupData(refreshed.data);
+          setManualPhoneInput(targetPhone);
         } catch {
           setFreezeMemberData(null);
         }
       }
+      // Xóa kết quả quét cũ nếu trước đó đang hiển thị thông báo FROZEN
+      setScanResult((prev: any) => (prev?.status === 'FROZEN' ? null : prev));
       loadInitialData();
     } catch (err: any) {
       soundEffects.playErrorBeep();
       toast.error(err.message, 'Lỗi Mở Bảo Lưu');
+    } finally {
+      setUnfreezeSubmitting(false);
     }
   };
 
@@ -938,11 +964,54 @@ interface StaffConsultant {
                         <div className="flex-1 min-w-0 text-center sm:text-left">
                           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                             <h4 className="text-lg font-extrabold text-foreground">{manualLookupData.member.fullName}</h4>
-                            <Badge variant={manualLookupData.hasActiveGymAccess ? 'success' : 'destructive'}>
-                              {manualLookupData.hasActiveGymAccess ? 'GÓI CÒN HẠN' : 'HẾT HẠN'}
+                            <Badge
+                              variant={
+                                manualLookupData.isFrozen
+                                  ? 'outline'
+                                  : manualLookupData.hasActiveGymAccess
+                                  ? 'success'
+                                  : 'destructive'
+                              }
+                              className={
+                                manualLookupData.isFrozen
+                                  ? 'bg-amber-500/15 text-amber-600 border border-amber-500/30 font-bold'
+                                  : ''
+                              }
+                            >
+                              {manualLookupData.isFrozen
+                                ? 'ĐANG BẢO LƯU'
+                                : manualLookupData.hasActiveGymAccess
+                                ? 'GÓI CÒN HẠN'
+                                : 'HẾT HẠN'}
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">SĐT: {manualLookupData.member.phone}</p>
+
+                          {manualLookupData.isFrozen && manualLookupData.frozenMembership && (
+                            <div className="mt-2 text-xs bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/30">
+                              <div className="text-amber-800 dark:text-amber-300 font-bold flex items-center gap-1.5">
+                                <PauseCircle className="size-4 text-amber-600 shrink-0" />
+                                Gói đang bảo lưu: <strong>{manualLookupData.frozenMembership.packageName}</strong>
+                              </div>
+                              <div className="text-muted-foreground mt-1">
+                                Hạn sau bảo lưu: <strong>{new Date(manualLookupData.frozenMembership.endDate).toLocaleDateString('vi-VN')}</strong> (Còn {manualLookupData.frozenMembership.remainingDays} ngày)
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="mt-2 h-7 text-xs border-amber-500/50 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
+                                onClick={() => {
+                                  setFreezePhoneSearch(manualLookupData.member.phone);
+                                  onTabChange('pos');
+                                  setPosSubTab('freeze');
+                                  handleSearchFreezeMember(undefined, manualLookupData.member.phone);
+                                }}
+                              >
+                                Chuyển sang Mở Lại Gói Bảo Lưu
+                              </Button>
+                            </div>
+                          )}
 
                           {manualLookupData.activeMembership && (
                             <div className="mt-2 text-xs bg-muted/40 p-2 rounded-lg border">
@@ -960,6 +1029,27 @@ interface StaffConsultant {
                             </div>
                           )}
 
+                          {/* CẢNH BÁO ANTI-PASSBACK KHI CHECK-IN THỦ CÔNG */}
+                          {manualLookupData.recentCheckIn && (
+                            <div className="mt-2 text-xs bg-red-500/10 border border-red-500/30 p-2.5 rounded-lg text-red-600 dark:text-red-400">
+                              <div className="font-bold flex items-center gap-1.5">
+                                <ShieldAlert className="size-4 shrink-0 text-red-600" /> CẢNH BÁO ANTI-PASSBACK (30 PHÚT)
+                              </div>
+                              <div className="mt-1 text-muted-foreground">
+                                Khách vừa check-in lúc <strong>{manualLookupData.recentCheckIn.timeDisplay}</strong> (cách đây {manualLookupData.recentCheckIn.minutesAgo} phút). Cần chờ thêm <strong>{manualLookupData.recentCheckIn.waitRemaining} phút</strong>.
+                              </div>
+                              <label className="mt-2 flex items-center gap-2 cursor-pointer font-semibold text-foreground">
+                                <input
+                                  type="checkbox"
+                                  checked={overrideAntiPassback}
+                                  onChange={(e) => setOverrideAntiPassback(e.target.checked)}
+                                  className="rounded border-gray-300 text-primary focus:ring-primary size-3.5 cursor-pointer"
+                                />
+                                <span>Xác nhận đối chiếu khuôn mặt hợp lệ & cho phép Ghi đè Anti-Passback</span>
+                              </label>
+                            </div>
+                          )}
+
                           <div className="mt-3 flex flex-wrap gap-2">
                             <Input
                               type="text"
@@ -971,11 +1061,22 @@ interface StaffConsultant {
                             <Button
                               type="button"
                               size="sm"
-                              disabled={!manualLookupData.hasActiveGymAccess}
-                              className="font-bold bg-primary text-primary-foreground h-8 cursor-pointer"
+                              disabled={!manualLookupData.hasActiveGymAccess || (!!manualLookupData.recentCheckIn && !overrideAntiPassback)}
+                              className={`font-bold h-8 cursor-pointer ${
+                                manualLookupData.recentCheckIn
+                                  ? overrideAntiPassback
+                                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                    : 'bg-muted text-muted-foreground cursor-not-allowed'
+                                  : 'bg-primary text-primary-foreground'
+                              }`}
                               onClick={handleConfirmManualCheckIn}
                             >
-                              <Check className="size-3.5" /> Xác Nhận Vào Cổng
+                              <Check className="size-3.5" />
+                              {manualLookupData.recentCheckIn
+                                ? overrideAntiPassback
+                                  ? 'Ghi Đè & Vào Cổng'
+                                  : 'Chặn Anti-Passback (Cần tích xác nhận)'
+                                : 'Xác Nhận Vào Cổng'}
                             </Button>
                           </div>
                         </div>
@@ -994,23 +1095,37 @@ interface StaffConsultant {
                 className={`overflow-hidden border-2 shadow-lg transition-all animate-in zoom-in-95 duration-200 ${
                   scanResult.color === 'GREEN'
                     ? 'border-success bg-gradient-to-b from-success/5 to-card ring-2 ring-success/20'
+                    : scanResult.status === 'FROZEN'
+                    ? 'border-amber-500 bg-gradient-to-b from-amber-500/10 to-card ring-2 ring-amber-500/20'
                     : 'border-destructive bg-gradient-to-b from-destructive/5 to-card ring-2 ring-destructive/20'
                 }`}
               >
                 <CardHeader
                   className={`pb-3 border-b ${
-                    scanResult.color === 'GREEN' ? 'bg-success/15 border-success/30' : 'bg-destructive/15 border-destructive/30'
+                    scanResult.color === 'GREEN'
+                      ? 'bg-success/15 border-success/30'
+                      : scanResult.status === 'FROZEN'
+                      ? 'bg-amber-500/15 border-amber-500/30'
+                      : 'bg-destructive/15 border-destructive/30'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <CardTitle
                       className={`text-base font-extrabold flex items-center gap-2 ${
-                        scanResult.color === 'GREEN' ? 'text-success' : 'text-destructive'
+                        scanResult.color === 'GREEN'
+                          ? 'text-success'
+                          : scanResult.status === 'FROZEN'
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-destructive'
                       }`}
                     >
                       {scanResult.color === 'GREEN' ? (
                         <>
                           <CheckCircle2 className="size-6 text-success animate-bounce" /> HỢP LỆ — MỜI VÀO CỔNG
+                        </>
+                      ) : scanResult.status === 'FROZEN' ? (
+                        <>
+                          <PauseCircle className="size-6 text-amber-500 animate-pulse" /> TỪ CHỐI — GÓI ĐANG BẢO LƯU
                         </>
                       ) : (
                         <>
@@ -1018,7 +1133,20 @@ interface StaffConsultant {
                         </>
                       )}
                     </CardTitle>
-                    <Badge variant={scanResult.color === 'GREEN' ? 'success' : 'destructive'} className="font-mono text-xs">
+                    <Badge
+                      variant={
+                        scanResult.color === 'GREEN'
+                          ? 'success'
+                          : scanResult.status === 'FROZEN'
+                          ? 'outline'
+                          : 'destructive'
+                      }
+                      className={
+                        scanResult.status === 'FROZEN'
+                          ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30 font-mono text-xs'
+                          : 'font-mono text-xs'
+                      }
+                    >
                       {scanResult.status}
                     </Badge>
                   </div>
@@ -1026,13 +1154,34 @@ interface StaffConsultant {
                 <CardContent className="grid gap-4 pt-4">
                   <Alert
                     variant={scanResult.color === 'GREEN' ? 'default' : 'destructive'}
-                    className={scanResult.color === 'GREEN' ? 'border-success/40 bg-success/10 text-success' : ''}
+                    className={
+                      scanResult.color === 'GREEN'
+                        ? 'border-success/40 bg-success/10 text-success'
+                        : scanResult.status === 'FROZEN'
+                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200'
+                        : ''
+                    }
                   >
                     <AlertTitle className="font-bold text-sm">{scanResult.message}</AlertTitle>
                     {scanResult.data?.suggestion && (
                       <AlertDescription className="text-xs">{scanResult.data.suggestion}</AlertDescription>
                     )}
                   </Alert>
+
+                  {scanResult.status === 'FROZEN' && scanResult.data?.member?.phone && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-500/50 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 font-bold"
+                      onClick={() => {
+                        setFreezePhoneSearch(scanResult.data.member.phone);
+                        setPosSubTab('freeze');
+                        handleSearchFreezeMember(undefined, scanResult.data.member.phone);
+                      }}
+                    >
+                      Mở lại Gói Bảo Lưu cho Hội Viên này
+                    </Button>
+                  )}
 
                   {/* NHẬN DIỆN BUỔI TẬP PT HÔM NAY (NỔI BẬT) */}
                   {scanResult.data?.ptSessionToday?.hasPtToday && (
@@ -1492,10 +1641,11 @@ interface StaffConsultant {
                           <Button
                             type="button"
                             size="lg"
-                            className="font-bold bg-primary text-primary-foreground cursor-pointer"
+                            disabled={offlinePaySubmitting}
+                            className="font-bold bg-primary text-primary-foreground cursor-pointer disabled:opacity-50"
                             onClick={handleProcessOfflinePay}
                           >
-                            <Check className="size-5" /> Xác Nhận Thu Tiền & Kích Hoạt Gói Trên App Ngay
+                            <Check className="size-5" /> {offlinePaySubmitting ? 'Đang xử lý...' : 'Xác Nhận Thu Tiền & Kích Hoạt Gói Trên App Ngay'}
                           </Button>
                         </div>
                       </div>
@@ -1572,10 +1722,11 @@ interface StaffConsultant {
 
                         <Button
                           type="button"
-                          className="font-bold bg-amber-600 hover:bg-amber-700 text-white cursor-pointer shadow-sm"
+                          disabled={unfreezeSubmitting}
+                          className="font-bold bg-amber-600 hover:bg-amber-700 text-white cursor-pointer shadow-sm disabled:opacity-50"
                           onClick={handleConfirmUnfreeze}
                         >
-                          <Unlock className="size-4" /> Kích Hoạt Lại / Mở Bảo Lưu Cho Hội Viên
+                          <Unlock className="size-4" /> {unfreezeSubmitting ? 'Đang kích hoạt lại...' : 'Kích Hoạt Lại / Mở Bảo Lưu Cho Hội Viên'}
                         </Button>
                       </div>
                     )}
@@ -1613,10 +1764,11 @@ interface StaffConsultant {
 
                         <Button
                           type="button"
-                          className="font-bold bg-primary text-primary-foreground cursor-pointer"
+                          disabled={freezeSubmitting}
+                          className="font-bold bg-primary text-primary-foreground cursor-pointer disabled:opacity-50"
                           onClick={handleConfirmFreeze}
                         >
-                          <Check className="size-4" /> Xác Nhận Bảo Lưu Thêm {freezeDays} Ngày
+                          <Check className="size-4" /> {freezeSubmitting ? 'Đang xử lý bảo lưu...' : `Xác Nhận Bảo Lưu Thêm ${freezeDays} Ngày`}
                         </Button>
                       </div>
                     )}

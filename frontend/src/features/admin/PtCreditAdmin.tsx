@@ -597,8 +597,8 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                 const change = (patch: Partial<typeof draft>) => setSingleDrafts(current => ({ ...current, [level]: { ...draft, ...patch } }));
                 return <div key={level} className="space-y-2 rounded-lg border p-3">
                   <div className="flex items-center justify-between"><strong>{levelNames[level]}</strong><Badge variant={offer?.isActive ? 'default' : 'outline'}>{offer?.isActive ? 'Đang bán' : 'Chưa bán'}</Badge></div>
-                  <Label>Giá một buổi (VNĐ)</Label><Input type="number" min="1" value={draft.price} onChange={e => change({ price: Number(e.target.value) })} />
-                  <div className="grid grid-cols-2 gap-2"><div><Label>Hạn dùng (ngày)</Label><Input type="number" min="1" max="3650" value={draft.durationDays} onChange={e => change({ durationDays: Number(e.target.value) })} /></div><div><Label>Tối đa/đơn</Label><Input type="number" min="1" max="100" value={draft.maxQuantity} onChange={e => change({ maxQuantity: Number(e.target.value) })} /></div></div>
+                  <Label>Giá một buổi (VNĐ)</Label><Input type="number" min="1" placeholder="0" value={draft.price === 0 ? '' : draft.price} onChange={e => change({ price: e.target.value === '' ? ('' as any) : Number(e.target.value) })} />
+                  <div className="grid grid-cols-2 gap-2"><div><Label>Hạn dùng (ngày)</Label><Input type="number" min="1" max="3650" placeholder="30" value={draft.durationDays === 0 ? '' : draft.durationDays} onChange={e => change({ durationDays: e.target.value === '' ? ('' as any) : Number(e.target.value) })} /></div><div><Label>Tối đa/đơn</Label><Input type="number" min="1" max="100" placeholder="20" value={draft.maxQuantity === 0 ? '' : draft.maxQuantity} onChange={e => change({ maxQuantity: e.target.value === '' ? ('' as any) : Number(e.target.value) })} /></div></div>
                   <Label>Quyền lợi hiển thị</Label><Input maxLength={1000} value={draft.benefits} onChange={e => change({ benefits: e.target.value })} placeholder="Ví dụ: Đặt lịch PT, QR check-in" />
                   <div className="flex gap-2"><Button size="sm" disabled={singleBusy !== null || draft.price < 1} onClick={() => void saveSingleOffer(level)}>Lưu cấu hình</Button>{offer && <Button size="sm" variant="outline" disabled={singleBusy !== null} onClick={() => void toggleSingleOffer(level, !offer.isActive)}>{offer.isActive ? 'Ngừng bán' : 'Mở bán'}</Button>}</div>
                 </div>;
@@ -722,8 +722,9 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           min="1"
                           max="100"
                           required
-                          value={form.sessionCount}
-                          onChange={e => setForm({ ...form, sessionCount: Math.max(1, Number(e.target.value)) })}
+                          placeholder="10"
+                          value={form.sessionCount === 0 ? '' : form.sessionCount}
+                          onChange={e => setForm({ ...form, sessionCount: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
                         />
                         <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">
                           buổi
@@ -744,8 +745,9 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           min="1"
                           max="3650"
                           required
-                          value={form.durationDays}
-                          onChange={e => setForm({ ...form, durationDays: Math.max(1, Number(e.target.value)) })}
+                          placeholder="30"
+                          value={form.durationDays === 0 ? '' : form.durationDays}
+                          onChange={e => setForm({ ...form, durationDays: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
                         />
                         <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">
                           ngày
@@ -765,8 +767,9 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           min="1000"
                           step="1000"
                           required
-                          value={form.price}
-                          onChange={e => setForm({ ...form, price: Math.max(0, Number(e.target.value)) })}
+                          placeholder="500000"
+                          value={form.price === 0 ? '' : form.price}
+                          onChange={e => setForm({ ...form, price: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
                         />
                         <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">
                           VNĐ
@@ -1058,8 +1061,9 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           min="1"
                           max="3650"
                           required
-                          value={renewalDurationDays}
-                          onChange={e => setRenewalDurationDays(Math.max(1, Number(e.target.value)))}
+                          placeholder="30"
+                          value={renewalDurationDays === 0 ? '' : renewalDurationDays}
+                          onChange={e => setRenewalDurationDays(e.target.value === '' ? ('' as any) : Number(e.target.value))}
                         />
                         <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">
                           ngày
@@ -1079,8 +1083,9 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           min="1000"
                           step="1000"
                           required
-                          value={renewalPrice}
-                          onChange={e => setRenewalPrice(Math.max(0, Number(e.target.value)))}
+                          placeholder="100000"
+                          value={renewalPrice === 0 ? '' : renewalPrice}
+                          onChange={e => setRenewalPrice(e.target.value === '' ? ('' as any) : Number(e.target.value))}
                         />
                         <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">
                           VNĐ
@@ -1407,8 +1412,9 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                             min="-100"
                             max="100"
                             className="h-8 text-xs"
-                            value={adjustment.delta}
-                            onChange={e => setAdjustment({ ...adjustment, delta: Number(e.target.value) })}
+                            placeholder="1"
+                            value={adjustment.delta === 0 ? '' : adjustment.delta}
+                            onChange={e => setAdjustment({ ...adjustment, delta: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
                           />
                         </div>
                         <div className="space-y-1">
