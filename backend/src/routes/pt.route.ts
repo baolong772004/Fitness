@@ -13,7 +13,10 @@ import { getCoachWorkspace, getCoachTrainees, getCoachPlans, createCoachPlan, ge
 import { assignCoachPlan, getStudentPlanRevisions, restoreStudentPlan, updateStudentPlan } from '../controllers/studentWorkoutPlan.controller.js';
 import { deleteCoachDate, deleteCoachSlot, getCoachAvailability, listCoachChangeRequests, putCoachDates, putCoachWeekly, requestCoachScheduleChange } from '../controllers/ptAvailability.controller.js';
 import { adjustPtWallet, archivePtProduct, archivePtRenewalOption, createPtProduct, createPtRenewalOption, createWalletBooking, getAdminPtWallet, getMyPtCreditHistory, getMyPtRenewalHistory, getMyPtWallet, listAllPtProducts, listAllPtRenewalOptions, listAllPtSingleOffers, listPtProducts, listPtRenewalOptions, listPtSingleOffers, restorePtProduct, restorePtRenewalOption, savePtSingleOffer, setCoachSpecializations, setPtSingleOfferActive, updatePtProduct, updatePtRenewalOption } from '../controllers/ptWallet.controller.js';
-import { listMyCoachChanges, listPendingCoachChanges, requestCoachChange, resolveCoachChange } from '../controllers/ptCoachChange.controller.js';
+import { listMyCoachChanges, listPendingCoachChanges, previewCoachChange, requestCoachChange, resolveCoachChange } from '../controllers/ptCoachChange.controller.js';
+import { adminAssignMakeupCoach, adminAttendanceDecision, adminReviewMakeupCoachChange,
+  coachAttendanceDecision, listPtOperations, memberMakeupCoachOptions,
+  memberRequestMakeupCoachChange } from '../controllers/ptOperations.controller.js';
 
 const router = Router();
 router.get('/wallet', authenticateToken, authorizeRoles('MEMBER'), getMyPtWallet);
@@ -42,6 +45,7 @@ router.post('/wallet/bookings', authenticateToken, authorizeRoles('MEMBER'), cre
 router.get('/coach-change-requests/mine', authenticateToken, authorizeRoles('MEMBER'), listMyCoachChanges);
 router.post('/coach-change-requests', authenticateToken, authorizeRoles('MEMBER'), requestCoachChange);
 router.get('/coach-change-requests/pending', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), listPendingCoachChanges);
+router.get('/coach-change-requests/:id/preview', authenticateToken, authorizeRoles('ADMIN'), previewCoachChange);
 router.patch('/coach-change-requests/:id', authenticateToken, authorizeRoles('ADMIN'), resolveCoachChange);
 
 /** @swagger
@@ -454,6 +458,13 @@ router.post('/booking/:id/manual-check-in', authenticateToken, authorizeRoles('A
  *         description: Thành công
  */
 router.post('/booking/:id/complete-session', authenticateToken, authorizeRoles('COACH', 'TRAINER'), PtController.completeSession);
+router.post('/booking/:id/attendance/coach', authenticateToken, authorizeRoles('COACH', 'TRAINER'), coachAttendanceDecision);
+router.post('/booking/:id/attendance/admin', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), adminAttendanceDecision);
+router.get('/admin/operations', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), listPtOperations);
+router.post('/admin/makeup-rights/:id/assign-coach', authenticateToken, authorizeRoles('ADMIN'), adminAssignMakeupCoach);
+router.post('/admin/makeup-rights/:id/review-coach-change', authenticateToken, authorizeRoles('ADMIN'), adminReviewMakeupCoachChange);
+router.get('/makeup-rights/:id/coach-options', authenticateToken, authorizeRoles('MEMBER'), memberMakeupCoachOptions);
+router.post('/makeup-rights/:id/request-coach-change', authenticateToken, authorizeRoles('MEMBER'), memberRequestMakeupCoachChange);
 
 /**
  * @swagger

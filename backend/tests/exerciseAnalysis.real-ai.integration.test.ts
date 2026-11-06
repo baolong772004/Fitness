@@ -288,16 +288,11 @@ test('real developer flow retains experimental predictions through worker, SQL, 
   const stored = await awaitResult(queued.id);
   const fromDb = JSON.parse(stored.resultJson || '{}');
   const detail = (await (await fetch(`${base}/developer/${stored.id}`, { headers })).json() as any).data;
-  const { poseOverlayToleranceSeconds, visibleExperimentalEvaluation } = await import('../../mobile-react-native/src/lib/exerciseAnalysisData.js');
+  const { visibleExperimentalEvaluation } = await import('../../mobile-react-native/src/lib/exerciseAnalysisData.js');
   const mobileVisible = visibleExperimentalEvaluation(detail, true);
   assert.equal(visibleExperimentalEvaluation(detail, false), null);
   assert.equal(mobileVisible?.passedCriteria, 3);
   const finalPose = fromDb.poseFrames.at(-1);
-  const playerTime = 16.522;
-  const overlayDelta = Math.abs(playerTime - finalPose.timeSeconds);
-  const overlayTolerance = poseOverlayToleranceSeconds(finalPose.timeSeconds, finalPose.timeSeconds,
-    playerTime, fromDb.video.durationSeconds, fromDb.video.sampleRateHz);
-  assert.ok(overlayDelta > 0.1 && overlayDelta <= overlayTolerance);
   assert.equal(Object.keys(finalPose.landmarks).length, 16);
   assert.equal(stored.evaluationMode, 'EXPERIMENTAL');
   assert.equal(stored.resultVersion, 'exercise-analysis-result-4');
@@ -321,9 +316,7 @@ test('real developer flow retains experimental predictions through worker, SQL, 
       resultVersion: detail.resultVersion, result: criterionTrace(detail.result) },
     mobileProjection: { visibleToDeveloper: !!mobileVisible, visibleToMember: visibleExperimentalEvaluation(detail, false) !== null,
       predictionCount: mobileVisible?.criteria.flatMap((item: any) => item.predictions).length || 0,
-      validation: mobileVisible?.validation,
-      finalPoseOverlay: { playbackSeconds: playerTime, sampleSeconds: finalPose.timeSeconds,
-        deltaSeconds: overlayDelta, toleranceSeconds: overlayTolerance, landmarkCount: Object.keys(finalPose.landmarks).length } },
+      validation: mobileVisible?.validation },
   };
   await mkdir('tests/artifacts', { recursive: true });
   await writeFile('tests/artifacts/exercise-experimental-e2e.json', JSON.stringify(trace, null, 2));

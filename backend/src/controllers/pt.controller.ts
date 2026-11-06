@@ -13,6 +13,7 @@ import { verifiedGymPayment } from '../services/gymEntitlement.service.js';
 import { settlePtCredit, releasePtCredit } from '../services/ptWallet.service.js';
 import { lockGymMember } from '../services/gymMembershipLock.service.js';
 import { decidePtAbsence } from '../services/ptEntitlementPolicy.service.js';
+import { reportCoachAbsence } from '../services/ptCoachAbsence.service.js';
 
 
 const PT_CHECKIN_EARLY_WINDOW_MS = 15 * 60 * 1000;
@@ -301,13 +302,31 @@ export class PtController {
           coach: { select: { fullName: true, phone: true } },
           membership: { include: { package: { select: { name: true } } } },
           sessionResult: { include: { exercises: true } },
-          makeUpRequests: { select: { id: true, status: true, expiresAt: true, newBookingId: true } },
+            makeUpRequests: { select: { id: true, status: true, cause: true, expiresAt: true, newBookingId: true,
+            extensionCount: true, coachAbsenceCount: true, assignedCoachId: true, escalatedAt: true,
+            requestedCoachId: true, requestedStartAt: true, requestReason: true,
+            coachChangeRequestedAt: true } },
+          attendanceReview: { select: { status: true, deadlineAt: true, coachDecision: true,
+            coachNote: true, adminDecision: true } },
           ptCreditAllocation: { include: { batch: { select: { level: true, source: true } } } },
         },
         orderBy: { startTime: 'desc' },
       });
 
-      return res.status(200).json({ success: true, data: bookings });
+      const changedCoachIds = [...new Set(bookings.flatMap(booking =>
+        booking.makeUpRequests.flatMap(right => [right.assignedCoachId, right.requestedCoachId]
+          .filter((id): id is number => id !== null))))];
+      const changedCoaches = changedCoachIds.length ? await prisma.user.findMany({
+        where: { id: { in: changedCoachIds } }, select: { id: true, fullName: true },
+      }) : [];
+      const coachNames = new Map(changedCoaches.map(coach => [coach.id, coach.fullName]));
+      const data = bookings.map(booking => ({ ...booking,
+        makeUpRequests: booking.makeUpRequests.map(right => ({ ...right,
+          assignedCoachName: right.assignedCoachId ? coachNames.get(right.assignedCoachId) ?? null : null,
+          requestedCoachName: right.requestedCoachId ? coachNames.get(right.requestedCoachId) ?? null : null,
+        })),
+      }));
+      return res.status(200).json({ success: true, data });
     } catch (error: any) {
       console.error('Lỗi tải danh sách lịch:', error);
       return res.status(500).json({ success: false, message: 'Lỗi tải danh sách lịch hẹn' });
@@ -704,9 +723,12 @@ export class PtController {
     if (booking.status !== 'CONFIRMED' || booking.startTime <= now) {
       return res.status(409).json({ success: false, message: 'Buổi PT đã bắt đầu hoặc đã được xử lý.' });
     }
+    if (booking.ptCreditAllocation && booking.ptCreditAllocation.status !== 'HELD') {
+      return res.status(409).json({ success: false, message: 'Credit của lịch PT đã được xử lý.' });
+    }
     const batch = booking.ptCreditAllocation?.batch;
     const protectedUsed = batch ? await prisma.ptCreditTransaction.count({
-      where: { batchId: batch.id, kind: 'PROTECTED_CANCEL' },
+      where: { batchId: batch.id, kind: { in: ['PROTECTED_CANCEL', 'MEMBER_MAKEUP'] } },
     }) : 0;
     const policy = decidePtAbsence({ source: batch?.source, initialCount: batch?.initialCount,
       protectedUsed, startTime: booking.startTime, now, isMakeup: booking.isMakeup,
@@ -748,6 +770,12 @@ export class PtController {
       if (!initial.coachId) {
         return res.status(409).json({ success: false, message: 'Lịch PT thiếu Coach.' });
       }
+      if (isCoach) {
+        const result = await reportCoachAbsence({ bookingId, coachId: userId, actorId: userId, reason });
+        return res.status(200).json({ success: true,
+          message: 'Coach đã báo vắng; hội viên được đặt học bù trong 7 ngày và không mất Credit.',
+          data: result.booking, makeUpRequest: result.right });
+      }
       const result = await prisma.$transaction(async tx => {
         await lockPtCalendar(tx);
         await lockPtCoach(tx, initial.coachId!);
@@ -763,20 +791,24 @@ export class PtController {
         const membership = booking.membership;
         const allocation = await tx.ptBookingCreditAllocation.findUnique({ where: { bookingId } });
         if (!membership && !allocation) throw new PtBookingError(409, 'Lịch PT không có credit để xử lý.');
+        if (allocation && allocation.status !== 'HELD') {
+          throw new PtBookingError(409, 'Credit của lịch PT đã được xử lý.');
+        }
         const coachAbsence = isCoach;
         const batch = allocation ? await tx.ptCreditBatch.findUniqueOrThrow({ where: { id: allocation.batchId } }) : null;
-        const walletMakeupUsed = batch && !coachAbsence ? await tx.ptCreditTransaction.count({
-          where: { batchId: batch.id, kind: 'MEMBER_MAKEUP' },
+        const protectedUsed = batch && !coachAbsence ? await tx.ptCreditTransaction.count({
+          where: { batchId: batch.id, kind: { in: ['PROTECTED_CANCEL', 'MEMBER_MAKEUP'] } },
         }) : 0;
-        const walletMakeupEligible = Boolean(batch && batch.level !== 'TRIAL' && walletMakeupUsed < 3);
-        const canMakeup = coachAbsence || (!booking.isMakeup &&
-          booking.startTime.getTime() - now.getTime() >= 2 * 60 * 60 * 1000 &&
-          (allocation ? walletMakeupEligible : Boolean(membership?.status === 'ACTIVE' && membership.endDate >= now &&
-            membership.usedMakeupCount < membership.maxMakeupAllowed)));
+        const policy = decidePtAbsence({ source: batch?.source, initialCount: batch?.initialCount,
+          protectedUsed, startTime: booking.startTime, now, isMakeup: booking.isMakeup,
+          coachAbsence, legacyMakeupRemaining: Boolean(membership?.status === 'ACTIVE' &&
+            membership.endDate >= now && membership.usedMakeupCount < membership.maxMakeupAllowed),
+        });
         const claimed = await tx.booking.updateMany({
           where: { id: bookingId, status: 'CONFIRMED' },
           data: {
-            status: canMakeup ? 'ABSENT_ELIGIBLE' : 'ABSENT_NO_REFUND',
+            status: policy.outcome === 'MAKEUP' ? 'ABSENT_ELIGIBLE' :
+              policy.outcome === 'RELEASE' ? 'CANCELLED' : 'ABSENT_NO_REFUND',
             absenceReason: reason || (coachAbsence ? 'Coach báo vắng' : 'Hội viên báo vắng'),
             absenceReportedAt: now,
             cancelledBy: role,
@@ -784,7 +816,7 @@ export class PtController {
           },
         });
         if (claimed.count !== 1) throw new PtBookingError(409, 'Buổi PT đã được xử lý.');
-        if (canMakeup) {
+        if (policy.outcome === 'MAKEUP') {
           if (!coachAbsence && !allocation && membership) {
             const quota = await tx.membership.updateMany({
               where: { id: membership.id, usedMakeupCount: { lt: membership.maxMakeupAllowed } },
@@ -796,28 +828,29 @@ export class PtController {
             data: { originalBookingId: bookingId, status: 'PENDING',
               expiresAt: new Date(now.getTime() + 7 * 86400000) },
           });
-          if (!coachAbsence && batch) await tx.ptCreditTransaction.create({ data: {
-            batchId: batch.id, bookingId, kind: 'MEMBER_MAKEUP', quantity: 1,
-            note: 'Member absence makeup quota',
-          } });
+        } else if (policy.outcome === 'RELEASE') {
+          if (!allocation || !await releasePtCredit(tx, bookingId, { kind: 'PROTECTED_CANCEL',
+            actorId: userId, note: reason || 'Hội viên hủy sớm' })) {
+            throw new PtBookingError(409, 'Credit đã được xử lý trước đó.');
+          }
         } else {
           if (allocation) await settlePtCredit(tx, bookingId);
           else await debitPtSession(tx, membership!.id);
         }
-        return { booking: await tx.booking.findUniqueOrThrow({ where: { id: bookingId } }), canMakeup };
+        return { booking: await tx.booking.findUniqueOrThrow({ where: { id: bookingId } }), policy };
       }, { maxWait: 15000, timeout: 30000 });
       closePtChatRoom(bookingId);
       emitCoachScheduleChanged(initial.coachId);
       await createUserNotification({
         userId: isCoach ? initial.memberId : initial.coachId,
         title: 'Lịch PT đã được báo vắng',
-        message: result.canMakeup ? 'Buổi PT được cấp quyền đặt học bù trong 7 ngày.'
-          : 'Buổi PT đã bị hủy và trừ một buổi trong gói.',
-      });
+        message: result.policy.message,
+      }).catch(error => console.error('Không thể gửi thông báo báo vắng PT:', error));
       return res.status(200).json({
         success: true,
-        message: result.canMakeup ? 'Đã cấp quyền đặt học bù trong 7 ngày.' : 'Đã báo vắng và trừ một buổi PT.',
+        message: result.policy.message,
         data: result.booking,
+        policy: result.policy,
       });
     } catch (error: any) {
       if (error instanceof PtBookingError) return res.status(error.status).json({ success: false, message: error.message });
@@ -853,9 +886,9 @@ export class PtController {
               coachId: original.coachId, start, makeupOriginalId: originalBookingId })
           : null;
       if (!booking) return res.status(409).json({ success: false, message: 'Quyền học bù không có credit.' });
-      emitCoachScheduleChanged(original.coachId);
+      emitCoachScheduleChanged(booking.coachId ?? original.coachId);
       void createUserNotification({
-        userId: original.coachId,
+        userId: booking.coachId ?? original.coachId,
         title: 'Lịch học bù PT mới',
         message: 'Hội viên #' + memberId + ' đã đặt học bù lúc ' +
           start.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + '.',

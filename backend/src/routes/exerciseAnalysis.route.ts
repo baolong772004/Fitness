@@ -9,6 +9,7 @@ import { sendAnalysisVideo } from '../services/exerciseAnalysis.media.js';
 import { hasValidTrainingRelation } from '../services/studentWorkoutPlan.service.js';
 import { exerciseCatalog, exerciseVariants, isExerciseType, publicExercises } from '../services/exerciseAnalysis.catalog.js';
 import { summarizeSquatSession } from '../services/exerciseAnalysis.session.js';
+import { runGeminiSquatAnalysis, runGeminiSquatPilot } from '../services/geminiSquatPilot.service.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
@@ -57,6 +58,29 @@ router.get('/developer', authorizeRoles('ADMIN', 'COACH', 'TRAINER'), async (req
     res.json({ success: true, data: rows.map(analysisSummary) });
   } catch (error) { next(error); }
 });
+router.post('/developer/:id/vision-pilot', authorizeRoles('ADMIN', 'COACH', 'TRAINER'), async (req: AuthRequest, res, next) => {
+  try {
+    if (process.env.NODE_ENV === 'production' || process.env.AI_EXPERIMENTAL_EVALUATION !== 'true') return res.status(404).json({ success: false, message: 'Vision pilot is unavailable.' });
+    const id = validId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: 'ID không hợp lệ.' });
+    if (req.body?.externalVideoConsent !== true) return res.status(400).json({ success: false, message: 'Cần đồng ý riêng trước khi gửi video tới Google Gemini.' });
+    if (['COACH', 'TRAINER'].includes(req.user!.role)) {
+      const profile = await prisma.coachProfile.findUnique({ where: { userId: req.user!.userId }, select: { status: true } });
+      if (profile?.status !== 'ACTIVE') return res.status(403).json({ success: false, message: 'Coach không còn hoạt động.' });
+    }
+    const pilot = await runGeminiSquatPilot(id, req.user!.userId);
+    return res.json({ success: true, data: pilot });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    if (code === 'VISION_NOT_FOUND') return res.status(404).json({ success: false, code });
+    if (code === 'VISION_VIDEO_EXPIRED') return res.status(410).json({ success: false, code, message: 'Video thử nghiệm đã hết thời gian lưu.' });
+    if (code === 'VISION_VIDEO_TOO_LARGE') return res.status(413).json({ success: false, code, message: 'Gemini thử nghiệm chỉ nhận video tối đa 12 MB. Hãy nén video rồi tải lại.' });
+    if (code === 'VISION_DAILY_LIMIT') return res.status(429).json({ success: false, code, message: 'Đã đạt giới hạn 20 video Gemini trong 24 giờ.' });
+    if (code.startsWith('VISION_HTTP_') || code === 'VISION_SERVICE_UNAVAILABLE') return res.status(502).json({ success: false, code, message: 'Gemini chưa phản hồi. Hãy thử lại sau.' });
+    if (code.startsWith('VISION_')) return res.status(400).json({ success: false, code, message: 'Không thể phân tích video bằng Gemini lúc này. Vui lòng kiểm tra video hoặc cấu hình dịch vụ.' });
+    next(error);
+  }
+});
 router.post('/developer/:id/reanalyze', authorizeRoles('ADMIN', 'COACH', 'TRAINER'), async (req: AuthRequest, res, next) => {
   try {
     if (process.env.NODE_ENV === 'production' || process.env.AI_EXPERIMENTAL_EVALUATION !== 'true') return res.status(404).json({ success: false, message: 'Developer evaluation is unavailable.' });
@@ -98,6 +122,18 @@ router.delete('/developer/:id', authorizeRoles('ADMIN', 'COACH', 'TRAINER'), asy
 });
 router.get('/supported-exercises', (_req, res) => res.json({ success: true, data: publicExercises }));
 router.use(authorizeRoles('MEMBER'));
+router.post('/:id/vision-analysis', async (req: AuthRequest, res, next) => {
+  try {
+    const id = validId(req.params.id);
+    if (!id || req.body?.externalVideoConsent !== true) return res.status(400).json({ success: false, message: 'Cần đồng ý gửi video này tới Google Gemini.' });
+    res.json({ success: true, data: await runGeminiSquatAnalysis(id, req.user!.userId) });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    if (code.startsWith('VISION_')) return res.status(code === 'VISION_NOT_FOUND' ? 404 : code === 'VISION_VIDEO_EXPIRED' ? 410 : code === 'VISION_DAILY_LIMIT' ? 429 : 400)
+      .json({ success: false, code, message: code === 'VISION_VIDEO_TOO_LARGE' ? 'Video cần dưới 12 MB để Gemini nhận xét.' : 'Chưa lấy được nhận xét Gemini. Vui lòng thử lại sau.' });
+    next(error);
+  }
+});
 router.post('/sessions', async (req: AuthRequest, res, next) => {
   try {
     const frontId = validId(req.body?.frontAnalysisId);

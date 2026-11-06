@@ -317,3 +317,123 @@ test('video consent, ranges, expiry, active Coach, relationship and deletion are
   assert.equal((await call(base, member)).status, 404);
   await assert.rejects(() => import('node:fs/promises').then(fs => fs.stat(file)), { code: 'ENOENT' });
 });
+
+test('Member retries a retained video after transient AI failure without changing the failed result', async t => {
+  const member = await prisma.user.create({ data: { email: `retry-${randomUUID()}@example.invalid`,
+    password: 'unused', fullName: 'TEST ONLY', role: 'MEMBER', status: 'ACTIVE' } });
+  const other = await prisma.user.create({ data: { email: `retry-other-${randomUUID()}@example.invalid`,
+    password: 'unused', fullName: 'TEST ONLY', role: 'MEMBER', status: 'ACTIVE' } });
+  const directory = path.resolve('private-exercise-media');
+  const key = `${randomUUID()}.video`;
+  await mkdir(directory, { recursive: true });
+  const bytes = Buffer.alloc(100, 7);
+  bytes.write('ftyp', 4, 'ascii');
+  await writeFile(path.join(directory, key), bytes, { flag: 'wx' });
+  t.after(async () => {
+    const rows = await prisma.exerciseAnalysis.findMany({ where: { memberId: member.id } });
+    for (const row of rows) if (row.mediaStorageKey)
+      await unlink(path.join(directory, row.mediaStorageKey)).catch(() => undefined);
+    await prisma.exerciseAnalysis.deleteMany({ where: { memberId: member.id } });
+    await prisma.user.deleteMany({ where: { id: { in: [member.id, other.id] } } });
+  });
+  const failed = await prisma.exerciseAnalysis.create({ data: { memberId: member.id,
+    exerciseType: 'SQUAT', evaluationMode: 'OFFICIAL', status: 'FAILED',
+    errorCode: 'AI_UNAVAILABLE', mediaStorageKey: key,
+    resultJson: JSON.stringify({ requestOptions: { cameraView: 'FRONT', depthTarget: 'NONE' },
+      exerciseVariant: 'BODYWEIGHT' }) } });
+  const endpointPath = `/api/exercise-analysis/${failed.id}/reanalyze`;
+  assert.equal((await call(endpointPath, other, 'POST')).status, 410);
+  const retry = await call(endpointPath, member, 'POST');
+  assert.equal(retry.status, 202);
+  assert.notEqual(retry.json.data.id, failed.id);
+  assert.equal(retry.json.data.status, 'PENDING');
+  assert.equal(retry.json.data.evaluationMode, 'OFFICIAL');
+  assert.equal((await prisma.exerciseAnalysis.findUniqueOrThrow({ where: { id: failed.id } })).status, 'FAILED');
+  assert.equal((await call(endpointPath, member, 'POST')).status, 429);
+});
+
+test('Member upload automatically gets Gemini feedback only with external consent, caches results and keeps pose data on Gemini failure', async t => {
+  const member = await prisma.user.create({ data: { email: `gemini-member-${randomUUID()}@example.invalid`, password: 'unused', fullName: 'TEST ONLY', role: 'MEMBER', status: 'ACTIVE' } });
+  const other = await prisma.user.create({ data: { email: `gemini-other-${randomUUID()}@example.invalid`, password: 'unused', fullName: 'TEST ONLY', role: 'MEMBER', status: 'ACTIVE' } });
+  const previousUrl = process.env.AI_SERVICE_URL;
+  const previousKey = process.env.GEMINI_API_KEY;
+  const originalFetch = globalThis.fetch;
+  let geminiCalls = 0;
+  let failGemini = false;
+  const evidence = [1.2, 2, 2.8].map(timestampSeconds => ({ timestampSeconds, landmarks: { leftKnee: { x: .4, y: .5, visibility: .9 }, leftAnkle: { x: .4, y: .8, visibility: .9 } } }));
+  const mockAi = express();
+  mockAi.post('/analyze/squat', (_req, res) => res.json({ exercise: 'SQUAT', exerciseVariant: 'BODYWEIGHT', status: 'COMPLETED',
+    evaluationMode: 'OFFICIAL', resultVersion: 'exercise-analysis-result-4', ruleVersion: 'TRANSPORT_TEST_ONLY', modelVersion: 'TRANSPORT_TEST_ONLY',
+    cameraView: { detected: 'FRONT' }, video: { durationSeconds: 3 }, observations: [], poseFrames: evidence,
+    repetitions: [{ number: 1, startSeconds: 1, bottomSeconds: 2, endSeconds: 3 }],
+    provisionalEvaluation: { mode: 'PROVISIONAL', validation: 'UNVALIDATED', decisionScope: 'PER_CRITERION_2D_ONLY', criteria: [
+      { criterionId: 'SQUAT-03', predictions: [{ repNumber: 1, timestampSeconds: 2, observedValue: .15, threshold: { maximum: .1 },
+        status: 'NEEDS_IMPROVEMENT', landmarkEvidence: evidence, measurementQuality: { sufficientForExperimentalComparison: true, continuousTracking: true, stableReference: true } }] },
+    ] } }));
+  const aiServer = mockAi.listen(0, '127.0.0.1');
+  await new Promise<void>(resolve => aiServer.once('listening', resolve));
+  process.env.AI_SERVICE_URL = `http://127.0.0.1:${(aiServer.address() as { port: number }).port}`;
+  process.env.GEMINI_API_KEY = 'TRANSPORT_TEST_ONLY';
+  globalThis.fetch = async (url, options) => {
+    if (!String(url).startsWith('https://generativelanguage.googleapis.com/')) return originalFetch(url, options);
+    geminiCalls++;
+    if (failGemini) return new Response('', { status: 503 });
+    const body = JSON.parse(String(options?.body));
+    assert.ok(body.contents[0].parts[1].inlineData.data.length > 0);
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ assessments: [{ repNumber: 1,
+      criterionId: 'SQUAT-03', status: 'NEEDS_IMPROVEMENT', timestampSeconds: 2,
+      observation: 'Gối trái dịch vào trong.', correction: 'Giữ gối theo hướng bàn chân.' }] }) }] } }] }));
+  };
+  t.after(async () => {
+    globalThis.fetch = originalFetch;
+    if (previousUrl === undefined) delete process.env.AI_SERVICE_URL; else process.env.AI_SERVICE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previousKey;
+    await new Promise<void>(resolve => aiServer.close(() => resolve()));
+    const rows = await prisma.exerciseAnalysis.findMany({ where: { memberId: member.id } });
+    for (const row of rows) if (row.mediaStorageKey) await unlink(path.resolve('private-exercise-media', row.mediaStorageKey)).catch(() => undefined);
+    await prisma.actionLog.deleteMany({ where: { userId: member.id } });
+    await prisma.exerciseAnalysis.deleteMany({ where: { memberId: member.id } });
+    await prisma.user.deleteMany({ where: { id: { in: [member.id, other.id] } } });
+  });
+  async function upload(externalConsent: boolean) {
+    const bytes = Buffer.alloc(32); bytes.write('ftyp', 4);
+    const form = new FormData(); form.append('video', new Blob([bytes]), 'test.mp4');
+    form.append('exerciseType', 'SQUAT'); form.append('exerciseVariant', 'BODYWEIGHT'); form.append('consent', 'true');
+    if (externalConsent) form.append('externalVideoConsent', 'true');
+    const response = await fetch(`${endpoint}/api/exercise-analysis`, { method: 'POST', headers: auth(member), body: form });
+    assert.equal(response.status, 202);
+    const queued: any = await response.json();
+    let job = await prisma.exerciseAnalysis.findUniqueOrThrow({ where: { id: queued.data.id } });
+    for (let i = 0; i < 200 && ['PENDING', 'PROCESSING'].includes(job.status); i++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      job = await prisma.exerciseAnalysis.findUniqueOrThrow({ where: { id: job.id } });
+    }
+    assert.equal(job.status, 'COMPLETED');
+    return { job, result: JSON.parse(job.resultJson || '{}') };
+  }
+  const automatic = await upload(true);
+  assert.equal(geminiCalls, 1);
+  assert.equal(automatic.result.visionAnalysis.status, 'COMPLETED');
+  assert.equal(automatic.result.visionAnalysis.assessments[0].correction, 'Giữ gối theo hướng bàn chân.');
+  assert.equal(automatic.result.assessment.reps[0].improves, 1);
+  const memberDetail = await call(`/api/exercise-analysis/${automatic.job.id}`, member);
+  assert.equal(memberDetail.json.data.result.assessment.reps[0].status, 'NEEDS_IMPROVEMENT');
+  assert.equal(memberDetail.json.data.result.assessmentDiagnostics, undefined);
+  assert.equal(await prisma.actionLog.count({ where: { userId: member.id, action: 'GEMINI_VIDEO_ANALYSIS' } }), 1);
+  const url = `/api/exercise-analysis/${automatic.job.id}/vision-analysis`;
+  assert.equal((await call(url, other, 'POST', { externalVideoConsent: true })).status, 404);
+  assert.equal((await call(url, member, 'POST', {})).status, 400);
+  const repeated = await Promise.all([call(url, member, 'POST', { externalVideoConsent: true }), call(url, member, 'POST', { externalVideoConsent: true })]);
+  assert.ok(repeated.every(row => row.status === 200));
+  assert.equal(geminiCalls, 1, 'Cached requests must not call Google again');
+  const legacy = await upload(false);
+  assert.equal(legacy.result.visionAnalysis, undefined);
+  assert.equal(geminiCalls, 1, 'Generic legacy upload consent must not send a video to Google');
+  failGemini = true;
+  const failed = await upload(true);
+  assert.equal(failed.result.visionAnalysis.status, 'FAILED');
+  assert.equal(failed.result.visionAnalysis.errorCode, 'VISION_HTTP_503');
+  assert.equal(failed.result.poseFrames.length, 3);
+  assert.equal(failed.result.provisionalEvaluation.mode, 'PROVISIONAL');
+  assert.equal(failed.result.assessment.reps[0].improves, 1, 'Strong measured evidence is not discarded when Gemini fails');
+});

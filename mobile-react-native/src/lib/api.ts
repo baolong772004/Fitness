@@ -136,6 +136,20 @@ export const api = {
   makeupPt: (originalBookingId: number, newBookingDate: string) => post('/pt/booking/schedule-makeup', { originalBookingId, newBookingDate }),
   absentPt: (bookingId: number, reason: string) => post(`/pt/booking/${bookingId}/mark-absent`, { reason }),
   ptAbsencePolicy: (bookingId: number) => get(`/pt/booking/${bookingId}/absence-policy`),
+  coachPtAttendance: (bookingId: number, decision: 'ATTENDED' | 'NO_SHOW', note: string) =>
+    post(`/pt/booking/${bookingId}/attendance/coach`, { decision, note }),
+  adminPtAttendance: (bookingId: number, decision: 'ATTENDED' | 'NO_SHOW' | 'EXCUSED', note: string) =>
+    post(`/pt/booking/${bookingId}/attendance/admin`, { decision, note }),
+  adminPtOperations: async () => (await get('/pt/admin/operations')).data as { attendance: any[]; makeup: any[]; legacy: any[]; legacyCount: number },
+  adminAssignMakeupCoach: (requestId: number, coachId: number, reason: string) =>
+    post(`/pt/admin/makeup-rights/${requestId}/assign-coach`, { coachId, reason }),
+  adminReviewMakeupCoachChange: (requestId: number, decision: 'APPROVED' | 'REJECTED', reason: string,
+    suggestedCoachId?: number) => post(`/pt/admin/makeup-rights/${requestId}/review-coach-change`,
+    { decision, reason, suggestedCoachId }),
+  ptMakeupCoachOptions: async (requestId: number) =>
+    list<{ coachId: number; coachName: string; level: string }>((await get(`/pt/makeup-rights/${requestId}/coach-options`)).data),
+  requestPtMakeupCoachChange: (requestId: number, coachId: number, reason: string) =>
+    post(`/pt/makeup-rights/${requestId}/request-coach-change`, { coachId, reason }),
   ptQr: (bookingId: number) => post(`/pt/booking/${bookingId}/generate-session-qr`),
   startPt: (qrToken: string) => post('/pt/booking/start-session', { qrToken }),
   completePt: (bookingId: number) => post(`/pt/booking/${bookingId}/complete-session`),

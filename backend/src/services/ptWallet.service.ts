@@ -178,16 +178,23 @@ export async function reservePtCredit(tx: Prisma.TransactionClient, input: {
   memberId: number; level: PtLevel; coachId: number; bookingId: number; start: Date; end: Date;
   legacyMembershipId?: number;
 }) {
-  const batches = await tx.ptCreditBatch.findMany({ where: {
+  const allBatches = await tx.ptCreditBatch.findMany({ where: {
     wallet: { memberId: input.memberId }, level: input.level,
-    OR: [{ coachId: null }, { coachId: input.coachId }],
     ...(input.legacyMembershipId ? { membershipId: input.legacyMembershipId } : {}),
   }, include: { membership: true }, orderBy: [{ grantedAt: 'asc' }, { id: 'asc' }] });
+  const batches = allBatches.filter(row => row.coachId === null || row.coachId === input.coachId);
   batches.sort((a, b) => (a.endAt?.getTime() ?? Infinity) - (b.endAt?.getTime() ?? Infinity) ||
     a.grantedAt.getTime() - b.grantedAt.getTime() || a.id - b.id);
   const batch = batches.find(row => row.initialCount > row.usedCount + row.heldCount &&
     ptBatchCovers(row, input.start, input.end));
-  if (!batch) throw new PtBookingError(409, `Không đủ credit ${input.level} khả dụng cho ca này.`);
+  if (!batch) {
+    const boundToAnotherCoach = allBatches.some(row => row.coachId !== null &&
+      row.coachId !== input.coachId && row.initialCount > row.usedCount + row.heldCount &&
+      ptBatchCovers(row, input.start, input.end));
+    throw new PtBookingError(409, boundToAnotherCoach
+      ? `Credit ${input.level} còn buổi nhưng đang gắn với HLV khác. Hãy chọn HLV của gói hoặc gửi yêu cầu đổi HLV.`
+      : `Không đủ credit ${input.level} khả dụng cho ca này.`);
+  }
   if (isPaidPtSource(batch.source) && batch.coachId === null) {
     const assigned = await tx.ptCreditBatch.updateMany({ where: { id: batch.id, coachId: null },
       data: { coachId: input.coachId } });

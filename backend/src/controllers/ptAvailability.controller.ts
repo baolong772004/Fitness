@@ -3,7 +3,8 @@ import prisma from '../config/prisma.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { emitCoachScheduleChanged } from '../sockets/ptChat.socket.js';
 import { createUserNotification } from '../services/notification.service.js';
-import { lockPtCalendar, lockPtCoach, lockPtMembership, PT_BOOKING_HOLD_STATUSES } from '../services/ptBooking.service.js';
+import { reportCoachAbsence } from '../services/ptCoachAbsence.service.js';
+import { lockPtCalendar, lockPtCoach, lockPtMembership, PtBookingError, PT_BOOKING_HOLD_STATUSES } from '../services/ptBooking.service.js';
 import { assertBookingsCovered, availableSlots, getCalendar, localInstant, masterSlots, minute, validDate, validateShifts, vietnamDate, type Shift } from '../services/ptCalendar.service.js';
 
 const fail = (res: Response, error: unknown) => res.status(error instanceof Error ? 409 : 500)
@@ -244,19 +245,9 @@ export async function requestCoachScheduleChange(req: AuthRequest, res: Response
     return res.status(400).json({ success: false, message: 'Cần Booking và lý do (tối đa 500 ký tự).' });
   }
   try {
-    const data = await prisma.$transaction(async tx => {
-      await lockPtCoach(tx, coachId);
-      const booking = await tx.booking.findUnique({ where: { id: bookingId } });
-      if (!booking || booking.coachId !== coachId || booking.type !== 'PT' || booking.status !== 'CONFIRMED' || booking.startTime <= new Date()) {
-        throw new Error('Chỉ được gửi yêu cầu cho ca PT đã xác nhận và chưa bắt đầu của mình.');
-      }
-      const existing = await tx.coachScheduleChangeRequest.findFirst({ where: { bookingId, status: 'PENDING' } });
-      if (existing) throw new Error('Ca này đã có yêu cầu chờ Admin xử lý.');
-      const created = await tx.coachScheduleChangeRequest.create({ data: { coachId, bookingId, reason } });
-      await log(tx, coachId, 'COACH_BOOKING_CHANGE_REQUEST', null, created);
-      return created;
-    });
-    return res.status(201).json({ success: true, message: 'Đã gửi báo vắng/yêu cầu thay đổi cho Admin.', data });
+    const result = await reportCoachAbsence({ bookingId, coachId, actorId: coachId, reason });
+    return res.status(201).json({ success: true,
+      message: 'Đã báo vắng; hội viên được cấp quyền học bù ngay.', data: result.right });
   } catch (error) { return fail(res, error); }
 }
 
@@ -281,49 +272,18 @@ export async function resolveCoachScheduleChange(req: AuthRequest, res: Response
     return res.status(400).json({ success: false, message: 'Quyết định hoặc ghi chú không hợp lệ.' });
   }
   try {
-    const result = await prisma.$transaction(async tx => {
-      const initial = await tx.coachScheduleChangeRequest.findUnique({ where: { id } });
-      if (!initial) throw new Error('Không tìm thấy yêu cầu.');
-      await lockPtCalendar(tx);
-      await lockPtCoach(tx, initial.coachId);
-      const current = await tx.coachScheduleChangeRequest.findUniqueOrThrow({ where: { id } });
-      if (current.status !== 'PENDING') throw new Error('Yêu cầu đã được xử lý.');
-      const booking = await tx.booking.findUniqueOrThrow({ where: { id: current.bookingId } });
-      if (decision === 'APPROVED') {
-        if (booking.membershipId) await lockPtMembership(tx, booking.membershipId);
-        else {
-          const allocation = await tx.ptBookingCreditAllocation.findUnique({ where: { bookingId: booking.id } });
-          if (allocation?.status !== 'HELD') throw new Error('Booking không có quyền PT đang giữ chỗ.');
-        }
-        const refreshed = await tx.booking.findUniqueOrThrow({ where: { id: booking.id } });
-        if (refreshed.status !== 'CONFIRMED' || refreshed.startTime <= new Date()) throw new Error('Booking đã bắt đầu hoặc đổi trạng thái.');
-        const profile = await tx.coachProfile.findUniqueOrThrow({ where: { userId: current.coachId } });
-        const date = vietnamDate(booking.startTime);
-        const slots = await availableSlots(tx, profile.id, date);
-        const changed = await tx.booking.updateMany({ where: { id: booking.id, status: 'CONFIRMED' }, data: {
-          status: 'ABSENT_ELIGIBLE', absenceReason: current.reason, absenceReportedAt: new Date(), cancelledBy: 'ADMIN',
-        } });
-        if (changed.count !== 1) throw new Error('Booking đã đổi trạng thái.');
-        await tx.makeUpRequest.create({ data: { originalBookingId: booking.id, status: 'PENDING', expiresAt: new Date(Date.now() + 7 * 86400000) } });
-        const remaining = slots.filter(slot => slot.start.getTime() !== booking.startTime.getTime())
-          .map(slot => ({ startTime: slot.startTime, endTime: slot.endTime }));
-        await tx.coachDateAvailability.upsert({ where: { coachProfileId_date: { coachProfileId: profile.id, date } },
-          create: { coachProfileId: profile.id, date, shifts: JSON.stringify(remaining) },
-          update: { shifts: JSON.stringify(remaining) } });
-        await assertBookingsCovered(tx, current.coachId, profile.id, { date, override: remaining });
-        await log(tx, req.user!.userId, 'COACH_DATE_AVAILABILITY', { date, bookedSlot: booking.id }, { date, shifts: remaining });
-      }
-      const updated = await tx.coachScheduleChangeRequest.update({ where: { id }, data: {
-        status: decision, handledById: req.user!.userId, adminNote: adminNote || null, handledAt: new Date(),
-      } });
-      await log(tx, req.user!.userId, 'COACH_BOOKING_CHANGE_RESOLVED', current, updated);
-      return { request: updated, booking };
-    }, { maxWait: 15000, timeout: 20000 });
-    emitCoachScheduleChanged(result.request.coachId);
-    await Promise.all([
-      createUserNotification({ userId: result.request.coachId, title: 'Yêu cầu đổi lịch PT', message: decision === 'APPROVED' ? 'Admin đã duyệt báo vắng. Hội viên được cấp quyền học bù.' : `Admin không duyệt yêu cầu. ${adminNote}` }),
-      ...(decision === 'APPROVED' ? [createUserNotification({ userId: result.booking.memberId, title: 'Coach báo vắng buổi PT', message: 'Bạn được đặt học bù trong 7 ngày, không bị trừ lượt PT.' })] : []),
-    ]);
-    return res.json({ success: true, data: result.request });
+    const pending = await prisma.coachScheduleChangeRequest.findUnique({ where: { id } });
+    if (!pending || pending.status !== 'PENDING') throw new PtBookingError(409, 'Yêu cầu đã được xử lý.');
+    if (decision === 'APPROVED') {
+      const result = await reportCoachAbsence({ bookingId: pending.bookingId, coachId: pending.coachId,
+        actorId: req.user!.userId, reason: pending.reason, pendingRequestId: id });
+      return res.json({ success: true, data: result.right });
+    }
+    const updated = await prisma.coachScheduleChangeRequest.updateMany({ where: { id, status: 'PENDING' },
+      data: { status: 'REJECTED', handledById: req.user!.userId, handledAt: new Date(), adminNote } });
+    if (updated.count !== 1) throw new PtBookingError(409, 'Yêu cầu đã được xử lý.');
+    await prisma.actionLog.create({ data: { userId: req.user!.userId, action: 'COACH_BOOKING_CHANGE_REJECTED',
+      details: JSON.stringify({ requestId: id, adminNote }) } });
+    return res.json({ success: true, data: { id, status: 'REJECTED' } });
   } catch (error) { return fail(res, error); }
 }

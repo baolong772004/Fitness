@@ -5,10 +5,15 @@ import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { lockPtCalendar, lockPtCoach, lockPtMember, PtBookingError } from '../services/ptBooking.service.js';
 import { releasePtCredit } from '../services/ptWallet.service.js';
 import { createUserNotification } from '../services/notification.service.js';
-import { emitCoachScheduleChanged } from '../sockets/ptChat.socket.js';
+import { emitCoachScheduleChanged, emitUserNotification } from '../sockets/ptChat.socket.js';
 import { hasValidTrainingRelation } from '../services/studentWorkoutPlan.service.js';
+import { requireQualifiedPtCoach } from '../services/ptCoachEligibility.service.js';
+import { planPackageCoachTransfer, protectedOldCoachSlot } from '../services/ptPackageCoachTransfer.service.js';
 
-const activeBookingStatuses = ['CONFIRMED', 'IN_PROGRESS'];
+const bookingTime = (value: Date) => value.toLocaleString('vi-VN', {
+  timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit',
+  day: '2-digit', month: '2-digit', year: 'numeric',
+});
 
 async function transferCoach(tx: Prisma.TransactionClient, input: {
   batchId: number; memberId: number; oldCoachId: number; newCoachId: number; actorId: number;
@@ -94,40 +99,46 @@ export async function requestCoachChange(req: AuthRequest, res: Response) {
         throw new PtBookingError(403, 'Chỉ gói PT Paid nhiều buổi còn hiệu lực mới được yêu cầu đổi Coach.');
       }
       if (!batch.coachId || batch.coachId === newCoachId) throw new PtBookingError(409, 'Gói chưa có Coach phụ trách hoặc Coach mới trùng Coach hiện tại.');
-      const [oldProfile, newProfile] = await Promise.all([
-        tx.coachProfile.findUnique({ where: { userId: batch.coachId }, select: { status: true, user: { select: { status: true } } } }),
-        tx.coachProfile.findUnique({ where: { userId: newCoachId }, include: {
-          user: { select: { status: true } }, specializations: { select: { level: true } },
-        } }),
-      ]);
-      if (!newProfile || newProfile.status !== 'ACTIVE' || newProfile.user.status !== 'ACTIVE' ||
-        !newProfile.specializations.some(item => item.level === batch.level)) {
-        throw new PtBookingError(403, 'Coach mới không hoạt động hoặc chưa được cấp chuyên môn cho cấp PT này.');
-      }
+      const oldProfile = await tx.coachProfile.findUnique({ where: { userId: batch.coachId },
+        select: { status: true, user: { select: { status: true } } } });
+      await requireQualifiedPtCoach(tx, newCoachId, batch.level, 403);
       const quotaExempt = !oldProfile || oldProfile.status !== 'ACTIVE' || oldProfile.user.status !== 'ACTIVE';
       const usedChanges = await tx.ptCoachChangeRequest.count({ where: { batchId, status: 'APPROVED', quotaExempt: false } });
       if (!quotaExempt && usedChanges >= 1) throw new PtBookingError(409, 'Gói PT đã sử dụng quyền đổi Coach theo yêu cầu.');
       const pending = await tx.ptCoachChangeRequest.findFirst({ where: { batchId, status: 'PENDING_ADMIN' } });
       if (pending) throw new PtBookingError(409, 'Gói PT đã có yêu cầu đổi Coach đang chờ Admin.');
-      const conflicts = await tx.booking.findMany({ where: { type: 'PT', coachId: batch.coachId,
-        status: { in: activeBookingStatuses }, endTime: { gt: now },
-        ptCreditAllocation: { is: { batchId } } }, select: { id: true } });
-      const status = conflicts.length ? 'PENDING_ADMIN' : 'APPROVED';
       const change = await tx.ptCoachChangeRequest.create({ data: {
-        batchId, memberId, oldCoachId: batch.coachId, newCoachId, reason, status,
-        quotaExempt, handledAt: status === 'APPROVED' ? now : null,
+        batchId, memberId, oldCoachId: batch.coachId, newCoachId, reason,
+        status: 'PENDING_ADMIN', quotaExempt,
       } });
-      if (status === 'APPROVED') await transferCoach(tx, { batchId, memberId, oldCoachId: batch.coachId, newCoachId, actorId: memberId });
       await tx.actionLog.create({ data: { userId: memberId, action: 'PT_COACH_CHANGE_REQUEST',
-        details: JSON.stringify({ batchId, oldCoachId: batch.coachId, newCoachId, status, reason }) } });
+        details: JSON.stringify({ scope: 'PACKAGE_COACH_CHANGE', batchId,
+          oldCoachId: batch.coachId, newCoachId, status: 'PENDING_ADMIN', reason }) } });
       return change;
     }, { maxWait: 15000, timeout: 30000 });
     await Promise.allSettled([memberId, result.oldCoachId, result.newCoachId].map(userId => createUserNotification({
       userId, title: 'Yêu cầu đổi Coach PT',
-      message: result.status === 'APPROVED' ? 'Gói PT đã chuyển sang Coach mới. Credit và thời hạn được giữ nguyên.' :
-        'Yêu cầu đổi Coach đang chờ Admin xử lý các lịch PT đã xác nhận.',
+      message: 'Yêu cầu đổi HLV gói PT đang chờ Admin duyệt. Quyền học bù được xử lý riêng.',
     })));
     return res.status(201).json({ success: true, data: result });
+  } catch (error) { return fail(res, error); }
+}
+
+export async function previewCoachChange(req: AuthRequest, res: Response) {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0)
+    return res.status(400).json({ success: false, message: 'Yêu cầu đổi HLV không hợp lệ.' });
+  try {
+    const data = await prisma.$transaction(async tx => {
+      const request = await tx.ptCoachChangeRequest.findUnique({ where: { id } });
+      if (!request || request.status !== 'PENDING_ADMIN')
+        throw new PtBookingError(409, 'Yêu cầu không còn chờ Admin duyệt.');
+      const batch = await tx.ptCreditBatch.findUniqueOrThrow({ where: { id: request.batchId } });
+      if (batch.coachId !== request.oldCoachId)
+        throw new PtBookingError(409, 'HLV của gói PT vừa thay đổi.');
+      return planPackageCoachTransfer(tx, request, batch);
+    });
+    return res.json({ success: true, data });
   } catch (error) { return fail(res, error); }
 }
 
@@ -135,11 +146,16 @@ export async function resolveCoachChange(req: AuthRequest, res: Response) {
   const id = Number(req.params.id);
   const decision = req.body?.decision;
   const adminNote = typeof req.body?.adminNote === 'string' ? req.body.adminNote.trim() : '';
+  const previewToken = typeof req.body?.previewToken === 'string' ? req.body.previewToken : '';
   const actorId = req.user?.userId;
   if (!actorId) return res.status(401).json({ success: false });
-  if (!Number.isSafeInteger(id) || id <= 0 || !['APPROVED', 'REJECTED'].includes(decision) || adminNote.length > 500) {
+  if (!Number.isSafeInteger(id) || id <= 0 || !['APPROVED', 'REJECTED'].includes(decision) ||
+    adminNote.length > 500) {
     return res.status(400).json({ success: false, message: 'Quyết định hoặc ghi chú không hợp lệ.' });
   }
+  if (decision === 'APPROVED' && !/^[a-f0-9]{64}$/.test(previewToken))
+    return res.status(400).json({ success: false,
+      message: 'Cần xem trước lịch PT và xác nhận kết quả trước khi duyệt.' });
   try {
     const result = await prisma.$transaction(async tx => {
       const initial = await tx.ptCoachChangeRequest.findUnique({ where: { id } });
@@ -151,26 +167,37 @@ export async function resolveCoachChange(req: AuthRequest, res: Response) {
       if (request.status !== 'PENDING_ADMIN') throw new PtBookingError(409, 'Yêu cầu đã được xử lý.');
       const batch = await tx.ptCreditBatch.findUniqueOrThrow({ where: { id: request.batchId } });
       if (batch.coachId !== request.oldCoachId) throw new PtBookingError(409, 'Coach của gói PT đã thay đổi.');
+      let summary: Awaited<ReturnType<typeof planPackageCoachTransfer>> | null = null;
       if (decision === 'APPROVED') {
         const now = new Date();
         if (batch.initialCount <= batch.usedCount || (batch.endAt && batch.endAt <= now)) {
           throw new PtBookingError(409, 'Gói PT đã hết Credit hoặc hết hạn; không thể duyệt đổi Coach.');
         }
-        const newProfile = await tx.coachProfile.findUnique({ where: { userId: request.newCoachId },
-          include: { user: { select: { status: true } }, specializations: true } });
-        if (!newProfile || newProfile.status !== 'ACTIVE' || newProfile.user.status !== 'ACTIVE' ||
-          !newProfile.specializations.some(item => item.level === batch.level)) throw new PtBookingError(409, 'Coach mới không còn đủ điều kiện.');
-        const bookings = await tx.booking.findMany({ where: { type: 'PT', coachId: request.oldCoachId,
-          status: { in: activeBookingStatuses }, endTime: { gt: now },
-          ptCreditAllocation: { is: { batchId: batch.id } } } });
-        if (bookings.some(booking => booking.status === 'IN_PROGRESS' || booking.startTime <= now || booking.isMakeup)) {
-          throw new PtBookingError(409, 'Có buổi PT đang diễn ra hoặc buổi học bù; cần xử lý lịch trước khi đổi Coach.');
+        summary = await planPackageCoachTransfer(tx, request, batch, now);
+        if (summary.token !== previewToken)
+          throw new PtBookingError(409, 'Lịch HLV đã thay đổi từ lúc xem trước. Hãy tải lại kết quả trước khi duyệt.');
+        for (const booking of summary.transferable) {
+          if (booking.startTime <= new Date())
+            throw new PtBookingError(409, 'Lịch PT đã bắt đầu. Hãy xem trước lại.');
+          const claimed = await tx.booking.updateMany({ where: { id: booking.bookingId,
+            memberId: request.memberId, coachId: request.oldCoachId, status: booking.status,
+            startTime: booking.startTime, endTime: booking.endTime },
+            data: { coachId: request.newCoachId, sessionQrToken: null } });
+          if (claimed.count !== 1) throw new PtBookingError(409, 'Lịch PT vừa thay đổi. Vui lòng xem trước lại.');
         }
-        for (const booking of bookings) {
-          const claimed = await tx.booking.updateMany({ where: { id: booking.id, status: 'CONFIRMED' },
+        for (const booking of summary.toCancel) {
+          const executionTime = new Date();
+          if (booking.startTime <= executionTime)
+            throw new PtBookingError(409, 'Lịch PT đã bắt đầu. Hãy xem trước lại.');
+          if (protectedOldCoachSlot(booking.startTime, executionTime, true))
+            throw new PtBookingError(409, 'Lịch đã còn dưới 2 giờ. Hãy xem trước lại để giữ HLV cũ.');
+          const claimed = await tx.booking.updateMany({ where: { id: booking.bookingId,
+            memberId: request.memberId, coachId: request.oldCoachId, status: booking.status,
+            startTime: booking.startTime, endTime: booking.endTime },
             data: { status: 'CANCELLED', cancelledBy: 'ADMIN_COACH_CHANGE',
-              absenceReason: 'Admin hủy lịch cũ để đổi Coach', sessionQrToken: null } });
-          if (claimed.count !== 1 || !await releasePtCredit(tx, booking.id)) throw new PtBookingError(409, 'Lịch PT vừa thay đổi. Vui lòng thử lại.');
+              absenceReason: booking.reason, sessionQrToken: null } });
+          if (claimed.count !== 1 || !await releasePtCredit(tx, booking.bookingId))
+            throw new PtBookingError(409, 'Lịch PT vừa thay đổi. Vui lòng xem trước lại.');
         }
         await transferCoach(tx, { batchId: batch.id, memberId: request.memberId,
           oldCoachId: request.oldCoachId, newCoachId: request.newCoachId, actorId });
@@ -179,15 +206,25 @@ export async function resolveCoachChange(req: AuthRequest, res: Response) {
         status: decision, adminNote: adminNote || null, handledById: actorId, handledAt: new Date(),
       } });
       await tx.actionLog.create({ data: { userId: actorId, action: 'PT_COACH_CHANGE_RESOLVED',
-        details: JSON.stringify({ requestId: id, decision, adminNote }) } });
-      return updated;
-    }, { maxWait: 15000, timeout: 30000 });
-    emitCoachScheduleChanged(result.oldCoachId);
-    await Promise.allSettled([result.memberId, result.oldCoachId, result.newCoachId].map(userId => createUserNotification({
+        details: JSON.stringify({ scope: 'PACKAGE_COACH_CHANGE', requestId: id, decision,
+          keptBookingIds: summary?.transferable.map(item => item.bookingId) ?? [],
+          keptOldCoachBookingIds: summary?.keepOldCoach.map(item => item.bookingId) ?? [],
+          cancelledBookingIds: summary?.toCancel.map(item => item.bookingId) ?? [], adminNote }) } });
+      const memberMessage = summary
+        ? `Đổi HLV gói PT: ${summary.transferable.length} lịch chuyển sang HLV mới (${summary.transferable.map(item => bookingTime(item.startTime)).join(', ') || 'không có'}); ${summary.keepOldCoach.length} lịch gần giờ giữ HLV cũ (${summary.keepOldCoach.map(item => bookingTime(item.startTime)).join(', ') || 'không có'}); ${summary.toCancel.length} lịch cần đặt lại (${summary.toCancel.map(item => bookingTime(item.startTime)).join(', ') || 'không có'}). Credit các lịch hủy đã hoàn về lô gốc. Quyền học bù không thay đổi.`
+        : `Yêu cầu đổi HLV gói PT không được duyệt. ${adminNote}`;
+      const memberNotification = await tx.notification.create({ data: { userId: request.memberId,
+        title: 'Yêu cầu đổi HLV gói PT đã xử lý', message: memberMessage } });
+      return { request: updated, summary, memberNotification };
+    }, { isolationLevel: 'Serializable', maxWait: 15000, timeout: 30000 });
+    emitCoachScheduleChanged(result.request.oldCoachId);
+    if (result.summary) emitCoachScheduleChanged(result.request.newCoachId);
+    emitUserNotification(result.request.memberId, result.memberNotification);
+    await Promise.allSettled([result.request.oldCoachId, result.request.newCoachId].map(userId => createUserNotification({
       userId, title: 'Yêu cầu đổi Coach PT đã xử lý',
-      message: result.status === 'APPROVED' ? 'Đã đổi Coach; các lịch tương lai với Coach cũ được hủy và Credit giữ nguyên.' :
-        `Yêu cầu đổi Coach không được duyệt. ${result.adminNote || ''}`,
+      message: result.summary ? `Đã chuyển HLV gói PT. Chuyển ${result.summary.transferable.length} lịch, giữ HLV cũ cho ${result.summary.keepOldCoach.length} lịch gần giờ, hủy ${result.summary.toCancel.length} lịch không phù hợp.` :
+        `Yêu cầu đổi Coach không được duyệt. ${result.request.adminNote || ''}`,
     })));
-    return res.json({ success: true, data: result });
+    return res.json({ success: true, data: result.request, summary: result.summary });
   } catch (error) { return fail(res, error); }
 }

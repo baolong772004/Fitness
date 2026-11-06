@@ -5,9 +5,27 @@ import { lockGymMember } from './gymMembershipLock.service.js';
 import { createUserNotification } from './notification.service.js';
 import { emitCoachScheduleChanged, emitUserNotification } from '../sockets/ptChat.socket.js';
 import { verifiedGymPayment } from './gymEntitlement.service.js';
+import { beginPtAttendanceReview, escalatePtAttendanceReview } from './ptAttendance.service.js';
+import { captureMakeupAvailability, hadNotifiedSuitableSlot } from './ptMakeupAvailability.service.js';
 
 const NO_SHOW_GRACE_MS = 15 * 60 * 1000;
 const SCAN_INTERVAL_MS = 60 * 1000;
+
+export async function isPtAbsenceSchemaReady() {
+  const rows = await prisma.$queryRaw<Array<{ ready: number }>>`
+    SELECT CASE WHEN OBJECT_ID(N'dbo.PtAttendanceReview', N'U') IS NOT NULL
+      AND OBJECT_ID(N'dbo.PtAttendanceReviewEvent', N'U') IS NOT NULL
+      AND OBJECT_ID(N'dbo.PtMakeUpEvent', N'U') IS NOT NULL
+      AND COL_LENGTH(N'dbo.MakeUpRequest', N'cause') IS NOT NULL
+      AND COL_LENGTH(N'dbo.MakeUpRequest', N'chainRootBookingId') IS NOT NULL
+      AND COL_LENGTH(N'dbo.MakeUpRequest', N'requestedCoachId') IS NOT NULL
+      AND COL_LENGTH(N'dbo.MakeUpRequest', N'requestedStartAt') IS NOT NULL
+      AND COL_LENGTH(N'dbo.MakeUpRequest', N'requestReason') IS NOT NULL
+      AND COL_LENGTH(N'dbo.MakeUpRequest', N'coachChangeRequestedAt') IS NOT NULL
+      THEN 1 ELSE 0 END AS ready
+  `;
+  return rows[0]?.ready === 1;
+}
 
 export async function cancelUncoveredWalletBooking(bookingId: number) {
   const initial = await prisma.booking.findUnique({ where: { id: bookingId },
@@ -30,7 +48,10 @@ export async function cancelUncoveredWalletBooking(bookingId: number) {
     }, select: { id: true } });
     const batch = booking.ptCreditAllocation.batch;
     const gift = batch.membership;
-    const trialValid = batch.level !== 'TRIAL' || (gift &&
+    const protectedMakeup = booking.isMakeup && Boolean(await tx.makeUpRequest.findFirst({ where: {
+      newBookingId: booking.id, cause: 'COACH', status: 'APPROVED',
+    }, select: { id: true } }));
+    const trialValid = protectedMakeup || batch.level !== 'TRIAL' || (gift &&
       ['ACTIVE', 'PENDING_ACTIVATION'].includes(gift.status) &&
       gift.startDate <= booking.startTime && gift.endDate >= booking.endTime);
     if (gym && trialValid) return null;
@@ -49,69 +70,68 @@ export async function cancelUncoveredWalletBooking(bookingId: number) {
   }
 }
 
-async function expireMakeupRight(requestId: number, cutoff: Date) {
+export async function expireMakeupRight(requestId: number, cutoff: Date) {
+  const initial = await prisma.makeUpRequest.findUnique({ where: { id: requestId },
+    select: { originalBooking: { select: { coachId: true, memberId: true, membershipId: true } } } });
+  if (!initial) return null;
   const result = await prisma.$transaction(async (tx) => {
-    const request = await tx.makeUpRequest.findUnique({
+    await lockPtCalendar(tx);
+    if (initial.originalBooking.coachId) await lockPtCoach(tx, initial.originalBooking.coachId);
+    await lockPtMember(tx, initial.originalBooking.memberId);
+    await lockGymMember(tx, initial.originalBooking.memberId);
+    if (initial.originalBooking.membershipId) await lockPtMembership(tx, initial.originalBooking.membershipId);
+    const request = await tx.makeUpRequest.findUniqueOrThrow({
       where: { id: requestId }, include: { originalBooking: true },
     });
-    const membershipId = request?.originalBooking.membershipId;
-    if (!request) return null;
-    if (membershipId) await lockPtMembership(tx, membershipId);
+    if (request.status !== 'PENDING' || request.expiresAt > cutoff ||
+      (request.cause === 'COACH' && (request.requestedCoachId || request.escalatedAt))) return null;
+    const coachRight = request.cause === 'COACH';
+    const hadSlot = coachRight && request.originalBooking.coachId ?
+      await hadNotifiedSuitableSlot(tx, { coachId: request.assignedCoachId ?? request.originalBooking.coachId,
+        memberId: request.originalBooking.memberId, evidence: request.slotEvidence,
+        deadline: request.expiresAt }) : false;
+    const extend = coachRight && !hadSlot && request.extensionCount === 0;
+    const escalate = coachRight && !hadSlot && request.extensionCount > 0;
+    const nextStatus = escalate ? 'ESCALATED' : extend ? 'PENDING' : 'EXPIRED';
+    const nextExpiry = extend ? new Date(Math.max(cutoff.getTime(), request.expiresAt.getTime()) + 7 * 86400000) : request.expiresAt;
     const claimed = await tx.makeUpRequest.updateMany({ where: {
       id: requestId, status: 'PENDING', expiresAt: { lte: cutoff },
-    }, data: { status: 'EXPIRED' } });
+    }, data: { status: nextStatus, expiresAt: nextExpiry,
+      extensionCount: extend ? 1 : request.extensionCount, escalatedAt: escalate ? cutoff : request.escalatedAt } });
     if (claimed.count !== 1) return null;
-    await releasePtCredit(tx, request.originalBookingId);
+    const action = extend ? 'SYSTEM_EXTENDED_7_DAYS' : escalate ? 'SYSTEM_ESCALATED_ADMIN' : 'SYSTEM_RIGHT_EXPIRED';
+    await tx.ptMakeUpEvent.create({ data: { requestId, action,
+      details: JSON.stringify({ hadNotifiedSuitableSlot: hadSlot, previousExpiry: request.expiresAt.toISOString(),
+        nextExpiry: nextExpiry.toISOString(), evidence: request.slotEvidence }).slice(0, 1000) } });
+    if (nextStatus === 'EXPIRED') {
+      const allocation = await tx.ptBookingCreditAllocation.findUnique({ where: { bookingId: request.originalBookingId } });
+      if (allocation && !await releasePtCredit(tx, request.originalBookingId)) {
+        throw new Error(`Quyền học bù #${requestId} không thể hoàn Credit đang giữ.`);
+      }
+    }
+    const message = extend ? 'Coach/Gym chưa có ca phù hợp; quyền học bù được gia hạn thêm 7 ngày một lần.' :
+      escalate ? 'Vẫn chưa có ca phù hợp; quyền học bù và Credit đang giữ được chuyển Admin xử lý.' :
+        'Quyền học bù đã hết hạn sau khi có ca phù hợp được thông báo; Credit trở lại lô ban đầu nếu còn hiệu lực.';
     const notification = await tx.notification.create({ data: {
-      userId: request.originalBooking.memberId,
-      title: 'Quyền học bù PT đã hết hạn',
-      message: 'Bạn không đặt học bù trong 7 ngày. Quyền học bù đã hết hạn; buổi PT chưa bị trừ và vẫn dùng được nếu gói còn hiệu lực.',
+      userId: request.originalBooking.memberId, title: 'Cập nhật quyền học bù PT', message,
     } });
-    return { userId: request.originalBooking.memberId, notification };
+    const notifications = [{ userId: request.originalBooking.memberId, notification }];
+    if (escalate) {
+      const admins = await tx.user.findMany({ where: { role: 'ADMIN', status: 'ACTIVE' }, select: { id: true } });
+      for (const admin of admins) {
+        const alert = await tx.notification.create({ data: { userId: admin.id,
+          title: 'PT học bù cần Admin sắp xếp', message: `Quyền #${requestId} không có ca sau lần gia hạn.` } });
+        notifications.push({ userId: admin.id, notification: alert });
+      }
+    }
+    return { notifications, status: nextStatus };
   }, { isolationLevel: 'Serializable', maxWait: 15000, timeout: 20000 });
-  if (result) emitUserNotification(result.userId, result.notification);
+  if (result) for (const row of result.notifications) emitUserNotification(row.userId, row.notification);
   return result;
 }
 
 export async function markPtNoShow(bookingId: number, cutoff: Date) {
-  const result = await prisma.$transaction(async (tx) => {
-    const current = await tx.booking.findUnique({ where: { id: bookingId }, select: { membershipId: true } });
-    if (!current) return null;
-    if (current.membershipId) await lockPtMembership(tx, current.membershipId);
-    const claimed = await tx.booking.updateMany({
-      where: {
-        id: bookingId,
-        type: 'PT',
-        status: 'CONFIRMED',
-        endTime: { lte: cutoff },
-      },
-      data: {
-        status: 'ABSENT_NO_REFUND',
-        absenceReason: 'Tự động ghi nhận vắng vì không check-in buổi PT',
-        absenceReportedAt: new Date(),
-        cancelledBy: 'SYSTEM_NO_SHOW',
-      },
-    });
-    if (claimed.count === 0) return null;
-
-    const booking = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
-    const allocation = await tx.ptBookingCreditAllocation.findUnique({ where: { bookingId } });
-    if (allocation) await settlePtCredit(tx, bookingId);
-    else if (current.membershipId) await debitPtSession(tx, current.membershipId);
-    else throw new Error('PT no-show has no credit allocation');
-
-    const notification = await tx.notification.create({
-      data: {
-        userId: booking.memberId,
-        title: 'Vắng buổi tập PT',
-        message: `Bạn không check-in buổi PT lúc ${booking.startTime.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}. Hệ thống đã trừ 1 buổi trong gói.`,
-      },
-    });
-
-    return { bookingId, debited: true, notification, userId: booking.memberId };
-  }, { isolationLevel: 'Serializable', maxWait: 15000, timeout: 20000 });
-  if (result) emitUserNotification(result.userId, result.notification);
-  return result;
+  return beginPtAttendanceReview(bookingId, cutoff);
 }
 
 export async function resolveAutomaticPtNoShow(
@@ -179,11 +199,20 @@ export async function resolveAutomaticPtNoShow(
 
 export function startPtNoShowWorker() {
   let running = false;
+  let warnedMissingSchema = false;
 
   const scan = async () => {
     if (running) return;
     running = true;
     try {
+      if (!await isPtAbsenceSchemaReady()) {
+        if (!warnedMissingSchema) {
+          console.warn('PT absence worker paused: PT absence/makeup migrations 20261109 and 20261110 are required. No PT attendance or make-up job will run.');
+          warnedMissingSchema = true;
+        }
+        return;
+      }
+      warnedMissingSchema = false;
       const cutoff = new Date(Date.now() - NO_SHOW_GRACE_MS);
       let cursor = 0;
       while (true) {
@@ -210,8 +239,34 @@ export function startPtNoShowWorker() {
       }
       cursor = 0;
       while (true) {
+        const overdue = await prisma.ptAttendanceReview.findMany({ where: {
+          id: { gt: cursor }, status: 'PENDING_COACH', deadlineAt: { lte: new Date() },
+        }, select: { id: true }, orderBy: { id: 'asc' }, take: 100 });
+        if (!overdue.length) break;
+        for (const item of overdue) {
+          cursor = item.id;
+          try { await escalatePtAttendanceReview(item.id, new Date()); }
+          catch (error) { console.error(`Lỗi chuyển Admin đối soát PT #${item.id}:`, error); }
+        }
+      }
+      cursor = 0;
+      while (true) {
+        const liveRights = await prisma.makeUpRequest.findMany({ where: {
+          id: { gt: cursor }, status: 'PENDING', cause: 'COACH',
+          requestedCoachId: null, expiresAt: { gt: new Date() },
+        }, select: { id: true }, orderBy: { id: 'asc' }, take: 100 });
+        if (!liveRights.length) break;
+        for (const item of liveRights) {
+          cursor = item.id;
+          try { await captureMakeupAvailability(item.id); }
+          catch (error) { console.error(`Lỗi lưu ca học bù #${item.id}:`, error); }
+        }
+      }
+      cursor = 0;
+      while (true) {
         const expired = await prisma.makeUpRequest.findMany({ where: {
           id: { gt: cursor }, status: 'PENDING', expiresAt: { lte: new Date() },
+          OR: [{ cause: { not: 'COACH' } }, { requestedCoachId: null, escalatedAt: null }],
         }, select: { id: true }, orderBy: { id: 'asc' }, take: 100 });
         if (expired.length === 0) break;
         for (const item of expired) {

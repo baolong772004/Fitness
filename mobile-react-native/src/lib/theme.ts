@@ -21,6 +21,16 @@ export const timeLabel = (value: unknown) => {
   const date = new Date(String(value ?? ''));
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 };
+export const vietnamDateLabel = (value: unknown) => {
+  const date = new Date(String(value ?? ''));
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+};
+export const vietnamTimeLabel = (value: unknown) => {
+  const date = new Date(String(value ?? ''));
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit',
+  });
+};
 export const dayKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 export const list = <T = Record<string, unknown>>(value: unknown): T[] => Array.isArray(value) ? value as T[] : [];
 export const asRecord = (value: unknown): Record<string, any> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};

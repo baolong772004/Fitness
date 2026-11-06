@@ -1,0 +1,15 @@
+BEGIN TRY
+BEGIN TRAN;
+
+ALTER TABLE [dbo].[MakeUpRequest] ADD
+  [requestedCoachId] INT NULL,
+  [requestedStartAt] DATETIME2 NULL,
+  [requestReason] NVARCHAR(500) NULL,
+  [coachChangeRequestedAt] DATETIME2 NULL;
+
+COMMIT TRAN;
+END TRY
+BEGIN CATCH
+  IF @@TRANCOUNT > 0 ROLLBACK TRAN;
+  THROW;
+END CATCH

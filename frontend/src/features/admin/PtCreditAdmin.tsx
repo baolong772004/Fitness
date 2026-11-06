@@ -102,6 +102,7 @@ function formatDate(dateStr: string | null | undefined): string {
 function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -121,7 +122,18 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [form, setForm] = useState<{ name: string; level: string; sessionCount: number; durationDays: number; price: number; singleSessionPrice: number | null; benefits: string }>({ name: '', level: 'BEGINNER', sessionCount: 10, durationDays: 30, price: 500000, singleSessionPrice: null, benefits: '' });
   const [coachChanges, setCoachChanges] = useState<Awaited<ReturnType<typeof api.adminTrainers.getPendingPtCoachChanges>>>([]);
+  const [makeupRequests, setMakeupRequests] = useState<Awaited<ReturnType<typeof api.adminTrainers.getPtMakeupOperations>>>([]);
+  const [makeupCoaches, setMakeupCoaches] = useState<Record<number, Array<{ userId: number; fullName: string }>>>({});
+  const [makeupCoachIds, setMakeupCoachIds] = useState<Record<number, number>>({});
+  const [makeupReasons, setMakeupReasons] = useState<Record<number, string>>({});
+  const [makeupExceptionsOpen, setMakeupExceptionsOpen] = useState<Record<number, boolean>>({});
+  const [makeupBusy, setMakeupBusy] = useState<number | null>(null);
   const [coachChangeBusy, setCoachChangeBusy] = useState<number | null>(null);
+  const [coachChangeNotes, setCoachChangeNotes] = useState<Record<number, string>>({});
+  const [coachChangePreviews, setCoachChangePreviews] = useState<Record<number,
+    Awaited<ReturnType<typeof api.adminTrainers.previewPtCoachChange>>>>({});
+  const [coachPreviewBusy, setCoachPreviewBusy] = useState<number | null>(null);
+  const [coachPreviewErrors, setCoachPreviewErrors] = useState<Record<number, string>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
   const [productSubmitting, setProductSubmitting] = useState(false);
   const [productFilter, setProductFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -174,9 +186,69 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
     }
   };
 
+  const loadMakeup = async () => {
+    try {
+      setMakeupRequests(await api.adminTrainers.getPtMakeupOperations());
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'Không tải được yêu cầu học bù.', type: 'error' });
+    }
+  };
+
   useEffect(() => {
     void load();
+    void loadMakeup();
   }, []);
+
+  const findMakeupCoaches = async (request: (typeof makeupRequests)[number]) => {
+    const level = request.originalBooking.ptCreditAllocation?.batch.level ?? request.originalBooking.membership?.package.ptLevel;
+    if (!level) {
+      setMessage({ text: `Quyền học bù #${request.id} chưa rõ cấp PT; cần đối soát trước khi đổi HLV.`, type: 'error' });
+      return;
+    }
+    try {
+      const candidates = await api.adminTrainers.getEligiblePtMakeupCoaches(level);
+      const currentCoachId = request.assignedCoachId ?? request.originalBooking.coachId;
+      setMakeupCoaches(previous => ({ ...previous, [request.id]: candidates.filter(coach => coach.userId !== currentCoachId) }));
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'Không tải được HLV phù hợp.', type: 'error' });
+    }
+  };
+
+  const assignMakeupCoach = async (requestId: number) => {
+    const coachId = makeupCoachIds[requestId];
+    const reason = makeupReasons[requestId]?.trim();
+    if (!coachId || !reason) {
+      setMessage({ text: 'Chọn HLV mới và nhập lý do sắp xếp lại buổi học bù.', type: 'error' });
+      return;
+    }
+    setMakeupBusy(requestId);
+    try {
+      await api.adminTrainers.assignPtMakeupCoach(requestId, coachId, reason);
+      await loadMakeup();
+      setMessage({ text: `Đã chuyển quyền học bù #${requestId} sang HLV mới và thông báo hội viên.`, type: 'success' });
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'Không thể giao HLV cho buổi học bù.', type: 'error' });
+    } finally { setMakeupBusy(null); }
+  };
+
+  const reviewMakeupChoice = async (requestId: number, decision: 'APPROVED' | 'REJECTED') => {
+    const reason = makeupReasons[requestId]?.trim();
+    if (!reason) {
+      setMessage({ text: 'Nhập lý do duyệt hoặc từ chối để lưu audit log và thông báo hội viên.', type: 'error' });
+      return;
+    }
+    setMakeupBusy(requestId);
+    try {
+      await api.adminTrainers.reviewPtMakeupCoachChange(requestId, decision, reason,
+        decision === 'REJECTED' ? makeupCoachIds[requestId] : undefined);
+      await loadMakeup();
+      setMessage({ text: decision === 'APPROVED'
+        ? 'Đã duyệt HLV; hội viên có thể chọn ca để đặt lịch.'
+        : 'Đã thông báo lý do từ chối. Hội viên có thể chọn HLV khác.', type: 'success' });
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'Không thể xử lý đề nghị.', type: 'error' });
+    } finally { setMakeupBusy(null); }
+  };
 
   const saveSingleOffer = async (level: string) => {
     const draft = singleDrafts[level];
@@ -249,16 +321,40 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
       setProductSubmitting(false);
     }
   };
+  const loadCoachChangePreview = async (id: number) => {
+    setCoachPreviewBusy(id);
+    setCoachChangePreviews(previous => { const next = { ...previous }; delete next[id]; return next; });
+    setCoachPreviewErrors(previous => { const next = { ...previous }; delete next[id]; return next; });
+    try {
+      const preview = await api.adminTrainers.previewPtCoachChange(id);
+      setCoachChangePreviews(previous => ({ ...previous, [id]: preview }));
+    } catch (error) {
+      setCoachPreviewErrors(previous => ({ ...previous, [id]: error instanceof Error ? error.message : 'Không xem trước được lịch.' }));
+    } finally { setCoachPreviewBusy(null); }
+  };
   const handleCoachChange = async (id: number, decision: 'APPROVED' | 'REJECTED') => {
-    const note = window.prompt(decision === 'APPROVED' ? 'Ghi chú cho hội viên (tùy chọn). Lịch tương lai với Coach cũ sẽ được hủy và hoàn Credit.' : 'Nhập lý do từ chối cho hội viên:');
-    if (note === null || (decision === 'REJECTED' && !note.trim())) return;
+    const note = coachChangeNotes[id]?.trim() ?? '';
+    if (decision === 'REJECTED' && !note) {
+      setMessage({ text: 'Nhập lý do từ chối để thông báo cho hội viên.', type: 'error' });
+      return;
+    }
+    const previewToken = coachChangePreviews[id]?.token;
+    if (decision === 'APPROVED' && !previewToken) {
+      setMessage({ text: 'Xem trước các lịch trước khi duyệt đổi HLV.', type: 'error' });
+      return;
+    }
     setCoachChangeBusy(id);
     try {
-      await api.adminTrainers.resolvePtCoachChange(id, decision, note.trim());
+      const result = await api.adminTrainers.resolvePtCoachChange(id, decision, note, previewToken);
       await load();
-      setMessage({ text: decision === 'APPROVED' ? 'Đã chuyển Coach và xử lý lịch cũ.' : 'Đã từ chối yêu cầu đổi Coach.', type: 'success' });
+      setCoachChangeNotes(previous => { const next = { ...previous }; delete next[id]; return next; });
+      setCoachChangePreviews(previous => { const next = { ...previous }; delete next[id]; return next; });
+      setMessage({ text: decision === 'APPROVED'
+        ? `Đã đổi HLV: chuyển ${result.summary?.transferable.length ?? 0} lịch, giữ HLV cũ cho ${result.summary?.keepOldCoach.length ?? 0} lịch gần giờ, hủy và hoàn Credit ${result.summary?.toCancel.length ?? 0} lịch.`
+        : 'Đã từ chối yêu cầu đổi HLV gói PT.', type: 'success' });
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : 'Không thể xử lý yêu cầu.', type: 'error' });
+      if (decision === 'APPROVED') void loadCoachChangePreview(id);
     } finally { setCoachChangeBusy(null); }
   };
 
@@ -462,7 +558,10 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
       )}
 
       {/* Main Tabs Navigation */}
-      <Tabs value={activeTab} onValueChange={val => setActiveTab(val as any)} className="w-full">
+      <Tabs value={activeTab} onValueChange={val => {
+        setActiveTab(val as typeof activeTab);
+        if (val === 'coachChanges') void loadMakeup();
+      }} className="w-full">
         <TabsList className="grid w-full grid-cols-4 bg-muted/60 p-1">
           <TabsTrigger value="packages" className="flex items-center gap-2 py-2">
             <Dumbbell className="size-4" />
@@ -483,7 +582,7 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
             <span className="font-medium">Ví PT Hội Viên</span>
           </TabsTrigger>
           <TabsTrigger value="coachChanges" className="flex items-center gap-2 py-2">
-            <ShieldAlert className="size-4" /><span className="font-medium">Đổi HLV ({coachChanges.length})</span>
+            <ShieldAlert className="size-4" /><span className="font-medium">Đổi HLV ({coachChanges.length + makeupRequests.length})</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1500,14 +1599,80 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
           )}
         </TabsContent>
         <TabsContent value="coachChanges" className="space-y-3 pt-2">
-          <Card><CardHeader><CardTitle>Yêu cầu đổi HLV cần xử lý</CardTitle><CardDescription>Chỉ gói PT Paid nhiều buổi. Duyệt yêu cầu sẽ hủy các lịch tương lai với HLV cũ, hoàn Credit về đúng gói và chuyển giáo án cho HLV mới.</CardDescription></CardHeader><CardContent className="space-y-3">
+          <Card><CardHeader className="flex flex-row items-start justify-between gap-3"><div><CardTitle>Đổi HLV cho buổi học bù · {makeupRequests.filter(right => right.requestedCoachId).length} chờ duyệt, {makeupRequests.filter(right => !right.requestedCoachId).length} chờ hội viên chọn</CardTitle><CardDescription>Hội viên chọn HLV trên Mobile. Admin duyệt chuyên môn và trạng thái HLV; hội viên chọn ca và đặt lịch sau khi được duyệt.</CardDescription></div><Button size="sm" variant="outline" onClick={() => void loadMakeup()}>Làm mới</Button></CardHeader><CardContent className="space-y-3">
+            {makeupRequests.length === 0 && <p className="text-sm text-muted-foreground">Không có quyền học bù cần Admin hỗ trợ.</p>}
+            {makeupRequests.map(right => {
+              const currentCoachId = right.assignedCoachId ?? right.originalBooking.coachId;
+              return <div key={right.id} className="rounded-lg border p-3 text-sm space-y-2">
+                <p className="font-semibold">Quyền học bù #{right.id} · {right.originalBooking.member?.fullName ?? `Hội viên #${right.originalBooking.memberId}`} (#{right.originalBooking.memberId})</p>
+                <p>HLV hiện tại: {currentCoachId === right.originalBooking.coachId ? right.originalBooking.coach?.fullName ?? `#${currentCoachId}` : `HLV #${currentCoachId}`} · Lịch gốc: {formatDateTime(right.originalBooking.startTime)}</p>
+                <p>Hạn xử lý: {formatDateTime(right.expiresAt)} · HLV vắng {right.coachAbsenceCount} lần · Gia hạn {right.extensionCount} lần</p>
+                {right.requestedCoachId ? <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-1">
+                  <Badge variant="outline">Chờ duyệt HLV</Badge>
+                  <p>HLV hội viên chọn: <strong>{right.requestedCoachName ?? `#${right.requestedCoachId}`}</strong></p>
+                  <p>Hội viên sẽ chọn ca sau khi được duyệt.</p>
+                  <p>Lý do của hội viên: {right.requestReason}</p>
+                  <p className="text-xs text-muted-foreground">Gửi lúc {formatDateTime(right.coachChangeRequestedAt)}. Quyền bù và Credit đang giữ được bảo vệ khi chờ Admin.</p>
+                </div> : <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+                  <Badge variant="outline">Chờ hội viên chọn HLV</Badge>
+                  <p className="mt-2 text-amber-800">Hội viên cần mở Mobile → Lịch PT → “Chọn HLV mong muốn” để gửi lựa chọn cho Admin duyệt.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Đề nghị cũ vẫn giữ quyền học bù và Credit; không tự chọn HLV thay hội viên.</p>
+                </div>}
+                {right.requestedCoachId && <>
+                  <Input placeholder="Lý do duyệt hoặc từ chối (bắt buộc)" maxLength={500} value={makeupReasons[right.id] ?? ''} onChange={event => setMakeupReasons(previous => ({ ...previous, [right.id]: event.target.value }))} />
+                  <div className="flex flex-wrap gap-2">
+                  <Button size="sm" disabled={makeupBusy !== null || !makeupReasons[right.id]?.trim()} onClick={() => void reviewMakeupChoice(right.id, 'APPROVED')}>Duyệt HLV</Button>
+                  <Button size="sm" variant="outline" disabled={makeupBusy !== null || !makeupReasons[right.id]?.trim()} onClick={() => void reviewMakeupChoice(right.id, 'REJECTED')}>Từ chối · yêu cầu chọn lại</Button>
+                  </div>
+                  <Button size="sm" variant="outline" disabled={makeupBusy !== null} onClick={() => void findMakeupCoaches(right)}>Tìm HLV khác để đề xuất nếu từ chối</Button>
+                  {(makeupCoaches[right.id] ?? []).map(coach => <Button key={coach.userId} size="sm" variant={makeupCoachIds[right.id] === coach.userId ? 'default' : 'outline'} onClick={() => setMakeupCoachIds(previous => ({ ...previous, [right.id]: coach.userId }))}>{coach.fullName}</Button>)}
+                  {makeupCoachIds[right.id] && <p className="text-xs text-muted-foreground">HLV được chọn ở đây chỉ là gợi ý khi từ chối. Hội viên sẽ tự chọn HLV và đặt ca sau khi được duyệt.</p>}
+                </>}
+                <Button size="sm" variant="ghost" onClick={() => setMakeupExceptionsOpen(previous => ({ ...previous, [right.id]: !previous[right.id] }))}>Xử lý ngoại lệ: Admin chủ động phân HLV</Button>
+                {makeupExceptionsOpen[right.id] && <div className="rounded-md border p-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">Chỉ dùng khi HLV cũ không thể tiếp tục hoặc hội viên không thể tự chọn. Việc phân HLV được ghi audit log và thông báo hội viên.</p>
+                  <Button size="sm" variant="outline" disabled={makeupBusy !== null} onClick={() => void findMakeupCoaches(right)}>Tìm HLV đủ chuyên môn</Button>
+                  {(makeupCoaches[right.id] ?? []).map(coach => <Button key={coach.userId} size="sm" variant={makeupCoachIds[right.id] === coach.userId ? 'default' : 'outline'} onClick={() => setMakeupCoachIds(previous => ({ ...previous, [right.id]: coach.userId }))}>{coach.fullName}</Button>)}
+                  <Input placeholder="Lý do Admin phân HLV ngoại lệ" maxLength={500} value={makeupReasons[right.id] ?? ''} onChange={event => setMakeupReasons(previous => ({ ...previous, [right.id]: event.target.value }))} />
+                  <Button size="sm" variant="outline" disabled={makeupBusy !== null || !makeupCoachIds[right.id] || !makeupReasons[right.id]?.trim()} onClick={() => void assignMakeupCoach(right.id)}>Xác nhận phân HLV ngoại lệ</Button>
+                </div>}
+              </div>;
+            })}
+          </CardContent></Card>
+          <Card><CardHeader className="flex flex-row items-start justify-between gap-3"><div><CardTitle>Yêu cầu đổi HLV gói PT cần xử lý</CardTitle><CardDescription>Chỉ gói PT Paid nhiều buổi. Lịch thường đủ điều kiện giữ nguyên giờ và Credit; lịch không phù hợp mới hủy, hoàn Credit về đúng lô. Lịch và quyền học bù giữ HLV riêng.</CardDescription></div><Button size="sm" variant="outline" onClick={() => void load()}>Làm mới</Button></CardHeader><CardContent className="space-y-3">
             {coachChanges.length === 0 && <p className="text-sm text-muted-foreground">Không có yêu cầu đang chờ.</p>}
             {coachChanges.map(change => <div key={change.id} className="rounded-lg border p-3 text-sm">
               <p className="font-semibold">Yêu cầu #{change.id} · {change.memberName} · Gói #{change.batchId} ({levelNames[change.batch.level] ?? change.batch.level})</p>
               <p>{change.oldCoachName} → {change.newCoachName}</p>
               <p className="text-muted-foreground">Lý do: {change.reason}</p>
               <p className="text-xs text-muted-foreground">{formatDateTime(change.requestedAt)}</p>
-              <div className="mt-3 flex gap-2"><Button size="sm" disabled={coachChangeBusy !== null} onClick={() => void handleCoachChange(change.id, 'APPROVED')}>Duyệt và chuyển HLV</Button><Button size="sm" variant="outline" disabled={coachChangeBusy !== null} onClick={() => void handleCoachChange(change.id, 'REJECTED')}>Từ chối</Button></div>
+              <div className="mt-3 space-y-2">
+                <Button size="sm" variant="outline" disabled={coachPreviewBusy !== null || coachChangeBusy !== null}
+                  onClick={() => void loadCoachChangePreview(change.id)}>
+                  {coachPreviewBusy === change.id ? 'Đang kiểm tra lịch...' : 'Xem trước lịch có thể chuyển'}
+                </Button>
+                {coachPreviewErrors[change.id] && <p className="text-sm text-destructive">{coachPreviewErrors[change.id]}</p>}
+                {coachChangePreviews[change.id] && <div className="rounded-md border p-3 space-y-2">
+                  <p className="font-medium">Chuyển sang HLV mới: {coachChangePreviews[change.id].transferable.length} · Giữ HLV cũ vì còn dưới 2 giờ: {coachChangePreviews[change.id].keepOldCoach.length} · Cần hủy và hoàn Credit: {coachChangePreviews[change.id].toCancel.length}</p>
+                  {coachChangePreviews[change.id].transferable.map(item => <p key={item.bookingId} className="text-emerald-700">Chuyển lịch #{item.bookingId} · {formatDateTime(item.startTime)}</p>)}
+                  {coachChangePreviews[change.id].keepOldCoach.map(item => <p key={item.bookingId} className="text-blue-700">Giữ HLV cũ cho lịch #{item.bookingId} · {formatDateTime(item.startTime)} · {item.reason}</p>)}
+                  {coachChangePreviews[change.id].toCancel.map(item => <p key={item.bookingId} className="text-amber-700">Đặt lại lịch #{item.bookingId} · {formatDateTime(item.startTime)} · {item.reason}</p>)}
+                  <p className="text-xs text-muted-foreground">Kết quả tại {formatDateTime(coachChangePreviews[change.id].generatedAt)}. Hệ thống kiểm tra lại khi duyệt; nếu kết quả đổi, cần xem trước lại.</p>
+                </div>}
+              </div>
+              <div className="mt-3 space-y-2">
+                <Label htmlFor={`coach-change-note-${change.id}`}>Ghi chú cho hội viên (bắt buộc khi từ chối)</Label>
+                <Input id={`coach-change-note-${change.id}`} maxLength={500}
+                  placeholder="Nhập ghi chú duyệt hoặc lý do từ chối"
+                  value={coachChangeNotes[change.id] ?? ''}
+                  onChange={event => setCoachChangeNotes(previous => ({ ...previous, [change.id]: event.target.value }))} />
+                <p className="text-xs text-muted-foreground">Lịch còn dưới 2 giờ mà HLV mới không nhận được sẽ giữ với HLV cũ và giữ Credit. Chỉ những lịch “Đặt lại lịch” mới bị hủy và hoàn Credit về lô gốc. Lịch học bù giữ HLV riêng.</p>
+                <div className="flex gap-2">
+                  <Button size="sm" disabled={coachChangeBusy !== null || !coachChangePreviews[change.id]}
+                    onClick={() => void handleCoachChange(change.id, 'APPROVED')}>Duyệt theo kết quả xem trước</Button>
+                  <Button size="sm" variant="outline" disabled={coachChangeBusy !== null || !coachChangeNotes[change.id]?.trim()} onClick={() => void handleCoachChange(change.id, 'REJECTED')}>Từ chối</Button>
+                </div>
+              </div>
             </div>)}
           </CardContent></Card>
         </TabsContent>

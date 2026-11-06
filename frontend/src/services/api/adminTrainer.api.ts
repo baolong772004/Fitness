@@ -1,6 +1,44 @@
 import { request } from './client';
 import { ApiCoachProfile, Pagination } from './types';
 
+export type PtMakeupOperation = {
+  id: number;
+  status: string;
+  cause: string;
+  expiresAt: string;
+  escalatedAt: string | null;
+  assignedCoachId: number | null;
+  requestedCoachId: number | null;
+  requestedCoachName: string | null;
+  requestedStartAt: string | null;
+  requestReason: string | null;
+  coachChangeRequestedAt: string | null;
+  coachAbsenceCount: number;
+  extensionCount: number;
+  originalBooking: {
+    memberId: number;
+    coachId: number | null;
+    startTime: string;
+    member?: { fullName: string };
+    coach?: { fullName: string } | null;
+    membership?: { package: { ptLevel: string | null } } | null;
+    ptCreditAllocation: { batch: { level: string } } | null;
+  };
+  events: Array<{ action: string; details: string | null; createdAt: string }>;
+};
+
+export type PtCoachChangePreview = {
+  requestId: number;
+  generatedAt: string;
+  token: string;
+  transferable: Array<{ bookingId: number; startTime: string; endTime: string;
+    status: string; outcome: 'TRANSFER'; reason: null }>;
+  keepOldCoach: Array<{ bookingId: number; startTime: string; endTime: string;
+    status: string; outcome: 'KEEP_OLD'; reason: string }>;
+  toCancel: Array<{ bookingId: number; startTime: string; endTime: string;
+    status: string; outcome: 'CANCEL'; reason: string }>;
+};
+
 export const adminTrainerApi = {
   async getPtProducts() {
     const res = await request<{ success: boolean; data: Array<{ id: number; name: string; level: string; sessionCount: number; durationDays: number | null; price: number; singleSessionPrice: number | null; benefits: string | null; isActive: boolean }> }>('/pt/products/manage');
@@ -32,8 +70,34 @@ export const adminTrainerApi = {
     const res = await request<{ success: boolean; data: Array<{ id: number; batchId: number; memberId: number; memberName: string; oldCoachId: number; oldCoachName: string; newCoachId: number; newCoachName: string; reason: string; requestedAt: string; batch: { level: string; source: string } }> }>('/pt/coach-change-requests/pending');
     return res.data;
   },
-  async resolvePtCoachChange(id: number, decision: 'APPROVED' | 'REJECTED', adminNote: string) {
-    return request(`/pt/coach-change-requests/${id}`, { method: 'PATCH', body: JSON.stringify({ decision, adminNote }) });
+  async previewPtCoachChange(id: number) {
+    const res = await request<{ success: boolean; data: PtCoachChangePreview }>(`/pt/coach-change-requests/${id}/preview`);
+    return res.data;
+  },
+  async getPtMakeupOperations() {
+    const res = await request<{ success: boolean; data: { makeup: PtMakeupOperation[] } }>('/pt/admin/operations');
+    return res.data.makeup;
+  },
+  async getEligiblePtMakeupCoaches(level: string) {
+    const res = await request<{ success: boolean; data: Array<{ userId: number; fullName: string }> }>(`/pt/trainers?level=${encodeURIComponent(level)}`);
+    return res.data;
+  },
+  async assignPtMakeupCoach(requestId: number, coachId: number, reason: string) {
+    return request(`/pt/admin/makeup-rights/${requestId}/assign-coach`, {
+      method: 'POST', body: JSON.stringify({ coachId, reason }),
+    });
+  },
+  async reviewPtMakeupCoachChange(requestId: number, decision: 'APPROVED' | 'REJECTED',
+    reason: string, suggestedCoachId?: number) {
+    return request(`/pt/admin/makeup-rights/${requestId}/review-coach-change`, {
+      method: 'POST', body: JSON.stringify({ decision, reason, suggestedCoachId }),
+    });
+  },
+  async resolvePtCoachChange(id: number, decision: 'APPROVED' | 'REJECTED', adminNote: string,
+    previewToken?: string) {
+    return request<{ success: boolean; summary?: PtCoachChangePreview }>(`/pt/coach-change-requests/${id}`, {
+      method: 'PATCH', body: JSON.stringify({ decision, adminNote, previewToken }),
+    });
   },
   async getPtRenewalOptions() {
     const res = await request<{ success: boolean; data: Array<{ id: number; name: string; level: string; durationDays: number; price: number; isActive: boolean; ptProductId: number | null; purchaseMode: string | null }> }>('/pt/renewal-options/manage');

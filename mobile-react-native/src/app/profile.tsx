@@ -221,6 +221,12 @@ export default function ProfileScreen({ embedded = false }: { embedded?: boolean
             <Text style={styles.editProfileBtnText}>Chỉnh sửa hồ sơ</Text>
           </Pressable>
         </LinearGradient>
+        {['ADMIN', 'STAFF'].includes(roleStr) && <View style={{ marginVertical: 12 }}>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/pt-admin')}
+            style={{ backgroundColor: aura.darkCoffee, borderRadius: 12, padding: 14 }}>
+            <Text style={{ color: '#fff', fontWeight: '800', textAlign: 'center' }}>Đối soát điểm danh và học bù PT</Text>
+          </Pressable>
+        </View>}
 
         {/* 1. Nhóm Thông tin cá nhân */}
         <View style={styles.infoCard}>

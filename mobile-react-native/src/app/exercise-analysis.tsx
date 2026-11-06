@@ -35,6 +35,7 @@ export default function ExerciseAnalysisScreen() {
   const [selectedExercise, setSelectedExercise] = useState<ExerciseCode>('SQUAT');
   const [selectedVariant, setSelectedVariant] = useState('BODYWEIGHT');
   const [shareVideo, setShareVideo] = useState(false);
+  const [externalVideoConsent, setExternalVideoConsent] = useState(false);
   const [shareNotice, setShareNotice] = useState('');
   const [comparison, setComparison] = useState<Analysis | null>(null);
   const [current, setCurrent] = useState<Analysis | null>(null);
@@ -47,7 +48,7 @@ export default function ExerciseAnalysisScreen() {
   const currentStatus = current?.status;
   const videoDurationSeconds = video?.duration == null ? null : video.duration / 1000;
   const selectedMeta = supported.find(item => item.code === selectedExercise);
-  useEffect(() => { setShareVideo(false); setShareNotice(''); setComparison(null); }, [currentId]);
+  useEffect(() => { setShareVideo(false); setExternalVideoConsent(false); setShareNotice(''); setComparison(null); }, [currentId]);
 
   const refresh = useCallback(async () => {
     if (!user || (user.role !== 'MEMBER' && !developerMode)) return;
@@ -84,6 +85,7 @@ export default function ExerciseAnalysisScreen() {
   };
   const submit = async () => {
     if (!video || !consent) return;
+    if (selectedExercise === 'SQUAT' && selectedVariant === 'BODYWEIGHT' && video.fileSize && video.fileSize > 12 * 1024 * 1024) { setError('Video Squat cần tối đa 12 MB để Gemini nhận xét. Hãy nén hoặc quay clip ngắn hơn.'); return; }
     if (video.fileSize && video.fileSize > 25 * 1024 * 1024) { setError('Video vượt quá 25 MB.'); return; }
     if (videoDurationSeconds != null && (videoDurationSeconds < 3 || videoDurationSeconds > 30)) { setError('Video cần dài từ 3 đến 30 giây.'); return; }
     setBusy(true); setError('');
@@ -109,6 +111,17 @@ export default function ExerciseAnalysisScreen() {
     setBusy(true); setError('');
     try { const row = await exerciseAnalysis.reanalyze(id); setCurrent(row); await refresh(); }
     catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+  const requestGeminiFeedback = async (id: number) => {
+    if (!externalVideoConsent) return;
+    setBusy(true); setError('');
+    try {
+      if (developerMode) await exerciseAnalysis.developerVisionPilot(id);
+      else await exerciseAnalysis.visionAnalysis(id);
+      setCurrent(await (developerMode ? exerciseAnalysis.developerDetail(id) : exerciseAnalysis.detail(id)));
+      await refresh();
+    } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   };
   const changeShare = async (coachId: number, revoke: boolean, includeVideo = shareVideo) => {
@@ -151,7 +164,7 @@ export default function ExerciseAnalysisScreen() {
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>{(selectedMeta?.variants || [defaultVariant[selectedExercise], 'UNSPECIFIED']).map(value => <Pressable key={value} onPress={() => setSelectedVariant(value)} style={[button, { backgroundColor: value === selectedVariant ? aura.darkCoffee : aura.latte }]}><Text style={{ color: value === selectedVariant ? '#fff' : aura.ink }}>{variantNames[value] || value}</Text></Pressable>)}</View>
     <View style={box}>
       <Text style={{ fontWeight: '800', fontSize: 18, color: aura.ink }}>Hướng dẫn quay {selectedMeta?.name || 'Squat'}</Text>
-      <Text style={{ color: aura.muted, marginTop: 8, lineHeight: 21 }}>{selectedMeta?.cameraAngle || 'Đặt camera ngang, thấy trọn vai, hông, gối và cổ chân.'} Quay 3–30 giây. Chỉ dùng video MP4/MOV hoặc WebM dưới 25 MB.</Text>
+      <Text style={{ color: aura.muted, marginTop: 8, lineHeight: 21 }}>{selectedMeta?.cameraAngle || 'Đặt camera ngang, thấy trọn vai, hông, gối và cổ chân.'} Quay 3–30 giây. Video Squat không tạ tối đa 12 MB để Gemini nhận xét; bài khác tối đa 25 MB. Hỗ trợ MP4/MOV hoặc WebM.</Text>
       <Text style={{ color: aura.caramel, fontWeight: '700', marginTop: 9, fontSize: 12 }}>{selectedExercise === 'SQUAT' ? 'Góc ngang: độ sâu, thân người và nhịp. Chính diện: hướng dịch chuyển gối trên ảnh và nhịp.' : 'Bài này hiện chỉ đo khớp trên ảnh; chưa đếm rep hay kết luận kỹ thuật.'} Các tiêu chí kỹ thuật đang chờ Coach kiểm chứng.</Text>
       {selectedExercise === 'SQUAT' && <Text style={{ color: aura.muted, marginTop: 8 }}>Quay chính diện hoặc góc ngang: toàn thân trong khung, máy cố định và đủ sáng.</Text>}
       <Text style={{ color: aura.ink, fontWeight: '800', marginTop: 14 }}>Góc quay của video</Text>
@@ -175,7 +188,7 @@ export default function ExerciseAnalysisScreen() {
           ['SELF_DECLARED', 'Chính tôi (tự khai báo)'], ['OTHER_PERSON', 'Người khác'], ['UNKNOWN', 'Chưa rõ'],
         ] as const).map(([value, label]) => <Pressable key={value} onPress={() => setPerformerDeclaration(value)} style={[button, { padding: 9, backgroundColor: performerDeclaration === value ? aura.darkCoffee : aura.latte }]}><Text style={{ color: performerDeclaration === value ? '#fff' : aura.ink }}>{label}</Text></Pressable>)}</View><Text style={{ color: aura.muted, marginTop: 4 }}>Chọn “Chính tôi” là khai báo của bạn; hệ thống chưa xác minh danh tính qua video.</Text></View>}
         <SelectedVideoPreview uri={video.uri} />
-        <Pressable onPress={() => setConsent(value => !value)} style={{ flexDirection: 'row', gap: 9, marginTop: 12 }}><Text>{consent ? '☑' : '☐'}</Text><Text style={{ flex: 1, color: aura.ink }}>Tôi đồng ý gửi video riêng tư để AI phân tích và hiểu video sẽ được xóa sau tối đa 7 ngày.</Text></Pressable>
+        <Pressable onPress={() => setConsent(value => !value)} style={{ flexDirection: 'row', gap: 9, marginTop: 12 }}><Text>{consent ? '☑' : '☐'}</Text><Text style={{ flex: 1, color: aura.ink }}>Tôi đồng ý gửi video để AI phân tích; video Squat được gửi tới Google Gemini để tự nhận xét. Video gốc tại phòng Gym được lưu tối đa 7 ngày.</Text></Pressable>
         <Pressable disabled={!consent || busy} style={[button, { opacity: consent && !busy ? 1 : .5 }]} onPress={() => void submit()}><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? 'Đang tải video...' : 'Gửi để phân tích'}</Text></Pressable>
       </View>}
     </View>
@@ -183,16 +196,30 @@ export default function ExerciseAnalysisScreen() {
     {current && <View style={box}>
       <Text style={{ fontWeight: '800', color: aura.ink, fontSize: 18 }}>Kết quả #{current.id}</Text>
       <Text style={{ color: aura.muted, marginTop: 4 }}>Nguồn: {current.videoOrigin || 'chưa ghi'}{current.sourceReference ? ` · mẫu ${current.sourceReference}` : ''} · Người tập: {current.performerDeclaration === 'SELF_DECLARED' ? 'chủ tài khoản tự khai báo' : 'chưa xác minh'}</Text>
-      {['PENDING', 'PROCESSING'].includes(current.status) ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 }}><ActivityIndicator color={aura.caramel} /><Text>Đang phân tích video...</Text></View> : current.status === 'FAILED' ? <Text style={{ marginTop: 10 }}>Không thể phân tích lúc này ({current.errorCode || 'lỗi dịch vụ'}). Hãy thử lại sau.</Text> : <>
+      {['PENDING', 'PROCESSING'].includes(current.status) ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 }}><ActivityIndicator color={aura.caramel} /><Text>Đang phân tích video...</Text></View> : current.status === 'FAILED' ? <View>
+        <Text style={{ marginTop: 10 }}>Không thể phân tích lúc này ({current.errorCode || 'lỗi dịch vụ'}). Hãy thử lại sau.</Text>
+        {current.videoAvailable && /^(AI_UNAVAILABLE|AI_TIMEOUT|AI_HTTP_50[0-4])$/.test(current.errorCode || '') &&
+          <Pressable disabled={busy} style={[button, { opacity: busy ? .5 : 1 }]} onPress={() => void (developerMode ? reanalyze(current.id) : reanalyzeMember(current.id))}>
+            <Text style={{ color: '#fff', fontWeight: '800' }}>Thử phân tích lại video đã lưu</Text>
+          </Pressable>}
+      </View> : <>
         <ExerciseAnalysisResult key={current.id} analysis={current} showExperimental={developerMode} />
+        {current.status === 'COMPLETED' && current.result?.exercise === 'SQUAT' && current.result?.exerciseVariant === 'BODYWEIGHT' && current.result?.visionAnalysis?.status !== 'COMPLETED' && current.videoAvailable && <View style={{ marginTop: 14, borderTopWidth: 1, borderColor: aura.border, paddingTop: 12 }}>
+          <Text style={{ color: aura.ink, fontWeight: '800' }}>Hoàn tất đánh giá AI</Text>
+          <Text style={{ color: aura.muted, marginTop: 5 }}>{current.result?.visionAnalysis?.status === 'FAILED' ? 'Chưa hoàn tất bước đối chiếu hình ảnh. Những tiêu chí chưa đủ bằng chứng được đánh dấu cần kiểm tra thêm.' : 'Video này chưa hoàn tất đánh giá tổng hợp. Bạn có thể bổ sung phân tích cho video còn lưu.'}</Text>
+          <>
+            <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: externalVideoConsent }} onPress={() => setExternalVideoConsent(value => !value)} style={{ marginTop: 10 }}><Text style={{ color: aura.ink }}>{externalVideoConsent ? '☑' : '☐'} Tôi đồng ý gửi video này tới Google Gemini để nhận xét.</Text></Pressable>
+            <Pressable disabled={busy || !externalVideoConsent} style={[button, { opacity: busy || !externalVideoConsent ? .5 : 1 }]} onPress={() => void requestGeminiFeedback(current.id)}><Text style={{ color: '#fff', fontWeight: '800' }}>{busy ? 'Đang tổng hợp nhận xét...' : 'Hoàn tất đánh giá AI'}</Text></Pressable>
+          </>
+        </View>}
         {developerMode && current.videoAvailable && <Pressable disabled={busy} style={button} onPress={() => void reanalyze(current.id)}><Text style={{ color: '#fff', fontWeight: '800' }}>Phân tích lại bằng rule mới · lưu thành kết quả mới</Text></Pressable>}
         {!developerMode && current.videoAvailable && current.resultVersion !== 'exercise-analysis-result-4' && <Pressable disabled={busy} style={button} onPress={() => void reanalyzeMember(current.id)}><Text style={{ color: '#fff', fontWeight: '800' }}>Phân tích lại video đã lưu · nhận đánh giá AI mới</Text></Pressable>}
         <Pressable style={button} onPress={() => void pick(true)}><Text style={{ color: '#fff', fontWeight: '800' }}>Quay lại để thử điều chỉnh</Text></Pressable>
         {history.some(row => comparable(row, current)) && <View style={{ marginTop: 16 }}>
           <Text style={{ color: aura.ink, fontWeight: '800' }}>Đối chiếu với lần trước</Text>
-          <Text style={{ color: aura.muted, marginTop: 6 }}>Nên dùng cùng góc quay, vị trí camera và bài tập. Chênh lệch số đo không tự xác nhận kỹ thuật tốt hơn.</Text>
+          <Text style={{ color: aura.muted, marginTop: 6 }}>Nên dùng cùng góc quay, vị trí camera và bài tập. Nhận xét AI cần Coach xác nhận.</Text>
           {history.filter(row => comparable(row, current)).slice(0, 3).map(row => <Pressable key={row.id} style={[button, { backgroundColor: aura.latte }]} onPress={() => void (developerMode ? exerciseAnalysis.developerDetail(row.id) : exerciseAnalysis.detail(row.id)).then(setComparison).catch(e => setError((e as Error).message))}><Text style={{ color: aura.ink }}>Xem lần #{row.id} · {new Date(row.createdAt).toLocaleDateString('vi-VN')}</Text></Pressable>)}
-          {comparison && <View style={{ marginTop: 14, borderTopWidth: 1, borderColor: aura.border }}><Text style={{ fontWeight: '800', marginTop: 12 }}>Lần trước #{comparison.id}</Text>{comparison.ruleVersion !== current.ruleVersion && <Text style={{ color: aura.muted }}>Hai kết quả dùng phiên bản phân tích khác nhau; số đo có thể không so sánh trực tiếp được.</Text>}<ExerciseAnalysisResult key={comparison.id} analysis={comparison} showExperimental={developerMode} /><Pressable onPress={() => setComparison(null)}><Text style={{ marginTop: 12 }}>Đóng đối chiếu</Text></Pressable></View>}
+          {comparison && <View style={{ marginTop: 14, borderTopWidth: 1, borderColor: aura.border }}><Text style={{ fontWeight: '800', marginTop: 12 }}>Lần trước #{comparison.id}</Text>{comparison.ruleVersion !== current.ruleVersion && <Text style={{ color: aura.muted }}>Hai kết quả dùng phiên bản AI khác nhau; nhận xét có thể khác nhau.</Text>}<ExerciseAnalysisResult key={comparison.id} analysis={comparison} showExperimental={developerMode} /><Pressable onPress={() => setComparison(null)}><Text style={{ marginTop: 12 }}>Đóng đối chiếu</Text></Pressable></View>}
         </View>}
         {!developerMode && <View style={{ borderTopWidth: 1, borderColor: aura.border, marginTop: 16, paddingTop: 14 }}>
           <Text style={{ color: aura.ink, fontWeight: '800' }}>Gửi kết quả cho Coach</Text>

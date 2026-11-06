@@ -28,6 +28,18 @@ test('late member absence debits; Coach absence preserves credit regardless of m
   assert.equal(coach.protectedUsed, 3);
 });
 
+test('the two-hour boundary is inclusive and a protected cancellation never exceeds its lot size', () => {
+  assert.equal(absence('PACKAGE_PURCHASE', 0, 120).outcome, 'RELEASE');
+  assert.equal(absence('PACKAGE_PURCHASE', 0, 119).outcome, 'DEBIT');
+  assert.equal(protectedAbsenceLimit('PACKAGE_PURCHASE', 1), 1);
+  assert.equal(protectedAbsenceLimit('PACKAGE_PURCHASE', 2), 2);
+  assert.equal(absence('PACKAGE_PURCHASE', 1, 180, 1).outcome, 'DEBIT');
+  assert.equal(absence('SINGLE_PURCHASE', 0, 180, 1).outcome, 'RELEASE');
+  const makeup = decidePtAbsence({ source: 'PACKAGE_PURCHASE', initialCount: 10,
+    protectedUsed: 0, startTime: startsIn(180), now, isMakeup: true, coachAbsence: false });
+  assert.equal(makeup.outcome, 'DEBIT');
+});
+
 test('renewal is only for Paid with remaining credit inside 30 day grace', () => {
   const endAt = new Date(now.getTime() - 29 * 86400000);
   const paid = { level: 'BEGINNER', source: 'PACKAGE_PURCHASE', endAt, initialCount: 10, usedCount: 9 };

@@ -29,6 +29,7 @@ export default function PtBook() {
   const [showDate, setShowDate] = useState(false);
   const [slots, setSlots] = useState<PtSlot[]>([]);
   const [creditSources, setCreditSources] = useState<Awaited<ReturnType<typeof api.ptWallet>>['sources']>([]);
+  const [creditSourcesLoaded, setCreditSourcesLoaded] = useState(false);
   const [selected, setSelected] = useState<ChosenSlot[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -36,7 +37,11 @@ export default function PtBook() {
   const loadId = useRef(0);
 
   useEffect(() => { if (!makeupFor) void api.ptTrainers(sub.level).then(setCoaches).catch(() => setCoaches([])); }, [makeupFor, sub.level]);
-  useEffect(() => { if (!makeupFor) void api.ptWallet().then(wallet => setCreditSources(wallet.sources ?? [])).catch(() => setCreditSources([])); }, [makeupFor, sub.level]);
+  useEffect(() => { if (!makeupFor) {
+    setCreditSourcesLoaded(false);
+    void api.ptWallet().then(wallet => setCreditSources(wallet.sources ?? []))
+      .catch(() => setCreditSources([])).finally(() => setCreditSourcesLoaded(true));
+  } }, [makeupFor, sub.level]);
   useEffect(() => { setSelected([]); }, [coachId]);
   const gymInstant = (time: string) => {
     const [hours, minutes] = time.split(':').map(Number);
@@ -72,9 +77,13 @@ export default function PtBook() {
     const end = gymInstant(slot.endTime).getTime();
     if (makeupFor) return !deadline || end <= new Date(deadline).getTime();
     return creditSources.some(source => source.level === sub.level && source.availableSessions > 0 &&
+      (source.coachId == null || source.coachId === coachId) &&
       (!source.startAt || new Date(source.startAt).getTime() <= start) &&
       (!source.endAt || new Date(source.endAt).getTime() >= end));
   };
+  const eligibleCoaches = coaches.filter(coach => creditSources.some(source =>
+    source.level === sub.level && source.remainingSessions > 0 &&
+    (source.coachId == null || source.coachId === coach.userId)));
   const chooseSlot = (slot: PtSlot) => {
     if (!isSlotAvailable(slot) || busy) return;
     const bookingDate = gymInstant(slot.startTime).toISOString();
@@ -115,7 +124,7 @@ export default function PtBook() {
   return <Page loading={loading} refresh={() => void load()}>
     <LinearGradient colors={[aura.espresso, aura.darkCoffee]} style={{ borderRadius: 20, padding: 17, flexDirection: 'row', alignItems: 'center', gap: 12 }}><View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFFFFF26', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="fitness-outline" size={25} color={aura.latte} /></View><View style={{ flex: 1 }}><Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>{coachName || (sub.isTrial ? 'Chọn Coach bên dưới' : 'Huấn luyện viên Aura')}</Text><Text style={{ color: '#E8D8CF', fontSize: 12, marginTop: 4 }}>{sub.package?.name || 'Gói PT'}</Text></View>{sub.remainingSessions != null && <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{sub.availableSessions ?? sub.remainingSessions} buổi</Text>}</LinearGradient>
     {makeupFor && <Card><Text style={{ color: aura.caramel, fontWeight: '800', fontSize: 12 }}>BUỔI HỌC BÙ</Text><Text style={{ color: aura.muted, fontSize: 12, marginTop: 5 }}>Lượt học bù chỉ được chọn một ca trước khi hết hạn.</Text></Card>}
-    {!makeupFor && <><Section title={`Chọn Coach chuyên ${sub.level}`} icon="people-outline" /><View style={{ gap: 8 }}>{coaches.map(coach => <Button key={String(coach.userId)} secondary={coachId !== Number(coach.userId)} title={coach.fullName || 'Coach'} onPress={() => setSelectedCoachId(Number(coach.userId))} />)}</View>{coaches.length === 0 && <Empty title="Chưa có Coach phù hợp" />}</>}
+    {!makeupFor && <><Section title={`Chọn Coach chuyên ${sub.level}`} icon="people-outline" /><View style={{ gap: 8 }}>{eligibleCoaches.map(coach => <Button key={String(coach.userId)} secondary={coachId !== Number(coach.userId)} title={coach.fullName || 'Coach'} onPress={() => setSelectedCoachId(Number(coach.userId))} />)}</View>{creditSourcesLoaded && eligibleCoaches.length === 0 && <Empty title="Không có HLV tương thích với Credit còn lại" />}{creditSources.some(source => source.level === sub.level && source.coachId != null && source.remainingSessions > 0) && <Card><Text style={{ color: aura.muted, fontSize: 12 }}>Credit của gói đang gắn với HLV đã chọn cho gói. Muốn đổi HLV, hãy gửi yêu cầu trong ví PT. Nếu đây là buổi bù do HLV báo vắng, hãy dùng nút “Đặt lịch học bù” tại lịch gốc; Credit của buổi bù đang được giữ riêng.</Text></Card>}</>}
     <Section title={`Ngày tập · ${dateLabel(date)}`} subtitle={makeupFor ? 'Chọn một ca học bù' : 'Có thể chọn ca ở nhiều ngày khác nhau'} icon="calendar-outline" />
     {!makeupFor && creditSources.some(source => source.level === sub.level && source.remainingSessions > 0 && source.status === 'EXPIRED') && <Card><Text style={{ color: aura.caramel }}>Một số buổi PT đã hết hạn; chỉ các ca được nguồn còn hiệu lực bao phủ mới có thể đặt.</Text></Card>}
     <Button secondary title="Chọn ngày khác" onPress={() => setShowDate(true)} />
