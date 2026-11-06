@@ -1,11 +1,19 @@
+import { attachSquatAssessment } from './exerciseAssessmentFusion.service.js';
+
 export function isSupportedVideo(bytes) {
   if (bytes.length < 32) return false;
   return bytes.toString('ascii', 4, 8) === 'ftyp' || bytes.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
 }
 
-export function publicAnalysis(row) {
+export function publicAnalysis(row, includeSources = false) {
   const { mediaStorageKey, resultJson, ...safe } = row;
-  return { ...safe, videoAvailable: videoAvailable(row), result: resultJson ? JSON.parse(resultJson) : null };
+  const result = resultJson ? attachSquatAssessment(JSON.parse(resultJson)) : null;
+  if (result && includeSources !== true && row.evaluationMode !== 'EXPERIMENTAL') {
+    delete result.assessmentDiagnostics;
+    if (result.visionAnalysis?.assessments) result.visionAnalysis = { ...result.visionAnalysis,
+      assessments: result.visionAnalysis.assessments.map(({ sourceStatus, sourceObservation, sourceCorrection, ...assessment }) => assessment) };
+  }
+  return { ...safe, videoAvailable: videoAvailable(row), result };
 }
 
 export function analysisSummary(row) {
@@ -145,7 +153,7 @@ export function evaluateCandidateRep(criterionId, repRow, protocol = {}, cameraV
 }
 
 export function coachAnalysisSummary(row) {
-  const safe = publicAnalysis(row);
+  const safe = publicAnalysis(row, true);
   if (safe.result) {
     const { poseFrames, diagnostics, ...summary } = safe.result;
     if (diagnostics) {

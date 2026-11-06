@@ -595,6 +595,7 @@ model Booking {
   makeUpRequests     MakeUpRequest[] @relation("OriginalBooking")
   createdFromMakeUp  MakeUpRequest[] @relation("NewBooking")
   sessionResult      SessionResult?
+  attendanceReview   PtAttendanceReview?
   review             Review?
   ptChatMessages     PtChatMessage[]
   ptCreditAllocation PtBookingCreditAllocation?
@@ -624,6 +625,62 @@ model MakeUpRequest {
   expiresAt         DateTime     
   rejectReason      String?
   createdAt         DateTime     @default(now())
+  cause             String       @default("LEGACY") @db.VarChar(20)
+  chainRootBookingId Int?
+  coachAbsenceCount Int          @default(0)
+  extensionCount     Int          @default(0)
+  assignedCoachId    Int?
+    requestedCoachId   Int?
+    requestedStartAt   DateTime?
+    requestReason      String?      @db.NVarChar(500)
+    coachChangeRequestedAt DateTime?
+  slotEvidence       String?      @db.NVarChar(Max)
+  escalatedAt        DateTime?
+  events             PtMakeUpEvent[]
+
+}
+
+model PtMakeUpEvent {
+  id        Int      @id @default(autoincrement())
+  requestId Int
+  request   MakeUpRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actorId   Int?
+  action    String   @db.VarChar(40)
+  details   String?  @db.NVarChar(1000)
+  createdAt DateTime @default(now())
+
+  @@index([requestId, createdAt])
+}
+
+model PtAttendanceReview {
+  id              Int      @id @default(autoincrement())
+  bookingId       Int      @unique
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status          String   @default("PENDING_COACH") @db.VarChar(24)
+  deadlineAt      DateTime
+  coachDecision   String?  @db.VarChar(20)
+  coachNote       String?  @db.NVarChar(500)
+  coachReviewedAt DateTime?
+  adminDecision   String?  @db.VarChar(20)
+  adminNote       String?  @db.NVarChar(500)
+  adminReviewedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  events          PtAttendanceReviewEvent[]
+
+  @@index([status, deadlineAt])
+}
+
+model PtAttendanceReviewEvent {
+  id        Int      @id @default(autoincrement())
+  reviewId  Int
+  review    PtAttendanceReview @relation(fields: [reviewId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actorId   Int?
+  action    String   @db.VarChar(40)
+  details   String?  @db.NVarChar(1000)
+  createdAt DateTime @default(now())
+
+  @@index([reviewId, createdAt])
 }
 
 model SessionResult {

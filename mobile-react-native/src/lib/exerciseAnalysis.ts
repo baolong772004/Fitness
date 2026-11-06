@@ -18,6 +18,18 @@ export type ExperimentalCriterion = { criterionId: string; title: string; status
 export type ExperimentalEvaluation = { mode: 'EXPERIMENTAL'; validation: 'UNVALIDATED'; warning: string; ruleVersion: string; standardVersion: string; passedCriteria: number; needsImprovementCriteria: number; unassessableCriteria: number; criteria: ExperimentalCriterion[] };
 export type ProvisionalCorrection = { criterionId: string; title: string; bodyPart: string; repNumber: number; timestampSeconds: number; observedValue: number; units: string; threshold: ExperimentalPrediction['threshold']; feedback: string; affectedReps: number[]; evidenceFrames: number };
 export type ProvisionalEvaluation = Omit<ExperimentalEvaluation, 'mode'> & { mode: 'PROVISIONAL'; decisionScope: 'PER_CRITERION_2D_ONLY'; screeningStatus?: 'NEEDS_IMPROVEMENT_DETECTED' | 'NO_ISSUE_DETECTED_IN_ASSESSED_SCOPE' | 'UNABLE_TO_ASSESS'; wholeExerciseStatus?: 'UNABLE_TO_CONFIRM'; correctionPriorities?: ProvisionalCorrection[] };
+export type VisionPilot = { status: 'COACH_REVIEW_REQUIRED'; model: string; createdAt: string; findings: { repNumber: number; criterionId: string; timestampSeconds: number; observation: string; correction: string; reviewStatus: 'RULE_CORROBORATED_COACH_REVIEW' | 'UNSUPPORTED_COACH_REVIEW'; reason: string }[]; usage: { promptTokenCount: number | null; candidatesTokenCount: number | null } };
+export type VisionAssessment = { repNumber: number; criterionId: string; status: 'MEETS_CRITERION' | 'NEEDS_IMPROVEMENT' | 'UNABLE_TO_ASSESS'; timestampSeconds: number | null; observation: string; correction: string; reviewStatus: 'RULE_CORROBORATED' | 'UNSUPPORTED_BY_MEASUREMENT' };
+export type VisionAnalysis = { status: 'COMPLETED' | 'FAILED' | 'SKIPPED'; version?: string; model?: string; createdAt?: string; errorCode?: string; assessments?: VisionAssessment[] };
+export type AssessmentGuidance = { kind: 'CORRECT' | 'MAINTAIN' | 'RECORD_AGAIN' | 'REVIEW'; title: string; steps: string[] };
+export type AssessmentCriterion = { id: string; title: string; status: 'MEETS_CRITERION' | 'NEEDS_IMPROVEMENT' | 'UNABLE_TO_ASSESS';
+  validation: 'PROVISIONAL' | 'VERIFIED' | 'NOT_ASSESSED'; explanation: string; correction: string; needsReview: boolean; reasonCode: string;
+  guidance?: AssessmentGuidance;
+  details: { bodyPart: string; measurement: string; timestampSeconds: number | null; joints: string[] }[] };
+export type UnifiedAssessment = { version: string; scope: 'PER_CRITERION_2D_ONLY'; wholeExerciseStatus: 'NOT_CONFIRMED'; reps: {
+  repNumber: number; criteria: AssessmentCriterion[]; meets: number; improves: number; unable: number;
+  improvementPlan?: { title: string; items: (AssessmentGuidance & { criterionId: string })[] };
+  status: 'NEEDS_IMPROVEMENT' | 'MEETS_OBSERVED_CRITERIA' | 'PARTIALLY_ASSESSED' | 'UNABLE_TO_ASSESS'; headline: string; reviewRequired: boolean; requiredForObservedView?: string[] }[] };
 export type Criterion = { code: string; title?: string; bodyPart?: string; status: string; outcome?: string; reason: string | null; formula: string; detectionRule: string; limitation: string; qualityConditions?: string; thresholds?: Record<string, number>; evidence?: Record<string, number | string>; assessedReps?: number; totalReps?: number; signalReps?: number; kind?: string };
 export type Observation = { code: string; message: string; timestampSeconds: number; confidence: number; confidenceBasis?: string; suggestion: string; repNumber?: number; bodyPart?: string; evidence?: Record<string, number | string>; evidenceText?: string; limitation?: string; kind?: string; intervalSeconds?: number[] | null };
 export type Repetition = { number: number; startSeconds: number; bottomSeconds: number; endSeconds: number; minimumKneeAngle: number | null; bottomHipAngleDegrees: number | null; rangeDegrees: number | null; descentSeconds: number; ascentSeconds: number; maximumTorsoLeanDegrees: number | null; observations: Observation[]; notAssessed: { code: string; reason: string }[]; criteria?: Criterion[]; cameraAngle?: string; hipTravelRatio?: number; trackingCoverage?: number };
@@ -41,6 +53,11 @@ export type AnalysisResult = {
   techniqueEvaluation?: TechniqueEvaluation;
   experimentalEvaluation?: ExperimentalEvaluation;
   provisionalEvaluation?: ProvisionalEvaluation;
+  visionPilot?: VisionPilot;
+  visionAnalysis?: VisionAnalysis;
+  assessment?: UnifiedAssessment;
+  assessmentDiagnostics?: { repNumber: number; criterionId: string; ruleStatus: string; visionStatus: string; ruleValidated: boolean; reasonCode: string; measurementRows: number; visualTimeAligned: boolean }[];
+  externalVideoConsent?: boolean;
   coachPlanContext?: TechniqueEvaluation['planContext'];
 };
 export type Analysis = {
@@ -68,6 +85,7 @@ export const exerciseAnalysis = {
     body.append('exerciseType', exerciseType);
     body.append('exerciseVariant', exerciseVariant);
     body.append('consent', 'true');
+    body.append('externalVideoConsent', 'true');
     if (options) body.append('analysisOptions', JSON.stringify(options));
     if (studentPlanId) body.append('studentPlanId', String(studentPlanId));
     if (provenance) for (const [key, value] of Object.entries(provenance)) body.append(key, value);
@@ -82,6 +100,7 @@ export const exerciseAnalysis = {
     body.append('exerciseType', exerciseType);
     body.append('exerciseVariant', exerciseVariant);
     body.append('consent', 'true');
+    body.append('externalVideoConsent', 'true');
     if (options) body.append('analysisOptions', JSON.stringify(options));
     if (provenance) for (const [key, value] of Object.entries(provenance)) body.append(key, value);
     body.append('video', new File(video.uri));
@@ -94,6 +113,8 @@ export const exerciseAnalysis = {
   developerHistory: async () => (await request<{ data: Analysis[] }>('GET', '/exercise-analysis/developer')).data,
   developerRemove: async (id: number) => request('DELETE', `/exercise-analysis/developer/${id}`),
   developerReanalyze: async (id: number) => (await request<{ data: Analysis }>('POST', `/exercise-analysis/developer/${id}/reanalyze`)).data,
+  developerVisionPilot: async (id: number) => (await request<{ data: VisionAnalysis }>('POST', `/exercise-analysis/developer/${id}/vision-pilot`, { externalVideoConsent: true })).data,
+  visionAnalysis: async (id: number) => (await request<{ data: VisionAnalysis }>('POST', `/exercise-analysis/${id}/vision-analysis`, { externalVideoConsent: true })).data,
   createSquatSession: async (frontAnalysisId: number, sideAnalysisId: number) => (await request<{ data: SquatSession }>('POST', '/exercise-analysis/sessions', { frontAnalysisId, sideAnalysisId, samePersonSessionConfirmed: true })).data,
   squatSession: async (sessionGroupId: string) => (await request<{ data: SquatSession }>('GET', `/exercise-analysis/sessions/${sessionGroupId}`)).data,
 };

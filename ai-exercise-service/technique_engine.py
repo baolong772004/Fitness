@@ -604,8 +604,13 @@ def member_provisional_evaluation(evaluation, movement):
             'affectedReps': sorted({row['repNumber'] for row in failed if row.get('repNumber') is not None}),
             'evidenceFrames': len(first.get('landmarkEvidence') or []),
         })
+    # A completed cycle or a steady tempo alone cannot clear squat form.
+    form_criteria = {'SQUAT-02', 'SQUAT-03', 'SQUAT-04', 'SQUAT-08'}
+    observed_form = any(item['criterionId'] in form_criteria and
+                        any(row['status'] == 'MEETS_CRITERION' for row in item['predictions'])
+                        for item in candidate['criteria'])
     screening_status = ('NEEDS_IMPROVEMENT_DETECTED' if corrections else
-                        'NO_ISSUE_DETECTED_IN_ASSESSED_SCOPE' if candidate['passedCriteria'] else
+                        'NO_ISSUE_DETECTED_IN_ASSESSED_SCOPE' if observed_form else
                         'UNABLE_TO_ASSESS')
     return {**candidate, 'mode': 'PROVISIONAL', 'ruleVersion': PROVISIONAL_RULE_VERSION,
             'warning': 'PHÂN TÍCH THAM KHẢO — CHƯA ĐƯỢC COACH KIỂM CHỨNG. Dự đoán theo từng tiêu chí, không xác nhận toàn bộ bài tập đạt kỹ thuật hoặc an toàn.',

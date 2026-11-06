@@ -1,8 +1,8 @@
 /// <reference types="node" />
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resultRepetitions, visibleProvisionalEvaluation } from '../src/lib/exerciseAnalysisData';
-import type { AnalysisResult } from '../src/lib/exerciseAnalysis';
+import { poseOverlayToleranceSeconds, resultRepetitions, screenSquatReps, visibleProvisionalEvaluation } from '../src/lib/exerciseAnalysisData';
+import type { AnalysisResult, ProvisionalEvaluation } from '../src/lib/exerciseAnalysis';
 
 const legacy: AnalysisResult = {
   exercise: 'SQUAT', status: 'COMPLETED', quality: 'SUFFICIENT', detectedRepetitions: 2, limitations: [],
@@ -12,6 +12,12 @@ const legacy: AnalysisResult = {
   ],
   observations: [{ code: 'VARIABLE_ROM', message: 'Smaller range', timestampSeconds: 5.2, confidence: 0.9, suggestion: 'Review with Coach' }],
 };
+
+test('pose overlay stays close to video playback and covers the last decoded sample', () => {
+  assert.equal(poseOverlayToleranceSeconds(2, 4, 2, 5, 10), 0.1);
+  assert.ok(Math.abs(poseOverlayToleranceSeconds(4, 4, 4.1, 4.1, 10) - 0.15) < 1e-9);
+  assert.equal(poseOverlayToleranceSeconds(4, 4, 4.3, 4.1, 10), 0.1);
+});
 
 test('v2 history has usable rep selection without inventing missing hip measurements', () => {
   const reps = resultRepetitions(legacy);
@@ -63,4 +69,47 @@ test('Member provisional comparisons stay separate from official and Developer r
   assert.equal(visibleProvisionalEvaluation({ ...analysis, evaluationMode: 'EXPERIMENTAL' }, false), null);
   assert.equal(visibleProvisionalEvaluation({ ...analysis, result: { ...analysis.result,
     provisionalEvaluation: { ...provisional, validation: 'APPROVED' as never } } }, false), null);
+});
+
+test('per-rep Squat screening requires observed form and never treats rep count as correct form', () => {
+  const reps = resultRepetitions({ ...legacy, repetitions: [...legacy.repetitions!, {
+    startSeconds: 6, bottomSeconds: 7, endSeconds: 8, minimumKneeAngle: null,
+    rangeDegrees: null, maximumTorsoLeanDegrees: null,
+  }] });
+  const comparison = { mode: 'PROVISIONAL', validation: 'UNVALIDATED',
+    criteria: [
+      { criterionId: 'SQUAT-01', title: 'Chu kỳ', predictions: [1, 2, 3].map(repNumber => ({
+        repNumber, status: 'MEETS_CRITERION', timestampSeconds: repNumber, feedback: '' })) },
+      { criterionId: 'SQUAT-03', title: 'Hướng gối', predictions: [
+        { repNumber: 1, status: 'MEETS_CRITERION', timestampSeconds: 1, feedback: '' },
+        { repNumber: 2, status: 'MEETS_CRITERION', timestampSeconds: 2, feedback: '' },
+        { repNumber: 2, status: 'NEEDS_IMPROVEMENT', timestampSeconds: 2.2, feedback: 'Xem lại gối trái' },
+      ] },
+    ] } as unknown as ProvisionalEvaluation;
+  const screened = screenSquatReps(comparison, reps, 'FRONT');
+  assert.deepEqual(screened.map(item => item.status), [
+    'MEETS_OBSERVED_CRITERIA', 'NEEDS_IMPROVEMENT', 'UNABLE_TO_ASSESS',
+  ]);
+  assert.equal(screened[1].firstIssue?.feedback, 'Xem lại gối trái');
+  assert.match(screened[2].unableReason || '', /Gối hoặc bàn chân/);
+  assert.match(screened[2].retryAdvice || '', /Quay chính diện/);
+  assert.deepEqual(screenSquatReps(null, reps), []);
+});
+
+test('unassessable Squat gives a specific reason and a way to retry', () => {
+  const reps = resultRepetitions(legacy).slice(0, 1);
+  const noDepthGoal = { criteria: [{ criterionId: 'SQUAT-02', title: 'Độ sâu',
+    reasonCode: 'NO_EXPLICIT_DEPTH_TARGET', predictions: [] }] } as unknown as ProvisionalEvaluation;
+  const side = screenSquatReps(noDepthGoal, reps, 'SIDE')[0];
+  assert.equal(side.status, 'UNABLE_TO_ASSESS');
+  assert.match(side.unableReason || '', /mục tiêu độ sâu/);
+  assert.match(side.retryAdvice || '', /hông gần ngang gối/);
+  const unknown = screenSquatReps(noDepthGoal, reps, 'UNKNOWN')[0];
+  assert.match(unknown.unableReason || '', /Góc quay/);
+  assert.match(unknown.retryAdvice || '', /giữ máy cố định/);
+  const noRule = { criteria: [{ criterionId: 'SQUAT-03', title: 'Hướng gối',
+    reasonCode: 'NO_EXPERIMENTAL_DECISION_RULE', predictions: [] }] } as unknown as ProvisionalEvaluation;
+  const unsupported = screenSquatReps(noRule, reps, 'FRONT')[0];
+  assert.match(unsupported.unableReason || '', /chưa có quy tắc/);
+  assert.match(unsupported.retryAdvice || '', /Coach nhận xét/);
 });

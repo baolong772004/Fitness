@@ -148,12 +148,15 @@ export async function createWalletPtBookings(input: {
 export async function createWalletPtMakeup(input: {
   memberId: number; originalBookingId: number; start: Date;
 }) {
+  const pending = await prisma.makeUpRequest.findFirst({ where: { originalBookingId: input.originalBookingId,
+    status: 'PENDING' }, select: { assignedCoachId: true } });
   return prisma.$transaction(async tx => {
     const original = await tx.booking.findFirst({ where: { id: input.originalBookingId,
       memberId: input.memberId, type: 'PT' }, select: { id: true, coachId: true, membershipId: true } });
     if (!original?.coachId) throw new PtBookingError(404, 'Không tìm thấy lịch PT gốc.');
     await lockPtCalendar(tx);
-    await lockPtCoach(tx, original.coachId);
+    const targetCoachId = pending?.assignedCoachId ?? original.coachId;
+    for (const coachId of new Set([original.coachId, targetCoachId].sort((a, b) => a - b))) await lockPtCoach(tx, coachId);
     await lockPtMember(tx, input.memberId);
     await lockGymMember(tx, input.memberId);
     const allocation = await tx.ptBookingCreditAllocation.findUnique({ where: { bookingId: original.id },
@@ -164,18 +167,24 @@ export async function createWalletPtMakeup(input: {
     if (!allocation || allocation.status !== 'HELD' || !request) {
       throw new PtBookingError(409, 'Quyền học bù không còn khả dụng.');
     }
+    if (request.requestedCoachId) {
+      throw new PtBookingError(409, 'Đề nghị đổi HLV đang chờ Admin duyệt; chưa thể đặt lịch học bù.');
+    }
+    if ((request.assignedCoachId ?? original.coachId) !== targetCoachId) {
+      throw new PtBookingError(409, 'Coach của quyền học bù vừa thay đổi.');
+    }
     if (!isPtLevel(allocation.batch.level)) throw new PtBookingError(409, 'Cấp độ PT không hợp lệ.');
-    const end = await requirePtSlot(tx, original.coachId, input.memberId, input.start, allocation.batch.level);
+    const end = await requirePtSlot(tx, targetCoachId, input.memberId, input.start, allocation.batch.level);
     if (end > request.expiresAt) throw new PtBookingError(409, 'Ca học bù phải kết thúc trong hạn 7 ngày.');
     await requireGymOnDate(tx, input.memberId, input.start, end);
     const gift = allocation.batch.membership;
-    if (allocation.batch.level === 'TRIAL' && (!gift ||
+    if (allocation.batch.level === 'TRIAL' && request.cause !== 'COACH' && (!gift ||
       !['ACTIVE', 'PENDING_ACTIVATION'].includes(gift.status) ||
       gift.startDate > input.start || gift.endDate < end)) {
       throw new PtBookingError(403, 'Trial không còn hiệu lực vào ngày học bù.');
     }
     const booking = await tx.booking.create({ data: {
-      type: 'PT', memberId: input.memberId, coachId: original.coachId,
+      type: 'PT', memberId: input.memberId, coachId: targetCoachId,
       membershipId: original.membershipId, startTime: input.start, endTime: end,
       status: 'CONFIRMED', isMakeup: true, makeupFromId: original.id,
     } });
@@ -187,6 +196,9 @@ export async function createWalletPtMakeup(input: {
     const claimed = await tx.makeUpRequest.updateMany({ where: { id: request.id, status: 'PENDING' },
       data: { status: 'APPROVED', newBookingId: booking.id } });
     if (claimed.count !== 1) throw new PtBookingError(409, 'Quyền học bù vừa được sử dụng.');
+    await tx.ptMakeUpEvent.create({ data: { requestId: request.id, actorId: input.memberId,
+      action: 'MAKEUP_BOOKED', details: JSON.stringify({ bookingId: booking.id,
+        start: input.start.toISOString() }) } });
     await tx.booking.update({ where: { id: original.id }, data: { status: 'MAKEUP_BOOKED' } });
     return booking;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 15000, timeout: 30000 });
@@ -197,11 +209,15 @@ export async function createConfirmedPtBooking(input: {
   makeupOriginalId?: number; coachId?: number;
 }) {
   return prisma.$transaction(async (tx) => {
+    const pendingMakeup = input.makeupOriginalId ? await tx.makeUpRequest.findFirst({ where: {
+      originalBookingId: input.makeupOriginalId, status: 'PENDING',
+    } }) : null;
     const initialMembership = await tx.membership.findFirst({ where: {
       id: input.membershipId, userId: input.memberId, package: { type: { in: ['PT', 'MEMBERSHIP'] } },
     }, select: { id: true, coachId: true, package: { select: { type: true, trialPtSessions: true } } } });
     if (!initialMembership) throw new PtBookingError(404, 'Không tìm thấy quyền đặt PT hợp lệ.');
-    const coachId = initialMembership.package.type === 'PT' ? initialMembership.coachId : input.coachId;
+    const coachId = pendingMakeup?.assignedCoachId ??
+      (initialMembership.package.type === 'PT' ? initialMembership.coachId : input.coachId);
     if (!coachId || !Number.isSafeInteger(coachId)) throw new PtBookingError(400, 'Cần chọn Coach cho buổi PT.');
     if (initialMembership.package.type === 'MEMBERSHIP' && initialMembership.package.trialPtSessions <= 0) {
       throw new PtBookingError(403, 'Gói Gym này không kèm buổi PT dùng thử.');
@@ -213,7 +229,8 @@ export async function createConfirmedPtBooking(input: {
     await lockGymMember(tx, input.memberId);
     await lockPtMembership(tx, initialMembership.id);
     const membership = await tx.membership.findUniqueOrThrow({ where: { id: initialMembership.id }, include: { package: true } });
-    if (membership.package.type === 'PT' && membership.coachId !== coachId) throw new PtBookingError(409, 'Coach của gói PT đã thay đổi.');
+    if (membership.package.type === 'PT' && membership.coachId !== coachId &&
+      pendingMakeup?.assignedCoachId !== coachId) throw new PtBookingError(409, 'Coach của gói PT đã thay đổi.');
     const end = await requirePtSlot(tx, coachId, input.memberId, input.start);
     await requireGymOnDate(tx, input.memberId, input.start, end);
     if ((membership.remainingSessions ?? 0) <= 0) throw new PtBookingError(409, 'Gói PT đã hết buổi.');
@@ -221,8 +238,11 @@ export async function createConfirmedPtBooking(input: {
     if (input.makeupOriginalId) {
       const request = await tx.makeUpRequest.findFirst({ where: {
         originalBookingId: input.makeupOriginalId, status: 'PENDING',
-        originalBooking: { memberId: input.memberId, membershipId: membership.id, coachId },
+        originalBooking: { memberId: input.memberId, membershipId: membership.id },
       } });
+      if (request?.assignedCoachId !== pendingMakeup?.assignedCoachId) {
+        throw new PtBookingError(409, 'Coach của quyền học bù vừa thay đổi.');
+      }
       if (!request || request.expiresAt <= new Date() || end > request.expiresAt) {
         throw new PtBookingError(409, 'Quyền học bù đã hết hạn hoặc ca học nằm ngoài hạn 7 ngày.');
       }
@@ -239,6 +259,9 @@ export async function createConfirmedPtBooking(input: {
       const claimed = await tx.makeUpRequest.updateMany({ where: { id: request.id, status: 'PENDING' },
         data: { status: 'APPROVED', newBookingId: booking.id } });
       if (claimed.count !== 1) throw new PtBookingError(409, 'Quyền học bù đã được sử dụng.');
+      await tx.ptMakeUpEvent.create({ data: { requestId: request.id, actorId: input.memberId,
+        action: 'MAKEUP_BOOKED', details: JSON.stringify({ bookingId: booking.id,
+          start: input.start.toISOString() }) } });
       await tx.booking.update({ where: { id: input.makeupOriginalId }, data: { status: 'MAKEUP_BOOKED' } });
       return booking;
     }

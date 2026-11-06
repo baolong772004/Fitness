@@ -5,6 +5,8 @@ import prisma from '../config/prisma.js';
 import { parseAnalysisOptions } from './exerciseAnalysis.utils.js';
 import { isExerciseType, type ExerciseType } from './exerciseAnalysis.catalog.js';
 import { deriveVideoProvenance } from './exerciseAnalysis.provenance.js';
+import { analyzeSquatVideoWithGemini, hasExternalVideoConsent } from './geminiSquatVideo.service.js';
+import { attachSquatAssessment } from './exerciseAssessmentFusion.service.js';
 export { isSupportedVideo, publicAnalysis } from './exerciseAnalysis.utils.js';
 
 const mediaDir = path.resolve(process.cwd(), 'private-exercise-media');
@@ -22,6 +24,7 @@ export async function createExerciseAnalysis(memberId: number, bytes: Buffer, st
   try {
     return await prisma.exerciseAnalysis.create({ data: { memberId, exerciseType, mediaStorageKey: key, studentPlanId, evaluationMode,
       ...provenance, resultJson: JSON.stringify({ requestOptions: analysisOptions, exerciseVariant, coachPlanContext: coachPlanContext || null, evaluationMode,
+        externalVideoConsent: hasExternalVideoConsent(provenanceInput),
         provenance: { ...provenance, uploaderId: memberId, performerIdentityVerified: false } }) } });
   } catch (error) {
     await unlink(path.join(mediaDir, key)).catch(() => undefined);
@@ -41,7 +44,9 @@ export async function reanalyzeOwnExerciseVideo(id: number, ownerId: number, eva
   const source = await prisma.exerciseAnalysis.findFirst({ where: { id, memberId: ownerId, evaluationMode } });
   if (!source || !source.mediaStorageKey || source.mediaDeletedAt ||
       new Date(source.createdAt).getTime() <= Date.now() - 7 * 24 * 60 * 60_000) return null;
-  if (!['COMPLETED', 'INSUFFICIENT_DATA', 'NEEDS_REVIEW'].includes(source.status)) return null;
+  const transientFailure = source.status === 'FAILED' &&
+    /^(AI_UNAVAILABLE|AI_TIMEOUT|AI_HTTP_50[0-4])$/.test(source.errorCode || '');
+  if (!transientFailure && !['COMPLETED', 'INSUFFICIENT_DATA', 'NEEDS_REVIEW'].includes(source.status)) return null;
   if (evaluationMode === 'OFFICIAL' && source.resultVersion === 'exercise-analysis-result-4') return null;
   if (!isExerciseType(source.exerciseType)) return null;
   const saved = source.resultJson ? JSON.parse(source.resultJson) : {};
@@ -51,11 +56,11 @@ export async function reanalyzeOwnExerciseVideo(id: number, ownerId: number, eva
   return createExerciseAnalysis(ownerId, bytes, source.studentPlanId || undefined, saved.requestOptions || saved.protocol || {},
     source.exerciseType, saved.coachPlanContext || undefined, saved.exerciseVariant || 'UNSPECIFIED', evaluationMode,
     { videoOrigin: source.videoOrigin, captureMethodDeclared: source.captureMethodDeclared,
-      performerDeclaration: source.performerDeclaration }, true);
+      performerDeclaration: source.performerDeclaration, externalVideoConsent: hasExternalVideoConsent(saved) }, true);
 }
 
 async function processOne() {
-  const stale = new Date(Date.now() - 3 * 60_000);
+  const stale = new Date(Date.now() - 5 * 60_000);
   const row = await prisma.exerciseAnalysis.findFirst({ where: { OR: [{ status: 'PENDING' }, { status: 'PROCESSING', startedAt: { lt: stale } }] }, orderBy: { createdAt: 'asc' } });
   if (!row) return;
   const claim = await prisma.exerciseAnalysis.updateMany({ where: { id: row.id, status: row.status, attempts: row.attempts }, data: { status: 'PROCESSING', startedAt: new Date(), attempts: { increment: 1 } } });
@@ -95,7 +100,24 @@ async function processOne() {
     if (!result.resultVersion || !result.ruleVersion) throw new Error('AI_RESULT_VERSION_MISSING');
     result.coachPlanContext = saved.coachPlanContext || null;
     if (result.techniqueEvaluation) result.techniqueEvaluation.planContext = saved.coachPlanContext || null;
-    await prisma.exerciseAnalysis.updateMany({ where: { id: row.id, status: 'PROCESSING', attempts: row.attempts + 1 }, data: { status: result.status, resultJson: JSON.stringify(result), modelVersion: String(result.modelVersion || '').slice(0, 100), ruleVersion: String(result.ruleVersion).slice(0, 30), resultVersion: String(result.resultVersion).slice(0, 30), completedAt: new Date(), errorCode: null } });
+    result.externalVideoConsent = hasExternalVideoConsent(saved);
+    if (row.exerciseType === 'SQUAT' && result.exerciseVariant === 'BODYWEIGHT' && result.externalVideoConsent) {
+      if (result.status === 'COMPLETED') {
+        try {
+          const used = await prisma.actionLog.count({ where: { userId: row.memberId, action: 'GEMINI_VIDEO_ANALYSIS', createdAt: { gte: new Date(Date.now() - 24 * 60 * 60_000) } } });
+          if (used >= 20) throw new Error('VISION_DAILY_LIMIT');
+          result.visionAnalysis = await analyzeSquatVideoWithGemini(bytes, result);
+        }
+        catch (error) { result.visionAnalysis = { status: 'FAILED', errorCode: error instanceof Error && /^VISION_[A-Z0-9_]+$/.test(error.message) ? error.message : 'VISION_SERVICE_UNAVAILABLE' }; }
+      } else result.visionAnalysis = { status: 'SKIPPED', errorCode: 'INSUFFICIENT_POSE_DATA' };
+    }
+    Object.assign(result, attachSquatAssessment(result));
+    await prisma.$transaction(async tx => {
+      const updated = await tx.exerciseAnalysis.updateMany({ where: { id: row.id, status: 'PROCESSING', attempts: row.attempts + 1 }, data: { status: result.status, resultJson: JSON.stringify(result), modelVersion: String(result.modelVersion || '').slice(0, 100), ruleVersion: String(result.ruleVersion).slice(0, 30), resultVersion: String(result.resultVersion).slice(0, 30), completedAt: new Date(), errorCode: null } });
+      if (updated.count && result.visionAnalysis) await tx.actionLog.create({ data: { userId: row.memberId, action: 'GEMINI_VIDEO_ANALYSIS',
+        details: JSON.stringify({ analysisId: row.id, consent: true, status: result.visionAnalysis.status,
+          model: result.visionAnalysis.model, usage: result.visionAnalysis.usage, errorCode: result.visionAnalysis.errorCode }) } });
+    });
   } catch (error) {
     const code = error instanceof Error && error.name === 'TimeoutError' ? 'AI_TIMEOUT'
       : error instanceof Error && /^AI_[A-Z0-9_]{1,55}$/.test(error.message) ? error.message : 'AI_UNAVAILABLE';

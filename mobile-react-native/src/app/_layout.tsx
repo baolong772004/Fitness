@@ -111,6 +111,8 @@ function RootNavigation() {
         <Stack.Screen name="subscriptions" options={{ title: 'Gói tập của tôi' }} />
         <Stack.Screen name="classes" options={{ title: 'Workout Class' }} />
         <Stack.Screen name="pt" options={{ title: 'Lịch tập cùng PT' }} />
+        <Stack.Screen name="pt-admin" options={{ title: 'Đối soát PT' }} />
+        <Stack.Screen name="pt-makeup-change" options={{ title: 'Chọn HLV học bù' }} />
         <Stack.Screen name="pt-purchase" options={{ title: 'Mua PT' }} />
         <Stack.Screen name="coach-availability" options={{ title: 'Đăng ký lịch Coach' }} />
         <Stack.Screen name="pt-book" options={{ title: 'Đặt lịch PT' }} />

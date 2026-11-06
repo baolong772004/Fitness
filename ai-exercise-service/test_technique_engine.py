@@ -1,5 +1,6 @@
 """Approval gates and measurement plumbing; synthetic joints are not Coach labels."""
 import unittest
+from unittest.mock import patch
 
 from exercise_catalog import EXERCISES, public_exercises
 from technique_engine import _experimental_evaluation, evaluate_technique, measured_pose_result, member_provisional_evaluation
@@ -17,6 +18,18 @@ def upper_body_frames():
 
 
 class TechniqueEngineTest(unittest.TestCase):
+    def test_member_screening_does_not_clear_form_from_rep_count_alone(self):
+        candidate = {'criteria': [
+            {'criterionId': 'SQUAT-01', 'title': 'Complete cycles', 'predictions': [
+                {'status': 'MEETS_CRITERION', 'repNumber': 1}]},
+            {'criterionId': 'SQUAT-03', 'title': 'Knee movement', 'predictions': []},
+        ], 'passedCriteria': 1, 'needsImprovementCriteria': 0}
+        with patch('technique_engine._experimental_evaluation', return_value=candidate):
+            result = member_provisional_evaluation(
+                {'exercise': 'SQUAT', 'exerciseVariant': 'BODYWEIGHT'}, {})
+        self.assertEqual(result['screeningStatus'], 'UNABLE_TO_ASSESS')
+        self.assertEqual(result['wholeExerciseStatus'], 'UNABLE_TO_CONFIRM')
+
     def test_six_exercises_have_distinct_documented_criteria(self):
         self.assertEqual(len(public_exercises()), 6)
         for code, spec in EXERCISES.items():
