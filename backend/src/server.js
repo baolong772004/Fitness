@@ -16,6 +16,7 @@ import { assertGymMembershipSafetyReady, startGymMembershipWorker } from './serv
 import { assertPtWalletSchemaReady } from './services/ptWallet.service.js';
 import { migrateLegacyPtChatMessages } from './services/ptChat.service.js';
 import { startExerciseAnalysisWorker } from './services/exerciseAnalysis.service.js';
+import { seedBusinessKnowledge } from './services/aiKnowledge.service.js';
 
 dotenv.config();
 
@@ -60,6 +61,7 @@ const startServer = async () => {
     startPtNoShowWorker();
     startGymMembershipWorker();
     startExerciseAnalysisWorker();
+    seedBusinessKnowledge().catch((error) => console.warn('Vector knowledge seed skipped:', error.message));
 
     httpServer.listen(PORT, '0.0.0.0', () => {
         console.log(`Server running on http://localhost:${PORT}`);

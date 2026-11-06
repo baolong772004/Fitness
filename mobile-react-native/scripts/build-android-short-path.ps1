@@ -5,11 +5,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $source = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$stage = Join-Path $env:TEMP ('aura-rn-build-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$stageRoot = 'D:\aura-rn'
+New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
+$stage = Join-Path $stageRoot ('build-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
 $output = Join-Path $source 'builds'
 
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
-foreach ($name in @('src', 'assets', 'app.json', 'app.config.js', 'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json', 'eslint.config.js', '.env')) {
+foreach ($name in @('src', 'assets', 'app.json', 'app.config.js', 'package.json', 'package-lock.json', '.npmrc', 'tsconfig.json', 'eslint.config.js', '.env', '.env.local')) {
   $item = Join-Path $source $name
   if (Test-Path -LiteralPath $item) {
     Copy-Item -LiteralPath $item -Destination $stage -Recurse -Force
