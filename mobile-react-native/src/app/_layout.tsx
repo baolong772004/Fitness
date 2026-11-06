@@ -9,6 +9,7 @@ import { aura } from '../lib/theme';
 import { AuraLoader } from '../components/AuraLoader';
 import { InAppChatBanner } from '../components/InAppChatBanner';
 import { loadIconFonts } from '../lib/iconFonts';
+import { AiBusinessChat } from '../components/AiBusinessChat';
 
 export default function RootLayout() {
   const [fontsReady, setFontsReady] = useState(() => isLoaded('ionicons'));
@@ -67,10 +68,12 @@ function RootNavigation() {
     return () => sub.remove();
   }, [pathname]);
   const hasLightHeader = ['/qr', '/(tabs)/qr', '/account', '/(tabs)/account', '/profile'].includes(pathname);
+  const isMember = String(user?.role || '').toUpperCase().trim() === 'MEMBER';
   return (
     <View style={{ flex: 1 }}>
       <StatusBar style={hasLightHeader ? 'dark' : 'light'} />
       <InAppChatBanner />
+      {isMember && <AiBusinessChat />}
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: aura.espresso },

@@ -18,6 +18,7 @@ import notificationRoutes from './notification.route.js';
 import staffRoutes from './staff.route.js';
 import exerciseAnalysisRoutes from './exerciseAnalysis.route.js';
 import coachExerciseAnalysisRoutes from './coachExerciseAnalysis.route.js';
+import aiAssistantRoutes from './aiAssistant.route.js';
 
 const router = express.Router();
 
@@ -44,6 +45,7 @@ router.use('/notifications', notificationRoutes);
 router.use('/staff', staffRoutes);
 router.use('/exercise-analysis', exerciseAnalysisRoutes);
 router.use('/coach/shared-exercise-analyses', coachExerciseAnalysisRoutes);
+router.use('/ai-assistant', aiAssistantRoutes);
 
 export default router;
 

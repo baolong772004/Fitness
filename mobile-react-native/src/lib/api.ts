@@ -1,9 +1,21 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { asRecord, dayKey, list } from './theme';
 
+const expoHost = Constants.expoConfig?.hostUri?.split(':')[0]?.replace(/[\[\]]/g, '');
+const lanUrl = expoHost ? `http://${expoHost}:5000/api` : null;
+const androidEmulatorUrl = 'http://10.0.2.2:5000/api';
 const configuredUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
-export const API_URL = (configuredUrl || (Platform.OS === 'android' ? 'http://10.0.2.2:5000/api' : 'http://localhost:5000/api')).replace(/\/$/, '');
+const normalizedConfiguredUrl = configuredUrl && Platform.OS === 'android' && /^https?:\/\/127\.0\.0\.1(?::|\/)/i.test(configuredUrl)
+  ? (expoHost && expoHost !== '127.0.0.1' && expoHost !== 'localhost' ? configuredUrl.replace(/^https?:\/\/127\.0\.0\.1/i, `http://${expoHost}`) : androidEmulatorUrl)
+  : configuredUrl;
+const defaultUrl = Platform.OS === 'android' && lanUrl
+  ? lanUrl
+  : Platform.OS === 'web'
+    ? 'http://localhost:5000/api'
+    : lanUrl || 'http://localhost:5000/api';
+export const API_URL = (normalizedConfiguredUrl || defaultUrl).replace(/\/$/, '');
 export const SOCKET_URL = API_URL.replace(/\/api$/, '');
 const TOKEN_KEY = 'aura_access_token';
 const USER_KEY = 'aura_user';
@@ -175,4 +187,8 @@ export const api = {
   myProfile: () => get('/users/me'),
   updateProfile: (data: { fullName?: string; phone?: string; dateOfBirth?: string; gender?: string; height?: number; weight?: number }) =>
     request('PUT', '/users/me', data),
+  aiBusinessChat: async (message: string, history: { role: 'user' | 'assistant'; text: string }[] = []) => {
+    const result = await post<{ success: boolean; data?: { message: string }; message?: string }>('/ai-assistant/chat', { message, history });
+    return result.data?.message || result.message || 'Xin lỗi, tôi chưa thể trả lời lúc này.';
+  },
 };
