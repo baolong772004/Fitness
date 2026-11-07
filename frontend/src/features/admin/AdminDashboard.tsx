@@ -326,7 +326,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     // 7. Fetch Group Classes & Schedules
     try {
-      const liveSchedules = await api.groupClasses.getAllSchedules();
+      setIsLoadingGroupClasses(true);
+      const [liveClasses, liveSchedules] = await Promise.all([
+        api.groupClasses.getAdminClasses().catch((err) => {
+          console.warn('Lỗi tải danh mục lớp học admin:', err);
+          return [];
+        }),
+        api.groupClasses.getAllSchedules().catch((err) => {
+          console.warn('Lỗi tải lịch lớp học nhóm admin:', err);
+          return [];
+        }),
+      ]);
+      setGroupClasses(liveClasses || []);
       setGroupClassSchedules(liveSchedules || []);
     } catch (e: any) {
       console.warn('Lỗi tải lịch lớp học nhóm admin:', e);
@@ -344,6 +355,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (activeTab === 'packages-engine') {
       void loadPackages();
       void loadPtProducts();
+    }
+    if (activeTab === 'group-classes') {
+      void reloadData();
     }
   }, [activeTab]);
 
@@ -712,7 +726,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveClass = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.groupClasses.createClass({
+      const res = await api.groupClasses.createClass({
         name: classForm.name,
         description: classForm.description,
         durationMin: Number(classForm.durationMin || 60),
@@ -722,6 +736,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await reloadData();
       setIsCreatingClass(false);
       setClassForm({ name: '', description: '', durationMin: 60, imageUrl: '' });
+      if (res?.data?.id) {
+        setScheduleForm(prev => ({ ...prev, classId: res.data.id }));
+      }
       alert('Đã tạo lớp học nhóm mới thành công!');
     } catch (err: any) {
       soundEffects.playErrorBeep();
@@ -2226,14 +2243,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="grid gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Danh Mục Lớp Học ({groupClasses.length})</CardTitle>
-              <CardDescription>Các lớp đã tạo, kể cả lớp chưa được xếp lịch.</CardDescription>
+              <div className="flex justify-between items-center flex-wrap gap-4">
+                <div>
+                  <CardTitle>Danh Mục Lớp Học ({groupClasses.length})</CardTitle>
+                  <CardDescription>Các lớp đã tạo, kể cả lớp chưa được xếp lịch.</CardDescription>
+                </div>
+                <Button onClick={() => setIsCreatingClass(true)}>
+                  <Plus className="size-4" /> Tạo Lớp Học Mới
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {groupClasses.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
                   <p className="font-semibold text-foreground">Chưa có lớp học nào</p>
-                  <p className="text-xs mt-1">Lớp vừa tạo sẽ xuất hiện tại đây.</p>
+                  <p className="text-xs mt-1">Bấm nút "Tạo Lớp Học Mới" ở trên để tạo lớp học đầu tiên.</p>
                 </div>
               ) : (
                 <Table>
@@ -2242,16 +2266,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <TableHead>Tên Lớp Học</TableHead>
                       <TableHead>Thời Lượng</TableHead>
                       <TableHead>Mô Tả</TableHead>
+                      <TableHead className="text-center">Số Ca Đã Xếp Lịch</TableHead>
+                      <TableHead className="text-right">Thao Tác</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {groupClasses.map(groupClass => (
-                      <TableRow key={groupClass.id}>
-                        <TableCell className="font-bold text-foreground">{groupClass.name}</TableCell>
-                        <TableCell>{groupClass.durationMin} phút</TableCell>
-                        <TableCell>{groupClass.description || '—'}</TableCell>
-                      </TableRow>
-                    ))}
+                    {groupClasses.map(groupClass => {
+                      const scheduleCount = groupClassSchedules.filter(s => s.classId === groupClass.id).length;
+                      return (
+                        <TableRow key={groupClass.id}>
+                          <TableCell className="font-bold text-foreground">
+                            {groupClass.name}
+                            <span className="text-xs text-muted-foreground ml-1.5 font-normal">#{groupClass.id}</span>
+                          </TableCell>
+                          <TableCell>{groupClass.durationMin} phút</TableCell>
+                          <TableCell className="max-w-md truncate text-muted-foreground text-xs">{groupClass.description || '—'}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className="text-xs font-semibold">
+                              {scheduleCount} ca tập
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs gap-1"
+                              onClick={() => {
+                                setScheduleForm(prev => ({
+                                  ...prev,
+                                  classId: groupClass.id,
+                                  trainerId: groupClassTrainers[0]?.userId ?? 0,
+                                  roomId: rooms[0]?.id ?? 0
+                                }));
+                                setIsCreatingSchedule(true);
+                              }}
+                            >
+                              <Plus className="size-3" /> Mở ca lịch
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -2269,7 +2324,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <Plus className="size-4" /> Tạo Lớp Học Mới
                   </Button>
                   <Button onClick={() => {
-                    setScheduleForm(prev => ({ ...prev, trainerId: groupClassTrainers[0]?.userId ?? 0, roomId: rooms[0]?.id ?? 0 }));
+                    setScheduleForm(prev => ({
+                      ...prev,
+                      classId: prev.classId && groupClasses.some(c => c.id === prev.classId) ? prev.classId : (groupClasses[0]?.id ?? 0),
+                      trainerId: groupClassTrainers[0]?.userId ?? 0,
+                      roomId: rooms[0]?.id ?? 0
+                    }));
                     setIsCreatingSchedule(true);
                   }}>
                     <Plus className="size-4" /> Mở Ca Lịch Tập
@@ -2502,11 +2562,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="grid gap-4 py-3">
               <Field label="Lớp Học *">
                 <Select
-                  value={String(scheduleForm.classId)}
+                  value={scheduleForm.classId ? String(scheduleForm.classId) : undefined}
                   onValueChange={(v) => setScheduleForm({ ...scheduleForm, classId: parseInt(v) })}
                   disabled={groupClasses.length === 0}
                 >
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Chọn lớp học" /></SelectTrigger>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={groupClasses.length === 0 ? "Chưa có lớp học nào" : "Chọn lớp học"} />
+                  </SelectTrigger>
                   <SelectContent>
                     {groupClasses.map(groupClass => (
                       <SelectItem key={groupClass.id} value={String(groupClass.id)}>
