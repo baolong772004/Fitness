@@ -19,7 +19,6 @@ import {
   RefreshCw,
   Wallet,
   Plus,
-  Edit3,
   Search,
   CheckCircle2,
   Clock,
@@ -28,11 +27,22 @@ import {
   X,
   History,
   ShieldAlert,
-  ArrowUpRight,
-  TrendingUp,
   SlidersHorizontal,
   Info,
   RotateCcw,
+  Pencil,
+  Sparkles,
+  ArrowRight,
+  Calendar,
+  Layers,
+  Loader2,
+  Tag,
+  Check,
+  TrendingUp,
+  UserCheck,
+  ChevronDown,
+  ChevronUp,
+  Eye,
 } from 'lucide-react';
 
 const levelNames: Record<string, string> = {
@@ -120,7 +130,15 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
   const [singleDrafts, setSingleDrafts] = useState<Record<string, { price: number; durationDays: number; maxQuantity: number; benefits: string }>>({});
   const [singleBusy, setSingleBusy] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [form, setForm] = useState<{ name: string; level: string; sessionCount: number; durationDays: number; price: number; singleSessionPrice: number | null; benefits: string }>({ name: '', level: 'BEGINNER', sessionCount: 10, durationDays: 30, price: 500000, singleSessionPrice: null, benefits: '' });
+  const [form, setForm] = useState<{ name: string; level: string; sessionCount: number; durationDays: number; price: number; singleSessionPrice: number | null; benefits: string }>({
+    name: '',
+    level: 'BEGINNER',
+    sessionCount: 10,
+    durationDays: 30,
+    price: 500000,
+    singleSessionPrice: null,
+    benefits: '',
+  });
   const [coachChanges, setCoachChanges] = useState<Awaited<ReturnType<typeof api.adminTrainers.getPendingPtCoachChanges>>>([]);
   const [makeupRequests, setMakeupRequests] = useState<Awaited<ReturnType<typeof api.adminTrainers.getPtMakeupOperations>>>([]);
   const [makeupCoaches, setMakeupCoaches] = useState<Record<number, Array<{ userId: number; fullName: string }>>>({});
@@ -130,8 +148,7 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
   const [makeupBusy, setMakeupBusy] = useState<number | null>(null);
   const [coachChangeBusy, setCoachChangeBusy] = useState<number | null>(null);
   const [coachChangeNotes, setCoachChangeNotes] = useState<Record<number, string>>({});
-  const [coachChangePreviews, setCoachChangePreviews] = useState<Record<number,
-    Awaited<ReturnType<typeof api.adminTrainers.previewPtCoachChange>>>>({});
+  const [coachChangePreviews, setCoachChangePreviews] = useState<Record<number, Awaited<ReturnType<typeof api.adminTrainers.previewPtCoachChange>>>>({});
   const [coachPreviewBusy, setCoachPreviewBusy] = useState<number | null>(null);
   const [coachPreviewErrors, setCoachPreviewErrors] = useState<Record<number, string>>({});
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -177,7 +194,14 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
       setRenewalOptions(optionList);
       setCoachChanges(pendingChanges);
       setSingleOffers(offerList);
-      setSingleDrafts(Object.fromEntries(offerList.map(offer => [offer.level, { price: Number(offer.price), durationDays: offer.durationDays, maxQuantity: offer.maxQuantity, benefits: offer.benefits ?? '' }])));
+      setSingleDrafts(
+        Object.fromEntries(
+          offerList.map(offer => [
+            offer.level,
+            { price: Number(offer.price), durationDays: offer.durationDays, maxQuantity: offer.maxQuantity, benefits: offer.benefits ?? '' },
+          ])
+        )
+      );
     } catch (error) {
       setMessage({
         text: error instanceof Error ? error.message : 'Không tải được danh sách gói PT.',
@@ -228,7 +252,9 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
       setMessage({ text: `Đã chuyển quyền học bù #${requestId} sang HLV mới và thông báo hội viên.`, type: 'success' });
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : 'Không thể giao HLV cho buổi học bù.', type: 'error' });
-    } finally { setMakeupBusy(null); }
+    } finally {
+      setMakeupBusy(null);
+    }
   };
 
   const reviewMakeupChoice = async (requestId: number, decision: 'APPROVED' | 'REJECTED') => {
@@ -239,15 +265,17 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
     }
     setMakeupBusy(requestId);
     try {
-      await api.adminTrainers.reviewPtMakeupCoachChange(requestId, decision, reason,
-        decision === 'REJECTED' ? makeupCoachIds[requestId] : undefined);
+      await api.adminTrainers.reviewPtMakeupCoachChange(requestId, decision, reason, decision === 'REJECTED' ? makeupCoachIds[requestId] : undefined);
       await loadMakeup();
-      setMessage({ text: decision === 'APPROVED'
-        ? 'Đã duyệt HLV; hội viên có thể chọn ca để đặt lịch.'
-        : 'Đã thông báo lý do từ chối. Hội viên có thể chọn HLV khác.', type: 'success' });
+      setMessage({
+        text: decision === 'APPROVED' ? 'Đã duyệt HLV; hội viên có thể chọn ca để đặt lịch.' : 'Đã thông báo lý do từ chối. Hội viên có thể chọn HLV khác.',
+        type: 'success',
+      });
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : 'Không thể xử lý đề nghị.', type: 'error' });
-    } finally { setMakeupBusy(null); }
+    } finally {
+      setMakeupBusy(null);
+    }
   };
 
   const saveSingleOffer = async (level: string) => {
@@ -257,10 +285,12 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
     try {
       await api.adminTrainers.savePtSingleOffer(level, draft);
       await load();
-      setMessage({ text: `Đã lưu giá buổi lẻ ${levelNames[level]}.`, type: 'success' });
+      setMessage({ text: `Đã lưu cấu hình bán buổi lẻ ${levelNames[level]}.`, type: 'success' });
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : 'Không lưu được giá buổi lẻ.', type: 'error' });
-    } finally { setSingleBusy(null); }
+    } finally {
+      setSingleBusy(null);
+    }
   };
 
   const toggleSingleOffer = async (level: string, isActive: boolean) => {
@@ -268,9 +298,15 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
     try {
       await api.adminTrainers.setPtSingleOfferActive(level, isActive);
       await load();
+      setMessage({
+        text: isActive ? `Đã mở bán buổi lẻ ${levelNames[level]}.` : `Đã tạm ngừng bán buổi lẻ ${levelNames[level]}.`,
+        type: 'info',
+      });
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : 'Không đổi được trạng thái bán.', type: 'error' });
-    } finally { setSingleBusy(null); }
+    } finally {
+      setSingleBusy(null);
+    }
   };
 
   const editProduct = (product: Product) => {
@@ -321,17 +357,29 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
       setProductSubmitting(false);
     }
   };
+
   const loadCoachChangePreview = async (id: number) => {
     setCoachPreviewBusy(id);
-    setCoachChangePreviews(previous => { const next = { ...previous }; delete next[id]; return next; });
-    setCoachPreviewErrors(previous => { const next = { ...previous }; delete next[id]; return next; });
+    setCoachChangePreviews(previous => {
+      const next = { ...previous };
+      delete next[id];
+      return next;
+    });
+    setCoachPreviewErrors(previous => {
+      const next = { ...previous };
+      delete next[id];
+      return next;
+    });
     try {
       const preview = await api.adminTrainers.previewPtCoachChange(id);
       setCoachChangePreviews(previous => ({ ...previous, [id]: preview }));
     } catch (error) {
       setCoachPreviewErrors(previous => ({ ...previous, [id]: error instanceof Error ? error.message : 'Không xem trước được lịch.' }));
-    } finally { setCoachPreviewBusy(null); }
+    } finally {
+      setCoachPreviewBusy(null);
+    }
   };
+
   const handleCoachChange = async (id: number, decision: 'APPROVED' | 'REJECTED') => {
     const note = coachChangeNotes[id]?.trim() ?? '';
     if (decision === 'REJECTED' && !note) {
@@ -347,15 +395,29 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
     try {
       const result = await api.adminTrainers.resolvePtCoachChange(id, decision, note, previewToken);
       await load();
-      setCoachChangeNotes(previous => { const next = { ...previous }; delete next[id]; return next; });
-      setCoachChangePreviews(previous => { const next = { ...previous }; delete next[id]; return next; });
-      setMessage({ text: decision === 'APPROVED'
-        ? `Đã đổi HLV: chuyển ${result.summary?.transferable.length ?? 0} lịch, giữ HLV cũ cho ${result.summary?.keepOldCoach.length ?? 0} lịch gần giờ, hủy và hoàn Credit ${result.summary?.toCancel.length ?? 0} lịch.`
-        : 'Đã từ chối yêu cầu đổi HLV gói PT.', type: 'success' });
+      setCoachChangeNotes(previous => {
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setCoachChangePreviews(previous => {
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setMessage({
+        text:
+          decision === 'APPROVED'
+            ? `Đã đổi HLV: chuyển ${result.summary?.transferable.length ?? 0} lịch, giữ HLV cũ cho ${result.summary?.keepOldCoach.length ?? 0} lịch gần giờ, hủy và hoàn Credit ${result.summary?.toCancel.length ?? 0} lịch.`
+            : 'Đã từ chối yêu cầu đổi HLV gói PT.',
+        type: 'success',
+      });
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : 'Không thể xử lý yêu cầu.', type: 'error' });
       if (decision === 'APPROVED') void loadCoachChangePreview(id);
-    } finally { setCoachChangeBusy(null); }
+    } finally {
+      setCoachChangeBusy(null);
+    }
   };
 
   const handleArchiveProduct = async (product: Product) => {
@@ -425,7 +487,7 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
     try {
       const oldMode = editingRenewalId ? renewalOptions.find(option => option.id === editingRenewalId)?.purchaseMode : undefined;
       const payload = {
-        ...(singleLevel ? { level: singleLevel, purchaseMode: 'SINGLE' as const } : { productId: selectedRenewalProduct!.id, purchaseMode: oldMode === null ? null : 'PACKAGE' as const }),
+        ...(singleLevel ? { level: singleLevel, purchaseMode: 'SINGLE' as const } : { productId: selectedRenewalProduct!.id, purchaseMode: oldMode === null ? null : ('PACKAGE' as const) }),
         durationDays: renewalDurationDays,
         price: renewalPrice,
       };
@@ -525,11 +587,11 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Alert / Toast bar */}
       {message && (
         <div
-          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm shadow-sm transition-all ${
+          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 text-sm shadow-sm transition-all ${
             message.type === 'success'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
               : message.type === 'error'
@@ -545,12 +607,12 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
             ) : (
               <Info className="size-4 shrink-0 text-blue-600 dark:text-blue-400" />
             )}
-            <span>{message.text}</span>
+            <span className="font-medium text-xs sm:text-sm">{message.text}</span>
           </div>
           <button
             type="button"
             onClick={() => setMessage(null)}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
           >
             <X className="size-4" />
           </button>
@@ -558,62 +620,192 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
       )}
 
       {/* Main Tabs Navigation */}
-      <Tabs value={activeTab} onValueChange={val => {
-        setActiveTab(val as typeof activeTab);
-        if (val === 'coachChanges') void loadMakeup();
-      }} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-muted/60 p-1">
-          <TabsTrigger value="packages" className="flex items-center gap-2 py-2">
-            <Dumbbell className="size-4" />
-            <span className="font-medium">Gói Buổi Tập PT</span>
-            <Badge variant="secondary" className="ml-1 text-xs">
+      <Tabs
+        value={activeTab}
+        onValueChange={val => {
+          setActiveTab(val as typeof activeTab);
+          if (val === 'coachChanges') void loadMakeup();
+        }}
+        className="w-full"
+      >
+        <TabsList className="grid w-full grid-cols-4 bg-muted/60 p-1 group-data-[orientation=horizontal]/tabs:h-10 h-10 rounded-xl">
+          <TabsTrigger value="packages" className="h-full py-0 flex items-center justify-center gap-1.5 rounded-lg text-xs sm:text-sm font-semibold">
+            <Dumbbell className="size-4 text-primary shrink-0" />
+            <span>Gói Buổi Tập PT</span>
+            <Badge variant="secondary" className="hidden sm:inline-flex ml-1 text-[11px] font-semibold px-1.5 py-0 leading-none">
               {products.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="renewals" className="flex items-center gap-2 py-2">
-            <RefreshCw className="size-4" />
-            <span className="font-medium">Bảng Giá Gia Hạn</span>
-            <Badge variant="secondary" className="ml-1 text-xs">
+          <TabsTrigger value="renewals" className="h-full py-0 flex items-center justify-center gap-1.5 rounded-lg text-xs sm:text-sm font-semibold">
+            <RefreshCw className="size-4 text-emerald-600 shrink-0" />
+            <span>Bảng Giá Gia Hạn</span>
+            <Badge variant="secondary" className="hidden sm:inline-flex ml-1 text-[11px] font-semibold px-1.5 py-0 leading-none">
               {renewalOptions.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="wallets" className="flex items-center gap-2 py-2">
-            <Wallet className="size-4" />
-            <span className="font-medium">Ví PT Hội Viên</span>
+          <TabsTrigger value="wallets" className="h-full py-0 flex items-center justify-center gap-1.5 rounded-lg text-xs sm:text-sm font-semibold">
+            <Wallet className="size-4 text-amber-600 shrink-0" />
+            <span>Ví PT Hội Viên</span>
           </TabsTrigger>
-          <TabsTrigger value="coachChanges" className="flex items-center gap-2 py-2">
-            <ShieldAlert className="size-4" /><span className="font-medium">Đổi HLV ({coachChanges.length + makeupRequests.length})</span>
+          <TabsTrigger value="coachChanges" className="h-full py-0 flex items-center justify-center gap-1.5 rounded-lg text-xs sm:text-sm font-semibold">
+            <ShieldAlert className="size-4 text-rose-600 shrink-0" />
+            <span>Đổi HLV & Bù Ca</span>
+            {(coachChanges.length + makeupRequests.length) > 0 && (
+              <Badge variant="destructive" className="ml-1 text-[11px] font-bold px-1.5 py-0 leading-none animate-pulse">
+                {coachChanges.length + makeupRequests.length}
+              </Badge>
+            )}
           </TabsTrigger>
         </TabsList>
 
         {/* ================= TAB 1: GÓI BUỔI TẬP PT ================= */}
-        <TabsContent value="packages" className="space-y-4 pt-2">
-          <Card>
-            <CardHeader><CardTitle className="text-base">Buổi PT lẻ theo cấp độ</CardTitle><CardDescription>Giá, hạn dùng và số buổi tối đa của một đơn được cấu hình riêng. Đơn đã tạo giữ nguyên giá và hạn dùng tại thời điểm mua.</CardDescription></CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-3">
-              {paidLevels.map(level => {
-                const offer = singleOffers.find(item => item.level === level);
-                const draft = singleDrafts[level] ?? { price: 0, durationDays: 30, maxQuantity: 20, benefits: '' };
-                const change = (patch: Partial<typeof draft>) => setSingleDrafts(current => ({ ...current, [level]: { ...draft, ...patch } }));
-                return <div key={level} className="space-y-2 rounded-lg border p-3">
-                  <div className="flex items-center justify-between"><strong>{levelNames[level]}</strong><Badge variant={offer?.isActive ? 'default' : 'outline'}>{offer?.isActive ? 'Đang bán' : 'Chưa bán'}</Badge></div>
-                  <Label>Giá một buổi (VNĐ)</Label><Input type="number" min="1" placeholder="0" value={draft.price === 0 ? '' : draft.price} onChange={e => change({ price: e.target.value === '' ? ('' as any) : Number(e.target.value) })} />
-                  <div className="grid grid-cols-2 gap-2"><div><Label>Hạn dùng (ngày)</Label><Input type="number" min="1" max="3650" placeholder="30" value={draft.durationDays === 0 ? '' : draft.durationDays} onChange={e => change({ durationDays: e.target.value === '' ? ('' as any) : Number(e.target.value) })} /></div><div><Label>Tối đa/đơn</Label><Input type="number" min="1" max="100" placeholder="20" value={draft.maxQuantity === 0 ? '' : draft.maxQuantity} onChange={e => change({ maxQuantity: e.target.value === '' ? ('' as any) : Number(e.target.value) })} /></div></div>
-                  <Label>Quyền lợi hiển thị</Label><Input maxLength={1000} value={draft.benefits} onChange={e => change({ benefits: e.target.value })} placeholder="Ví dụ: Đặt lịch PT, QR check-in" />
-                  <div className="flex gap-2"><Button size="sm" disabled={singleBusy !== null || draft.price < 1} onClick={() => void saveSingleOffer(level)}>Lưu cấu hình</Button>{offer && <Button size="sm" variant="outline" disabled={singleBusy !== null} onClick={() => void toggleSingleOffer(level, !offer.isActive)}>{offer.isActive ? 'Ngừng bán' : 'Mở bán'}</Button>}</div>
-                </div>;
-              })}
+        <TabsContent value="packages" className="space-y-4 pt-3">
+          {/* Section A: Buổi PT lẻ theo cấp độ */}
+          <Card className="border border-border/80 shadow-xs overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b pb-3 pt-3.5 px-4 sm:px-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <Sparkles className="size-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm sm:text-base font-bold">Cấu Hình Bán Buổi PT Lẻ Theo Cấp Độ</CardTitle>
+                    <CardDescription className="text-xs">
+                      Thiết lập giá lẻ, hạn dùng và số buổi tối đa cho mỗi lần mua thêm của hội viên.
+                    </CardDescription>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-5">
+              <div className="grid gap-3.5 md:grid-cols-3">
+                {paidLevels.map(level => {
+                  const offer = singleOffers.find(item => item.level === level);
+                  const draft = singleDrafts[level] ?? { price: 0, durationDays: 30, maxQuantity: 20, benefits: '' };
+                  const change = (patch: Partial<typeof draft>) => setSingleDrafts(current => ({ ...current, [level]: { ...draft, ...patch } }));
+                  const isBusy = singleBusy === level;
+
+                  return (
+                    <div
+                      key={level}
+                      className="flex flex-col justify-between rounded-xl border bg-card p-3.5 shadow-xs hover:border-primary/40 transition-all space-y-3"
+                    >
+                      <div className="flex items-center justify-between pb-2 border-b">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block size-2 rounded-full ${level === 'BEGINNER' ? 'bg-emerald-500' : level === 'INTERMEDIATE' ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                          <span className="font-bold text-sm text-foreground">{levelNames[level]}</span>
+                        </div>
+                        <Badge
+                          variant={offer?.isActive ? 'default' : 'secondary'}
+                          className={`text-[10px] font-semibold ${offer?.isActive ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+                        >
+                          {offer?.isActive ? 'Đang mở bán' : 'Tạm dừng bán'}
+                        </Badge>
+                      </div>
+
+                      <div className="space-y-2.5 text-xs">
+                        <div>
+                          <Label className="text-[11px] font-medium text-muted-foreground flex items-center justify-between mb-1">
+                            <span>Đơn giá 1 buổi</span>
+                            <span className="text-[10px] font-semibold text-primary">{draft.price > 0 ? formatVND(draft.price) : '0 đ'}</span>
+                          </Label>
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              min="1"
+                              step="1000"
+                              placeholder="0"
+                              className="h-8 text-xs font-semibold pr-10"
+                              value={draft.price === 0 ? '' : draft.price}
+                              onChange={e => change({ price: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
+                            />
+                            <span className="pointer-events-none absolute right-2.5 top-2 text-[10px] text-muted-foreground">VNĐ</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">Hạn dùng</Label>
+                            <div className="relative">
+                              <Input
+                                type="number"
+                                min="1"
+                                max="3650"
+                                placeholder="30"
+                                className="h-8 text-xs pr-10"
+                                value={draft.durationDays === 0 ? '' : draft.durationDays}
+                                onChange={e => change({ durationDays: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
+                              />
+                              <span className="pointer-events-none absolute right-2.5 top-2 text-[10px] text-muted-foreground">ngày</span>
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">Tối đa / đơn</Label>
+                            <div className="relative">
+                              <Input
+                                type="number"
+                                min="1"
+                                max="100"
+                                placeholder="20"
+                                className="h-8 text-xs pr-10"
+                                value={draft.maxQuantity === 0 ? '' : draft.maxQuantity}
+                                onChange={e => change({ maxQuantity: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
+                              />
+                              <span className="pointer-events-none absolute right-2.5 top-2 text-[10px] text-muted-foreground">buổi</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-[11px] font-medium text-muted-foreground mb-1 block">Quyền lợi hiển thị</Label>
+                          <Input
+                            maxLength={1000}
+                            className="h-8 text-xs"
+                            value={draft.benefits}
+                            onChange={e => change({ benefits: e.target.value })}
+                            placeholder="VD: Đặt lịch PT, QR check-in..."
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 pt-2 border-t">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs flex-1 gap-1"
+                          disabled={isBusy || draft.price < 1}
+                          onClick={() => void saveSingleOffer(level)}
+                        >
+                          {isBusy ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                          Lưu
+                        </Button>
+                        {offer && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs px-2"
+                            disabled={isBusy}
+                            onClick={() => void toggleSingleOffer(level, !offer.isActive)}
+                          >
+                            {offer.isActive ? 'Ngừng' : 'Mở bán'}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </CardContent>
           </Card>
-          {/* Action Header & Statistics */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5 rounded-lg border bg-muted/30 p-1">
+
+          {/* Section B: Action Toolbar & Danh sách Gói PT Trọn Gói */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
                 <Button
                   type="button"
                   variant={productFilter === 'all' ? 'secondary' : 'ghost'}
                   size="sm"
-                  className="h-7 text-xs px-2.5 font-medium"
+                  className="h-7 text-xs px-3 font-semibold rounded-md"
                   onClick={() => setProductFilter('all')}
                 >
                   Tất cả ({products.length})
@@ -622,7 +814,7 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                   type="button"
                   variant={productFilter === 'active' ? 'secondary' : 'ghost'}
                   size="sm"
-                  className="h-7 text-xs px-2.5 font-medium text-emerald-700 dark:text-emerald-400"
+                  className="h-7 text-xs px-3 font-semibold text-emerald-700 dark:text-emerald-400 rounded-md"
                   onClick={() => setProductFilter('active')}
                 >
                   Đang bán ({activeProducts.length})
@@ -631,21 +823,22 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                   type="button"
                   variant={productFilter === 'inactive' ? 'secondary' : 'ghost'}
                   size="sm"
-                  className="h-7 text-xs px-2.5 font-medium text-muted-foreground"
+                  className="h-7 text-xs px-3 font-semibold text-muted-foreground rounded-md"
                   onClick={() => setProductFilter('inactive')}
                 >
-                  Đã ngừng bán ({products.length - activeProducts.length})
+                  Đã ngừng ({products.length - activeProducts.length})
                 </Button>
               </div>
               {productsMissingDuration.length > 0 && (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="size-3.5" />
-                  {productsMissingDuration.length} gói chưa có hạn
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                  <AlertTriangle className="size-3" />
+                  {productsMissingDuration.length} gói chưa gán thời hạn
                 </span>
               )}
             </div>
+
             {!isFormOpen && (
-              <Button onClick={() => setIsFormOpen(true)} className="gap-1.5 shadow-sm">
+              <Button onClick={() => setIsFormOpen(true)} className="gap-1.5 shadow-sm font-semibold h-8 text-xs">
                 <Plus className="size-4" /> Tạo Gói PT Mới
               </Button>
             )}
@@ -653,15 +846,15 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
 
           {/* Form Tạo/Sửa Gói PT */}
           {isFormOpen && (
-            <Card className="border-primary/30 bg-card/60 shadow-md">
-              <CardHeader className="pb-3">
+            <Card className="border-2 border-primary/40 bg-card shadow-md animate-in fade-in-50 duration-200">
+              <CardHeader className="bg-primary/5 border-b pb-3 pt-3.5 px-4 sm:px-6">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      {editingId ? <Edit3 className="size-4" /> : <Plus className="size-4" />}
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
+                      {editingId ? <Pencil className="size-4" /> : <Plus className="size-4" />}
                     </div>
                     <div>
-                      <CardTitle className="text-base font-semibold">
+                      <CardTitle className="text-base font-bold">
                         {editingId ? 'Cập Nhật Gói Buổi Tập PT' : 'Tạo Gói Buổi Tập PT Mới'}
                       </CardTitle>
                       <CardDescription className="text-xs">
@@ -669,23 +862,26 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                       </CardDescription>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={handleCancelProductEdit}>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full" onClick={handleCancelProductEdit}>
                     <X className="size-4" />
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSaveProduct} className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+
+              <CardContent className="p-4 sm:p-6">
+                <form onSubmit={handleSaveProduct} className="space-y-5">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {/* Tên gói */}
                     <div className="space-y-1.5 sm:col-span-2">
-                      <Label htmlFor="pkg-name" className="text-xs font-medium">
+                      <Label htmlFor="pkg-name" className="text-xs font-semibold text-foreground flex items-center gap-1">
+                        <Tag className="size-3.5 text-muted-foreground" />
                         Tên gói PT <span className="text-rose-500">*</span>
                       </Label>
                       <Input
                         id="pkg-name"
-                        placeholder="VD: Gói PT Cơ Bản 10 Buổi"
+                        placeholder="VD: Gói PT Cơ Bản 10 Buổi (Level 1)"
                         required
+                        className="h-9 text-sm"
                         value={form.name}
                         onChange={e => setForm({ ...form, name: e.target.value })}
                       />
@@ -693,18 +889,19 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
 
                     {/* Cấp độ HLV */}
                     <div className="space-y-1.5">
-                      <Label htmlFor="pkg-level" className="text-xs font-medium">
+                      <Label htmlFor="pkg-level" className="text-xs font-semibold text-foreground flex items-center gap-1">
+                        <Layers className="size-3.5 text-muted-foreground" />
                         Cấp độ Huấn Luyện Viên <span className="text-rose-500">*</span>
                       </Label>
                       <select
                         id="pkg-level"
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-1.5 text-xs sm:text-sm font-medium shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
                         value={form.level}
                         onChange={e => setForm({ ...form, level: e.target.value })}
                       >
                         {paidLevels.map(lvl => (
                           <option key={lvl} value={lvl}>
-                            {levelNames[lvl]}
+                            {levelNames[lvl]} ({lvl})
                           </option>
                         ))}
                       </select>
@@ -712,7 +909,8 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
 
                     {/* Số buổi */}
                     <div className="space-y-1.5">
-                      <Label htmlFor="pkg-sessions" className="text-xs font-medium">
+                      <Label htmlFor="pkg-sessions" className="text-xs font-semibold text-foreground flex items-center gap-1">
+                        <Dumbbell className="size-3.5 text-muted-foreground" />
                         Số buổi trong gói <span className="text-rose-500">*</span>
                       </Label>
                       <div className="relative">
@@ -723,18 +921,18 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           max="100"
                           required
                           placeholder="10"
+                          className="h-9 text-sm font-semibold pr-12"
                           value={form.sessionCount === 0 ? '' : form.sessionCount}
                           onChange={e => setForm({ ...form, sessionCount: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
                         />
-                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">
-                          buổi
-                        </span>
+                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs font-medium text-muted-foreground">buổi</span>
                       </div>
                     </div>
 
                     {/* Thời hạn */}
                     <div className="space-y-1.5">
-                      <Label htmlFor="pkg-duration" className="text-xs font-medium">
+                      <Label htmlFor="pkg-duration" className="text-xs font-semibold text-foreground flex items-center gap-1">
+                        <Calendar className="size-3.5 text-muted-foreground" />
                         Thời hạn sử dụng <span className="text-rose-500">*</span>
                       </Label>
                       <div className="relative">
@@ -746,18 +944,18 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           max="3650"
                           required
                           placeholder="30"
+                          className="h-9 text-sm font-semibold pr-12"
                           value={form.durationDays === 0 ? '' : form.durationDays}
                           onChange={e => setForm({ ...form, durationDays: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
                         />
-                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">
-                          ngày
-                        </span>
+                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs font-medium text-muted-foreground">ngày</span>
                       </div>
                     </div>
 
                     {/* Giá trọn gói */}
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label htmlFor="pkg-price" className="text-xs font-medium">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="pkg-price" className="text-xs font-semibold text-foreground flex items-center gap-1">
+                        <span className="font-bold text-emerald-600">₫</span>
                         Giá trọn gói (VNĐ) <span className="text-rose-500">*</span>
                       </Label>
                       <div className="relative">
@@ -768,37 +966,57 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           step="1000"
                           required
                           placeholder="500000"
+                          className="h-9 text-sm font-bold text-primary pr-12"
                           value={form.price === 0 ? '' : form.price}
                           onChange={e => setForm({ ...form, price: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
                         />
-                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">
-                          VNĐ
-                        </span>
+                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs font-medium text-muted-foreground">VNĐ</span>
                       </div>
                     </div>
+
+                    {/* Quyền lợi hiển thị */}
                     <div className="space-y-1.5 sm:col-span-2">
-                      <Label htmlFor="pt-benefits" className="text-xs font-medium">Quyền lợi hiển thị</Label>
-                      <Input id="pt-benefits" maxLength={1000} placeholder="Ví dụ: Đặt lịch PT, QR check-in" value={form.benefits} onChange={e => setForm({ ...form, benefits: e.target.value })} />
+                      <Label htmlFor="pt-benefits" className="text-xs font-semibold text-foreground">
+                        Quyền lợi hiển thị cho hội viên
+                      </Label>
+                      <Input
+                        id="pt-benefits"
+                        maxLength={1000}
+                        placeholder="VD: Kiểm tra InBody miễn phí, giáo án bài bản, QR check-in..."
+                        className="h-9 text-xs sm:text-sm"
+                        value={form.benefits}
+                        onChange={e => setForm({ ...form, benefits: e.target.value })}
+                      />
                     </div>
 
-                    {/* Widget tính toán đơn giá */}
-                    <div className="flex flex-col justify-end rounded-md bg-muted/40 p-2.5 sm:col-span-2 lg:col-span-3">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Đơn giá trung bình / 1 buổi:</span>
-                        <strong className="text-sm font-semibold text-primary">
-                          {form.sessionCount > 0 ? formatVND(Math.round(form.price / form.sessionCount)) : '0 đ'} / buổi
-                        </strong>
+                    {/* Live Calculation Preview Card */}
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 flex flex-col justify-center">
+                      <span className="text-[11px] font-medium text-muted-foreground">Đơn giá trung bình ước tính:</span>
+                      <div className="flex items-baseline gap-1 mt-0.5">
+                        <span className="text-lg font-bold text-primary">
+                          {form.sessionCount > 0 ? formatVND(Math.round(form.price / form.sessionCount)) : '0 đ'}
+                        </span>
+                        <span className="text-xs text-muted-foreground">/ 1 buổi</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Submit / Cancel Buttons */}
-                  <div className="flex justify-end gap-2 pt-1 border-t">
+                  <div className="flex justify-end gap-2 pt-3 border-t">
                     <Button type="button" variant="outline" size="sm" onClick={handleCancelProductEdit}>
                       Hủy bỏ
                     </Button>
-                    <Button type="submit" size="sm" disabled={productSubmitting} className="min-w-28">
-                      {productSubmitting ? 'Đang lưu...' : editingId ? 'Lưu thay đổi' : 'Tạo gói PT'}
+                    <Button type="submit" size="sm" disabled={productSubmitting} className="min-w-28 font-semibold">
+                      {productSubmitting ? (
+                        <div className="flex items-center gap-1.5">
+                          <Loader2 className="size-3.5 animate-spin" />
+                          <span>Đang lưu...</span>
+                        </div>
+                      ) : editingId ? (
+                        'Lưu thay đổi'
+                      ) : (
+                        'Tạo gói PT'
+                      )}
                     </Button>
                   </div>
                 </form>
@@ -807,18 +1025,18 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
           )}
 
           {/* Table Danh sách các gói PT */}
-          <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
             <Table>
-              <TableHeader className="bg-muted/40">
-                <TableRow>
-                  <TableHead className="font-semibold">Tên Gói PT</TableHead>
-                  <TableHead className="font-semibold">Cấp Độ HLV</TableHead>
-                  <TableHead className="text-center font-semibold">Quy Cách</TableHead>
-                  <TableHead className="text-right font-semibold">Giá Trọn Gói</TableHead>
-                  <TableHead className="text-right font-semibold">Đơn Giá / Buổi</TableHead>
-                  <TableHead className="font-semibold">Quyền lợi</TableHead>
-                  <TableHead className="text-center font-semibold">Trạng Thái</TableHead>
-                  <TableHead className="text-right font-semibold">Thao Tác</TableHead>
+              <TableHeader className="bg-muted/50">
+                <TableRow className="text-xs">
+                  <TableHead className="font-bold py-3">Tên Gói PT</TableHead>
+                  <TableHead className="font-bold py-3">Cấp Độ HLV</TableHead>
+                  <TableHead className="text-center font-bold py-3">Quy Cách</TableHead>
+                  <TableHead className="text-right font-bold py-3">Giá Trọn Gói</TableHead>
+                  <TableHead className="text-right font-bold py-3">Đơn Giá / Buổi</TableHead>
+                  <TableHead className="font-bold py-3">Quyền Lợi</TableHead>
+                  <TableHead className="text-center font-bold py-3">Trạng Thái</TableHead>
+                  <TableHead className="text-right font-bold py-3 pr-4">Thao Tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -832,7 +1050,7 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                   if (displayedProducts.length === 0) {
                     return (
                       <TableRow>
-                        <TableCell colSpan={8} className="h-28 text-center text-muted-foreground">
+                        <TableCell colSpan={8} className="h-28 text-center text-xs text-muted-foreground">
                           {productFilter === 'inactive'
                             ? 'Không có gói PT nào đã ngừng bán.'
                             : productFilter === 'active'
@@ -846,75 +1064,72 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                   return displayedProducts.map(product => {
                     const avgPrice = product.sessionCount > 0 ? Math.round(product.price / product.sessionCount) : 0;
                     return (
-                      <TableRow key={product.id} className={!product.isActive ? 'opacity-70 bg-muted/20' : ''}>
-                        <TableCell className="font-medium">
+                      <TableRow key={product.id} className={`text-xs hover:bg-muted/30 transition-colors ${!product.isActive ? 'opacity-65 bg-muted/15' : ''}`}>
+                        <TableCell className="font-semibold text-foreground py-3">
                           <div className="flex items-center gap-2">
-                            <Dumbbell className="size-4 text-muted-foreground shrink-0" />
                             <span>{product.name}</span>
+                            <span className="text-[10px] text-muted-foreground font-normal">#{product.id}</span>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <span
-                            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${
-                              levelBadgeVariants[product.level] || ''
-                            }`}
-                          >
+                        <TableCell className="py-3">
+                          <Badge variant="outline" className={`text-[10px] font-semibold ${levelBadgeVariants[product.level] || ''}`}>
                             {levelNames[product.level] ?? product.level}
-                          </span>
+                          </Badge>
                         </TableCell>
-                        <TableCell className="text-center">
-                          <div className="inline-flex flex-col text-xs">
-                            <span className="font-semibold">{product.sessionCount} buổi</span>
-                            <span className="text-muted-foreground">
-                              {product.durationDays ? `${product.durationDays} ngày` : 'Chưa có hạn'}
-                            </span>
+                        <TableCell className="text-center py-3">
+                          <div className="inline-flex items-center gap-1 font-semibold">
+                            <span>{product.sessionCount} buổi</span>
+                            <span className="text-muted-foreground text-[11px] font-normal">• {product.durationDays ? `${product.durationDays} ngày` : '—'}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-semibold text-foreground">
+                        <TableCell className="text-right font-bold text-foreground py-3">
                           {formatVND(Number(product.price))}
                         </TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground">
-                          ~{formatVND(avgPrice)}
+                        <TableCell className="text-right font-medium text-muted-foreground py-3">
+                          {formatVND(avgPrice)}
                         </TableCell>
-                        <TableCell className="max-w-48 text-xs text-muted-foreground">{product.benefits || 'Theo chính sách PT Paid'}</TableCell>
-                        <TableCell className="text-center">
+                        <TableCell className="max-w-[200px] truncate text-muted-foreground text-[11px] py-3">
+                          {product.benefits || '—'}
+                        </TableCell>
+                        <TableCell className="text-center py-3">
                           {product.isActive ? (
-                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-xs">
+                            <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-semibold">
                               Đang bán
                             </Badge>
                           ) : (
-                            <Badge variant="secondary" className="text-xs">
-                              Đã ngừng bán
+                            <Badge variant="secondary" className="text-[10px] text-muted-foreground font-semibold">
+                              Đã ngừng
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right py-3 pr-4">
                           <div className="flex items-center justify-end gap-1">
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 px-2 text-primary"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                              title="Chỉnh sửa gói"
                               onClick={() => editProduct(product)}
                             >
-                              <Edit3 className="size-3.5 mr-1" /> Sửa
+                              <Pencil className="size-3.5" />
                             </Button>
                             {product.isActive ? (
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                className="h-7 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[11px]"
                                 onClick={() => void handleArchiveProduct(product)}
                               >
                                 Ngừng bán
                               </Button>
                             ) : (
                               <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="sm"
-                                className="h-8 px-2.5 text-xs text-emerald-700 border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 gap-1 font-medium shadow-2xs"
+                                className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-[11px]"
                                 onClick={() => void handleRestoreProduct(product)}
                               >
-                                <RotateCcw className="size-3.5" /> Khôi phục
+                                Mở lại
                               </Button>
                             )}
                           </div>
@@ -928,18 +1143,20 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
           </div>
         </TabsContent>
 
-        {/* ================= TAB 2: GIÁ GIA HẠN THỜI GIAN PT ================= */}
-        <TabsContent value="renewals" className="space-y-4 pt-2">
+        {/* ================= TAB 2: BẢNG GIÁ GIA HẠN ================= */}
+        <TabsContent value="renewals" className="space-y-4 pt-3">
           {/* Policy Info Card */}
-          <div className="rounded-lg border border-blue-200/80 bg-blue-50/50 p-3.5 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
-            <div className="flex items-start gap-2.5">
-              <Info className="size-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-sm">Chính sách gia hạn thời gian gói PT</p>
-                <p className="leading-relaxed">
-                  • <strong>Gia hạn chỉ cộng thêm số ngày sử dụng</strong>, không cộng thêm số buổi tập. Các buổi chưa tập của gói sẽ được mở khóa lại để hội viên tiếp tục đặt lịch.
+          <div className="rounded-xl border border-blue-200/90 bg-blue-50/60 p-4 text-xs text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200 shadow-xs">
+            <div className="flex items-start gap-3">
+              <div className="flex size-7 items-center justify-center rounded-lg bg-blue-600/10 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5">
+                <Info className="size-4" />
+              </div>
+              <div className="space-y-1 leading-relaxed">
+                <p className="font-bold text-sm text-blue-950 dark:text-blue-100">Quy định & Chính sách gia hạn hạn dùng buổi PT</p>
+                <p>
+                  • <strong>Gia hạn chỉ cộng thêm số ngày sử dụng</strong> cho các buổi tập còn lại chưa dùng, không tăng thêm số buổi. Các buổi chưa dùng sẽ được mở khóa lại để hội viên tiếp tục book lịch tập.
                 </p>
-                <p className="leading-relaxed">
+                <p>
                   • Hội viên chỉ được phép gia hạn trong vòng <strong>30 ngày (Grace Period)</strong> kể từ ngày gói hết hạn. Quá 30 ngày, hệ thống sẽ tự động khóa và yêu cầu mua gói mới.
                 </p>
               </div>
@@ -948,7 +1165,7 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
 
           {/* Missing Duration Warning */}
           {productsMissingDuration.length > 0 && (
-            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+            <div className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50/90 p-3.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200 shadow-xs">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span>
@@ -958,24 +1175,24 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs border-amber-300"
+                className="h-7 text-xs border-amber-300 bg-background font-semibold"
                 onClick={() => editProduct(productsMissingDuration[0])}
               >
-                Cấu hình thời hạn
+                Cấu hình thời hạn ngay
               </Button>
             </div>
           )}
 
           {/* Action Header */}
           <div className="flex justify-between items-center">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground font-medium">
               Hiện có <strong>{renewalOptions.length}</strong> tùy chọn mức giá gia hạn được cấu hình.
             </p>
             {!isRenewalFormOpen && (
               <Button
                 onClick={() => setIsRenewalFormOpen(true)}
                 disabled={renewalProducts.length === 0 && singleOffers.length === 0}
-                className="gap-1.5 shadow-sm"
+                className="gap-1.5 shadow-sm font-semibold h-8 text-xs"
               >
                 <Plus className="size-4" /> Thiết Lập Giá Gia Hạn Mới
               </Button>
@@ -984,15 +1201,15 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
 
           {/* Form Thiết lập giá gia hạn */}
           {isRenewalFormOpen && (
-            <Card className="border-primary/30 bg-card/60 shadow-md">
-              <CardHeader className="pb-3">
+            <Card className="border-2 border-emerald-500/40 bg-card shadow-md animate-in fade-in-50 duration-200">
+              <CardHeader className="bg-emerald-50/40 dark:bg-emerald-950/20 border-b pb-3 pt-3.5 px-4 sm:px-6">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs">
                       <RefreshCw className="size-4" />
                     </div>
                     <div>
-                      <CardTitle className="text-base font-semibold">
+                      <CardTitle className="text-base font-bold">
                         {editingRenewalId ? 'Cập Nhật Mức Giá Gia Hạn' : 'Thiết Lập Mức Giá Gia Hạn Mới'}
                       </CardTitle>
                       <CardDescription className="text-xs">
@@ -1000,23 +1217,23 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                       </CardDescription>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={handleCancelRenewalEdit}>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full" onClick={handleCancelRenewalEdit}>
                     <X className="size-4" />
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 sm:p-6">
                 <form onSubmit={handleSaveRenewal} className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-4 sm:grid-cols-3">
                     {/* Chọn gói PT */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="rn-product" className="text-xs font-medium">
+                    <div className="space-y-1.5 sm:col-span-1">
+                      <Label htmlFor="rn-product" className="text-xs font-semibold text-foreground">
                         Gói PT Áp Dụng <span className="text-rose-500">*</span>
                       </Label>
                       <select
                         id="rn-product"
                         required
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-1.5 text-xs sm:text-sm font-medium shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
                         value={renewalProductId}
                         onChange={e => {
                           const prod = renewalProducts.find(p => String(p.id) === e.target.value);
@@ -1031,14 +1248,18 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                             {prod.name} ({levelNames[prod.level]} · {prod.sessionCount} buổi · {prod.durationDays} ngày)
                           </option>
                         ))}
-                        {singleOffers.map(offer => <option key={`single:${offer.level}`} value={`single:${offer.level}`}>Buổi lẻ {levelNames[offer.level]}</option>)}
+                        {singleOffers.map(offer => (
+                          <option key={`single:${offer.level}`} value={`single:${offer.level}`}>
+                            Buổi lẻ {levelNames[offer.level]}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
                     {/* Số ngày gia hạn */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="rn-days" className="text-xs font-medium">
+                        <Label htmlFor="rn-days" className="text-xs font-semibold text-foreground">
                           Số ngày gia hạn thêm <span className="text-rose-500">*</span>
                         </Label>
                         <div className="flex gap-1 text-[11px]">
@@ -1047,7 +1268,7 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                               key={days}
                               type="button"
                               onClick={() => setRenewalDurationDays(days)}
-                              className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+                              className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground hover:bg-emerald-100 hover:text-emerald-700 transition-colors font-medium"
                             >
                               +{days}d
                             </button>
@@ -1059,58 +1280,52 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           id="rn-days"
                           type="number"
                           min="1"
-                          max="3650"
+                          max="365"
                           required
+                          className="h-9 text-sm font-semibold pr-12"
                           placeholder="30"
                           value={renewalDurationDays === 0 ? '' : renewalDurationDays}
                           onChange={e => setRenewalDurationDays(e.target.value === '' ? ('' as any) : Number(e.target.value))}
                         />
-                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">
-                          ngày
-                        </span>
+                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">ngày</span>
                       </div>
                     </div>
 
-                    {/* Giá gia hạn */}
+                    {/* Mức phí gia hạn */}
                     <div className="space-y-1.5">
-                      <Label htmlFor="rn-price" className="text-xs font-medium">
-                        Phí gia hạn (VNĐ) <span className="text-rose-500">*</span>
+                      <Label htmlFor="rn-price" className="text-xs font-semibold text-foreground">
+                        Mức phí gia hạn (VNĐ) <span className="text-rose-500">*</span>
                       </Label>
                       <div className="relative">
                         <Input
                           id="rn-price"
                           type="number"
-                          min="1000"
+                          min="0"
                           step="1000"
                           required
                           placeholder="100000"
+                          className="h-9 text-sm font-bold text-emerald-700 dark:text-emerald-400 pr-12"
                           value={renewalPrice === 0 ? '' : renewalPrice}
                           onChange={e => setRenewalPrice(e.target.value === '' ? ('' as any) : Number(e.target.value))}
                         />
-                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">
-                          VNĐ
-                        </span>
+                        <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-muted-foreground">VNĐ</span>
                       </div>
                     </div>
                   </div>
 
-                  {selectedRenewalProduct && (
-                    <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground flex items-center justify-between">
-                      <span>
-                        Gói gốc: <strong>{selectedRenewalProduct.name}</strong> ({levelNames[selectedRenewalProduct.level]}) · Hạn gốc: {selectedRenewalProduct.durationDays} ngày · Giá mua: {formatVND(Number(selectedRenewalProduct.price))}
-                      </span>
-                      <span className="font-semibold text-primary">
-                        Tỷ lệ phí gia hạn: ~{Math.round((renewalPrice / Number(selectedRenewalProduct.price)) * 100)}% giá gói gốc
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="flex justify-end gap-2 pt-1 border-t">
+                  <div className="flex justify-end gap-2 pt-3 border-t">
                     <Button type="button" variant="outline" size="sm" onClick={handleCancelRenewalEdit}>
                       Hủy bỏ
                     </Button>
-                    <Button type="submit" size="sm" disabled={renewalSubmitting || !selectedRenewalProduct}>
-                      {renewalSubmitting ? 'Đang lưu...' : editingRenewalId ? 'Lưu thay đổi' : 'Tạo giá gia hạn'}
+                    <Button type="submit" size="sm" disabled={renewalSubmitting} className="min-w-28 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white">
+                      {renewalSubmitting ? (
+                        <div className="flex items-center gap-1.5">
+                          <Loader2 className="size-3.5 animate-spin" />
+                          <span>Đang lưu...</span>
+                        </div>
+                      ) : (
+                        'Lưu mức giá'
+                      )}
                     </Button>
                   </div>
                 </form>
@@ -1118,96 +1333,86 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
             </Card>
           )}
 
-          {/* Table Danh sách giá gia hạn */}
-          <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+          {/* Table Bảng Giá Gia Hạn */}
+          <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
             <Table>
-              <TableHeader className="bg-muted/40">
-                <TableRow>
-                  <TableHead className="font-semibold">Tên Tùy Chọn / Gói Gốc</TableHead>
-                  <TableHead className="font-semibold">Cấp Độ HLV</TableHead>
-                  <TableHead className="text-center font-semibold">Thời Hạn Thêm</TableHead>
-                  <TableHead className="text-right font-semibold">Phí Gia Hạn</TableHead>
-                  <TableHead className="text-center font-semibold">Phạm Vi Áp Dụng</TableHead>
-                  <TableHead className="text-center font-semibold">Trạng Thái</TableHead>
-                  <TableHead className="text-right font-semibold">Thao Tác</TableHead>
+              <TableHeader className="bg-muted/50">
+                <TableRow className="text-xs">
+                  <TableHead className="font-bold py-3">Gói PT / Tên Tùy Chọn</TableHead>
+                  <TableHead className="font-bold py-3">Cấp Độ HLV</TableHead>
+                  <TableHead className="text-center font-bold py-3">Thời Gian Gia Hạn</TableHead>
+                  <TableHead className="text-right font-bold py-3">Phí Gia Hạn</TableHead>
+                  <TableHead className="text-center font-bold py-3">Trạng Thái</TableHead>
+                  <TableHead className="text-right font-bold py-3 pr-4">Thao Tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {renewalOptions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                      Chưa có cấu hình giá gia hạn nào. Nhấn "Thiết Lập Giá Gia Hạn Mới" để tạo.
+                    <TableCell colSpan={6} className="h-28 text-center text-xs text-muted-foreground">
+                      Chưa có cấu hình giá gia hạn nào. Hãy bấm "Thiết Lập Giá Gia Hạn Mới" để thêm.
                     </TableCell>
                   </TableRow>
                 ) : (
                   renewalOptions.map(option => (
-                    <TableRow key={option.id} className={!option.isActive ? 'opacity-60 bg-muted/20' : ''}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <RefreshCw className="size-4 text-muted-foreground shrink-0" />
+                    <TableRow key={option.id} className={`text-xs hover:bg-muted/30 transition-colors ${!option.isActive ? 'opacity-65 bg-muted/15' : ''}`}>
+                      <TableCell className="font-semibold text-foreground py-3">
+                        <div className="flex items-center gap-1.5">
                           <span>{option.name}</span>
+                          {option.purchaseMode === 'SINGLE' && (
+                            <Badge variant="secondary" className="text-[10px] px-1 py-0 font-normal">Buổi lẻ</Badge>
+                          )}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${
-                            levelBadgeVariants[option.level] || ''
-                          }`}
-                        >
+                      <TableCell className="py-3">
+                        <Badge variant="outline" className={`text-[10px] font-semibold ${levelBadgeVariants[option.level] || ''}`}>
                           {levelNames[option.level] ?? option.level}
-                        </span>
+                        </Badge>
                       </TableCell>
-                      <TableCell className="text-center font-semibold">
+                      <TableCell className="text-center font-semibold py-3">
                         +{option.durationDays} ngày
                       </TableCell>
-                      <TableCell className="text-right font-semibold text-foreground">
+                      <TableCell className="text-right font-bold text-foreground py-3">
                         {formatVND(Number(option.price))}
                       </TableCell>
-                      <TableCell className="text-center text-xs text-muted-foreground">
-                        {option.ptProductId ? (
-                          <Badge variant="outline">Gói #{option.ptProductId}</Badge>
-                        ) : (
-                          <Badge variant="secondary">Toàn bộ cấp độ {levelNames[option.level]}</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
+                      <TableCell className="text-center py-3">
                         {option.isActive ? (
-                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-xs">
-                            Đang áp dụng
+                          <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-semibold">
+                            Áp dụng
                           </Badge>
                         ) : (
-                          <Badge variant="secondary" className="text-xs">
+                          <Badge variant="secondary" className="text-[10px] text-muted-foreground font-semibold">
                             Đã ngừng
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right py-3 pr-4">
                         <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 px-2 text-primary"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                             onClick={() => handleEditRenewalOption(option)}
                           >
-                            <Edit3 className="size-3.5 mr-1" /> Sửa
+                            <Pencil className="size-3.5" />
                           </Button>
                           {option.isActive ? (
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                              className="h-7 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-[11px]"
                               onClick={() => void handleArchiveRenewal(option)}
                             >
-                              Ngừng bán
+                              Ngừng
                             </Button>
                           ) : (
                             <Button
-                              variant="outline"
+                              variant="ghost"
                               size="sm"
-                              className="h-8 px-2.5 text-xs text-emerald-700 border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 gap-1 font-medium shadow-2xs"
+                              className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 text-[11px]"
                               onClick={() => void handleRestoreRenewal(option)}
                             >
-                              <RotateCcw className="size-3.5" /> Khôi phục
+                              Mở lại
                             </Button>
                           )}
                         </div>
@@ -1220,15 +1425,15 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
           </div>
         </TabsContent>
 
-        {/* ================= TAB 3: TRA CỨU & VÍ HỘI VIÊN ================= */}
-        <TabsContent value="wallets" className="space-y-4 pt-2">
+        {/* ================= TAB 3: VÍ PT HỘI VIÊN ================= */}
+        <TabsContent value="wallets" className="space-y-4 pt-3">
           {/* Search Bar */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <div className="relative flex-1 sm:max-w-md">
               <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
               <Input
                 placeholder="Nhập mã hội viên (Ví dụ: 6 hoặc MEM-6)..."
-                className="pl-9"
+                className="pl-9 h-9 text-xs sm:text-sm font-medium"
                 value={memberId}
                 onChange={e => {
                   setMemberId(e.target.value);
@@ -1239,11 +1444,28 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                 }}
               />
             </div>
-            <Button onClick={() => void findWallet()} disabled={walletLoading || !memberId.trim()} className="gap-1.5">
-              <Search className="size-4" />
+            <Button
+              onClick={() => void findWallet()}
+              disabled={walletLoading || !memberId.trim()}
+              className="gap-1.5 h-9 text-xs sm:text-sm font-semibold shadow-xs"
+            >
+              {walletLoading ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
               {walletLoading ? 'Đang tra cứu...' : 'Tra Cứu Ví'}
             </Button>
           </div>
+
+          {/* Empty State when no wallet is loaded */}
+          {!wallet && (
+            <Card className="border border-dashed p-8 text-center bg-muted/15">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-3">
+                <Wallet className="size-6" />
+              </div>
+              <h3 className="font-bold text-sm sm:text-base text-foreground">Tra Cứu & Kiểm Soát Ví Buổi Tập PT</h3>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1 leading-relaxed">
+                Nhập mã hội viên (ID số hoặc mã định danh như <strong>MEM-6</strong>) để xem số buổi khả dụng, các đợt mua, hạn sử dụng và can thiệp cộng/trừ buổi có lưu audit log.
+              </p>
+            </Card>
+          )}
 
           {/* Wallet Result View */}
           {wallet && (
@@ -1251,61 +1473,61 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
               {/* 4 Metric KPI Cards */}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {/* Có thể đặt */}
-                <Card className="border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/50 dark:bg-emerald-950/20 shadow-sm">
+                <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50/80 to-emerald-100/30 dark:border-emerald-900/50 dark:bg-emerald-950/20 shadow-xs">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
-                        Có Thể Đặt Lịch (Khả dụng)
+                      <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                        Khả Dụng (Có Thể Đặt)
                       </span>
                       <CalendarCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
                     </div>
                     <div className="mt-2 flex items-baseline gap-1">
-                      <span className="text-3xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300">
+                      <span className="text-3xl font-extrabold tracking-tight text-emerald-700 dark:text-emerald-300">
                         {wallet.summary.available}
                       </span>
-                      <span className="text-xs text-muted-foreground">buổi</span>
+                      <span className="text-xs text-muted-foreground font-medium">buổi</span>
                     </div>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      Buổi hợp lệ có thể đặt ca tập mới ngay
+                      Buổi hợp lệ có thể book lịch ngay
                     </p>
                   </CardContent>
                 </Card>
 
                 {/* Đang giữ chỗ */}
-                <Card className="border-amber-200 bg-amber-50/40 dark:border-amber-900/50 dark:bg-amber-950/20 shadow-sm">
+                <Card className="border-amber-200 bg-gradient-to-br from-amber-50/80 to-amber-100/30 dark:border-amber-900/50 dark:bg-amber-950/20 shadow-xs">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-amber-800 dark:text-amber-300">
-                        Đang Giữ Chỗ (Đã đặt)
+                      <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                        Đang Giữ Chỗ (Đã Đặt)
                       </span>
                       <Clock className="size-4 text-amber-600 dark:text-amber-400" />
                     </div>
                     <div className="mt-2 flex items-baseline gap-1">
-                      <span className="text-3xl font-bold tracking-tight text-amber-700 dark:text-amber-300">
+                      <span className="text-3xl font-extrabold tracking-tight text-amber-700 dark:text-amber-300">
                         {wallet.summary.held}
                       </span>
-                      <span className="text-xs text-muted-foreground">buổi</span>
+                      <span className="text-xs text-muted-foreground font-medium">buổi</span>
                     </div>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      Đang khóa cho các ca tập đã book sắp tới
+                      Đang khóa cho các ca tập đã book
                     </p>
                   </CardContent>
                 </Card>
 
                 {/* Đã sử dụng */}
-                <Card className="border-blue-200 bg-blue-50/40 dark:border-blue-900/50 dark:bg-blue-950/20 shadow-sm">
+                <Card className="border-blue-200 bg-gradient-to-br from-blue-50/80 to-blue-100/30 dark:border-blue-900/50 dark:bg-blue-950/20 shadow-xs">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-blue-800 dark:text-blue-300">
-                        Đã Hoàn Thành (Đã tập)
+                      <span className="text-xs font-bold text-blue-800 dark:text-blue-300">
+                        Đã Hoàn Thành (Đã Tập)
                       </span>
                       <CheckCircle2 className="size-4 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="mt-2 flex items-baseline gap-1">
-                      <span className="text-3xl font-bold tracking-tight text-blue-700 dark:text-blue-300">
+                      <span className="text-3xl font-extrabold tracking-tight text-blue-700 dark:text-blue-300">
                         {wallet.summary.used}
                       </span>
-                      <span className="text-xs text-muted-foreground">buổi</span>
+                      <span className="text-xs text-muted-foreground font-medium">buổi</span>
                     </div>
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       Số ca tập đã check-in thành công
@@ -1314,43 +1536,43 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                 </Card>
 
                 {/* Tổng đã cấp */}
-                <Card className="border-muted bg-muted/30 shadow-sm">
+                <Card className="border-muted bg-gradient-to-br from-muted/50 to-muted/20 shadow-xs">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">
+                      <span className="text-xs font-bold text-foreground">
                         Tổng Buổi Đã Cấp
                       </span>
                       <Dumbbell className="size-4 text-muted-foreground" />
                     </div>
                     <div className="mt-2 flex items-baseline gap-1">
-                      <span className="text-3xl font-bold tracking-tight text-foreground">
+                      <span className="text-3xl font-extrabold tracking-tight text-foreground">
                         {wallet.summary.total}
                       </span>
-                      <span className="text-xs text-muted-foreground">buổi</span>
+                      <span className="text-xs text-muted-foreground font-medium">buổi</span>
                     </div>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      Tích lũy từ mọi nguồn (mua lẻ, gói, trial...)
+                      Tích lũy từ mọi nguồn (mua lẻ, gói, trial)
                     </p>
                   </CardContent>
                 </Card>
               </div>
 
               {/* Chi tiết theo Cấp Độ */}
-              <div className="grid gap-2 sm:grid-cols-4">
+              <div className="grid gap-2.5 sm:grid-cols-4">
                 {wallet.summary.levels.map(lvl => (
                   <div
                     key={lvl.level}
-                    className="flex flex-col justify-between rounded-lg border bg-card p-3 shadow-xs text-xs"
+                    className="flex flex-col justify-between rounded-xl border bg-card p-3 shadow-xs text-xs"
                   >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-semibold text-foreground">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-foreground">
                         {levelNames[lvl.level] ?? lvl.level}
                       </span>
-                      <Badge variant="outline" className={`text-[10px] ${levelBadgeVariants[lvl.level]}`}>
+                      <Badge variant="outline" className={`text-[10px] font-semibold ${levelBadgeVariants[lvl.level]}`}>
                         {lvl.available} khả dụng
                       </Badge>
                     </div>
-                    <div className="flex justify-between text-muted-foreground">
+                    <div className="flex justify-between text-muted-foreground text-[11px]">
                       <span>Đã đặt: {lvl.held}</span>
                       <span>Đã tập: {lvl.used}</span>
                     </div>
@@ -1359,11 +1581,11 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
               </div>
 
               {/* Bảng Nguồn Buổi Tập (Batches) */}
-              <Card className="shadow-xs">
-                <CardHeader className="pb-3">
+              <Card className="shadow-xs overflow-hidden">
+                <CardHeader className="bg-muted/30 border-b pb-3 pt-3.5 px-4 sm:px-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle className="text-sm font-semibold">
+                      <CardTitle className="text-sm sm:text-base font-bold">
                         Chi Tiết Các Đợt Cấp Buổi Tập (Batches)
                       </CardTitle>
                       <CardDescription className="text-xs">
@@ -1371,30 +1593,30 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                       </CardDescription>
                     </div>
                     <Button
-                      variant="outline"
+                      variant={isAdjustFormOpen ? 'secondary' : 'outline'}
                       size="sm"
                       onClick={() => setIsAdjustFormOpen(val => !val)}
-                      className="gap-1.5 text-xs"
+                      className="gap-1.5 text-xs font-semibold h-8"
                     >
-                      <SlidersHorizontal className="size-3.5" />
-                      {isAdjustFormOpen ? 'Đóng Điều Chỉnh' : 'Điều Chỉnh Số Buổi (+/-)'}
+                      <SlidersHorizontal className="size-3.5 text-primary" />
+                      {isAdjustFormOpen ? 'Đóng Can Thiệp' : 'Can Thiệp Số Buổi (+/-)'}
                     </Button>
                   </div>
                 </CardHeader>
 
                 {/* Form Điều chỉnh số buổi (Collapsible) */}
                 {isAdjustFormOpen && (
-                  <div className="mx-6 mb-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                  <div className="m-4 rounded-xl border border-primary/30 bg-primary/5 p-4 animate-in fade-in-50 duration-150">
                     <form onSubmit={handleAdjustWallet} className="space-y-3">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-primary">
                         <ShieldAlert className="size-4" />
-                        <span>Quản Trị Viên Can Thiệp Điều Chỉnh Số Buổi (Audit Log sẽ được lưu)</span>
+                        <span>Quản Trị Viên Can Thiệp Điều Chỉnh Số Buổi (Audit Log sẽ được lưu lại)</span>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="space-y-1">
-                          <Label className="text-xs">Cấp Độ PT</Label>
+                          <Label className="text-xs font-semibold">Cấp Độ PT</Label>
                           <select
-                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs shadow-sm"
+                            className="w-full h-8 rounded-md border border-input bg-background px-3 py-1 text-xs font-medium shadow-xs"
                             value={adjustment.level}
                             onChange={e => setAdjustment({ ...adjustment, level: e.target.value })}
                           >
@@ -1406,21 +1628,21 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           </select>
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-xs">Số buổi cộng (+) hoặc trừ (−)</Label>
+                          <Label className="text-xs font-semibold">Số buổi (+ cộng hoặc − trừ)</Label>
                           <Input
                             type="number"
                             min="-100"
                             max="100"
-                            className="h-8 text-xs"
+                            className="h-8 text-xs font-bold"
                             placeholder="1"
                             value={adjustment.delta === 0 ? '' : adjustment.delta}
                             onChange={e => setAdjustment({ ...adjustment, delta: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-xs">Lý do điều chỉnh (bắt buộc)</Label>
+                          <Label className="text-xs font-semibold">Lý do can thiệp <span className="text-rose-500">*</span></Label>
                           <Input
-                            placeholder="VD: Bù buổi do HLV bận đột xuất..."
+                            placeholder="VD: Bù buổi do sự cố kỹ thuật..."
                             className="h-8 text-xs"
                             required
                             value={adjustment.reason}
@@ -1428,7 +1650,7 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           />
                         </div>
                       </div>
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2 pt-1">
                         <Button
                           type="button"
                           variant="ghost"
@@ -1438,7 +1660,7 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                         >
                           Hủy
                         </Button>
-                        <Button type="submit" size="sm" className="h-7 text-xs" disabled={adjustSubmitting}>
+                        <Button type="submit" size="sm" className="h-7 text-xs font-semibold" disabled={adjustSubmitting}>
                           {adjustSubmitting ? 'Đang lưu...' : 'Xác Nhận Lưu Thay Đổi'}
                         </Button>
                       </div>
@@ -1450,14 +1672,14 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader className="bg-muted/40">
-                        <TableRow>
-                          <TableHead className="font-semibold text-xs">Cấp Độ</TableHead>
-                          <TableHead className="font-semibold text-xs">Nguồn Cấp</TableHead>
-                          <TableHead className="text-center font-semibold text-xs">Còn / Đã Cấp</TableHead>
-                          <TableHead className="text-center font-semibold text-xs">Có Thể Đặt</TableHead>
-                          <TableHead className="font-semibold text-xs">Hạn Sử Dụng</TableHead>
-                          <TableHead className="text-center font-semibold text-xs">Trạng Thái</TableHead>
-                          <TableHead className="font-semibold text-xs">Gia Hạn Đến</TableHead>
+                        <TableRow className="text-xs">
+                          <TableHead className="font-bold py-3">Cấp Độ</TableHead>
+                          <TableHead className="font-bold py-3">Nguồn Cấp</TableHead>
+                          <TableHead className="text-center font-bold py-3">Còn / Đã Cấp</TableHead>
+                          <TableHead className="text-center font-bold py-3">Có Thể Đặt</TableHead>
+                          <TableHead className="font-bold py-3">Hạn Sử Dụng</TableHead>
+                          <TableHead className="text-center font-bold py-3">Trạng Thái</TableHead>
+                          <TableHead className="font-bold py-3">Gia Hạn Đến</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1469,52 +1691,48 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                           </TableRow>
                         ) : (
                           wallet.summary.sources.map(source => (
-                            <TableRow key={source.id} className="text-xs">
-                              <TableCell>
-                                <span
-                                  className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
-                                    levelBadgeVariants[source.level] || ''
-                                  }`}
-                                >
+                            <TableRow key={source.id} className="text-xs hover:bg-muted/30">
+                              <TableCell className="py-2.5">
+                                <Badge variant="outline" className={`text-[10px] font-semibold ${levelBadgeVariants[source.level] || ''}`}>
                                   {levelNames[source.level] ?? source.level}
-                                </span>
+                                </Badge>
                               </TableCell>
-                              <TableCell className="font-medium text-foreground">
+                              <TableCell className="font-semibold text-foreground py-2.5">
                                 {source.source}
                               </TableCell>
-                              <TableCell className="text-center font-semibold">
+                              <TableCell className="text-center font-bold py-2.5">
                                 {source.remainingSessions} / {source.quantity}
                               </TableCell>
-                              <TableCell className="text-center">
+                              <TableCell className="text-center py-2.5">
                                 <span className={source.availableSessions > 0 ? 'font-bold text-emerald-600' : 'text-muted-foreground'}>
                                   {source.availableSessions}
                                 </span>
                               </TableCell>
-                              <TableCell className="text-muted-foreground">
-                                {source.endAt ? formatDate(source.endAt) : 'Không giới hạn (quyền cũ)'}
+                              <TableCell className="text-muted-foreground py-2.5">
+                                {source.endAt ? formatDate(source.endAt) : 'Không giới hạn'}
                               </TableCell>
-                              <TableCell className="text-center">
+                              <TableCell className="text-center py-2.5">
                                 {source.status === 'EXPIRED' ? (
-                                  <Badge variant="destructive" className="text-[10px]">
+                                  <Badge variant="destructive" className="text-[10px] font-semibold">
                                     HẾT HẠN
                                   </Badge>
                                 ) : source.status === 'ACTIVE' ? (
-                                  <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 text-[10px]">
+                                  <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-semibold">
                                     HOẠT ĐỘNG
                                   </Badge>
                                 ) : (
-                                  <Badge variant="secondary" className="text-[10px]">
+                                  <Badge variant="secondary" className="text-[10px] font-semibold">
                                     {source.status}
                                   </Badge>
                                 )}
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="py-2.5">
                                 {source.renewable ? (
-                                  <span className="text-emerald-700 dark:text-emerald-400 font-medium text-[11px]">
+                                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold text-[11px]">
                                     {formatDate(source.renewalDeadline)}
                                   </span>
                                 ) : source.status === 'EXPIRED' ? (
-                                  <span className="text-rose-600 dark:text-rose-400 text-[11px]">
+                                  <span className="text-rose-600 dark:text-rose-400 text-[11px] font-medium">
                                     Quá hạn gia hạn
                                   </span>
                                 ) : (
@@ -1533,30 +1751,30 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
               {/* Lịch sử gia hạn & Lịch sử biến động giao dịch ví */}
               <div className="grid gap-4 md:grid-cols-2">
                 {/* Lịch sử gia hạn */}
-                <Card className="shadow-xs">
-                  <CardHeader className="py-3 px-4 border-b bg-muted/20">
-                    <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                <Card className="shadow-xs overflow-hidden">
+                  <CardHeader className="py-3 px-4 border-b bg-muted/30">
+                    <CardTitle className="text-xs font-bold flex items-center gap-1.5">
                       <RefreshCw className="size-3.5 text-primary" />
-                      Lịch Sử Các Lần Gia Hạn
+                      Lịch Sử Các Lần Gia Hạn Thời Gian
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-3">
                     {wallet.renewals.length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-4 text-center">
+                      <p className="text-xs text-muted-foreground py-6 text-center">
                         Hội viên chưa từng thực hiện gia hạn nào.
                       </p>
                     ) : (
                       <div className="space-y-2 text-xs">
                         {wallet.renewals.map(rn => (
-                          <div key={rn.id} className="flex items-center justify-between rounded border p-2 bg-muted/20">
+                          <div key={rn.id} className="flex items-center justify-between rounded-lg border p-2.5 bg-muted/20">
                             <div>
-                              <p className="font-semibold">Nguồn #{rn.batchId} • +{rn.durationDays} ngày</p>
+                              <p className="font-semibold text-foreground">Đợt #{rn.batchId} • +{rn.durationDays} ngày</p>
                               <p className="text-[11px] text-muted-foreground">
                                 {formatDate(rn.previousEndAt)} → {formatDate(rn.endAt)}
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="font-semibold text-primary">{formatVND(Number(rn.payment.amount))}</p>
+                              <p className="font-bold text-emerald-600">{formatVND(Number(rn.payment.amount))}</p>
                               <p className="text-[10px] text-muted-foreground">{formatDate(rn.payment.paidAt)}</p>
                             </div>
                           </div>
@@ -1567,32 +1785,32 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                 </Card>
 
                 {/* Lịch sử biến động số dư */}
-                <Card className="shadow-xs">
-                  <CardHeader className="py-3 px-4 border-b bg-muted/20">
-                    <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                <Card className="shadow-xs overflow-hidden">
+                  <CardHeader className="py-3 px-4 border-b bg-muted/30">
+                    <CardTitle className="text-xs font-bold flex items-center gap-1.5">
                       <History className="size-3.5 text-primary" />
-                      Nhật Ký Biến Động Số Buổi (Transactions)
+                      Nhật Ký Biến Động Số Buổi (Audit Log)
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-3">
                     {wallet.transactions.length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-4 text-center">
+                      <p className="text-xs text-muted-foreground py-6 text-center">
                         Chưa có lịch sử giao dịch số buổi.
                       </p>
                     ) : (
-                      <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1 text-xs">
+                      <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1 text-xs">
                         {wallet.transactions.map((tx: any) => (
-                          <div key={tx.id} className="flex items-center justify-between border-b pb-1.5 last:border-b-0">
+                          <div key={tx.id} className="flex items-center justify-between border-b pb-2 last:border-b-0 hover:bg-muted/20 p-1 rounded transition-colors">
                             <div>
-                              <p className="font-medium text-foreground">
+                              <p className="font-semibold text-foreground">
                                 {transactionNames[tx.kind] ?? tx.kind}
                               </p>
                               <p className="text-[10px] text-muted-foreground">
                                 {formatDateTime(tx.createdAt)} {tx.note ? `• ${tx.note}` : ''}
                               </p>
                             </div>
-                            <span className="font-bold text-primary">
-                              {tx.kind === 'PROTECTED_CANCEL' ? '1 lượt' : `${tx.quantity > 0 ? `+${tx.quantity}` : tx.quantity} buổi`}
+                            <span className={`font-bold text-xs ${tx.quantity > 0 ? 'text-emerald-600' : tx.quantity < 0 ? 'text-rose-600' : 'text-primary'}`}>
+                              {tx.kind === 'PROTECTED_CANCEL' ? '1 lượt bảo lưu' : `${tx.quantity > 0 ? `+${tx.quantity}` : tx.quantity} buổi`}
                             </span>
                           </div>
                         ))}
@@ -1604,83 +1822,322 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
             </div>
           )}
         </TabsContent>
-        <TabsContent value="coachChanges" className="space-y-3 pt-2">
-          <Card><CardHeader className="flex flex-row items-start justify-between gap-3"><div><CardTitle>Đổi HLV cho buổi học bù · {makeupRequests.filter(right => right.requestedCoachId).length} chờ duyệt, {makeupRequests.filter(right => !right.requestedCoachId).length} chờ hội viên chọn</CardTitle><CardDescription>Hội viên chọn HLV trên Mobile. Admin duyệt chuyên môn và trạng thái HLV; hội viên chọn ca và đặt lịch sau khi được duyệt.</CardDescription></div><Button size="sm" variant="outline" onClick={() => void loadMakeup()}>Làm mới</Button></CardHeader><CardContent className="space-y-3">
-            {makeupRequests.length === 0 && <p className="text-sm text-muted-foreground">Không có quyền học bù cần Admin hỗ trợ.</p>}
-            {makeupRequests.map(right => {
-              const currentCoachId = right.assignedCoachId ?? right.originalBooking.coachId;
-              return <div key={right.id} className="rounded-lg border p-3 text-sm space-y-2">
-                <p className="font-semibold">Quyền học bù #{right.id} · {right.originalBooking.member?.fullName ?? `Hội viên #${right.originalBooking.memberId}`} (#{right.originalBooking.memberId})</p>
-                <p>HLV hiện tại: {currentCoachId === right.originalBooking.coachId ? right.originalBooking.coach?.fullName ?? `#${currentCoachId}` : `HLV #${currentCoachId}`} · Lịch gốc: {formatDateTime(right.originalBooking.startTime)}</p>
-                <p>Hạn xử lý: {formatDateTime(right.expiresAt)} · HLV vắng {right.coachAbsenceCount} lần · Gia hạn {right.extensionCount} lần</p>
-                {right.requestedCoachId ? <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-1">
-                  <Badge variant="outline">Chờ duyệt HLV</Badge>
-                  <p>HLV hội viên chọn: <strong>{right.requestedCoachName ?? `#${right.requestedCoachId}`}</strong></p>
-                  <p>Hội viên sẽ chọn ca sau khi được duyệt.</p>
-                  <p>Lý do của hội viên: {right.requestReason}</p>
-                  <p className="text-xs text-muted-foreground">Gửi lúc {formatDateTime(right.coachChangeRequestedAt)}. Quyền bù và Credit đang giữ được bảo vệ khi chờ Admin.</p>
-                </div> : <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
-                  <Badge variant="outline">Chờ hội viên chọn HLV</Badge>
-                  <p className="mt-2 text-amber-800">Hội viên cần mở Mobile → Lịch PT → “Chọn HLV mong muốn” để gửi lựa chọn cho Admin duyệt.</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Đề nghị cũ vẫn giữ quyền học bù và Credit; không tự chọn HLV thay hội viên.</p>
-                </div>}
-                {right.requestedCoachId && <>
-                  <Input placeholder="Lý do duyệt hoặc từ chối (bắt buộc)" maxLength={500} value={makeupReasons[right.id] ?? ''} onChange={event => setMakeupReasons(previous => ({ ...previous, [right.id]: event.target.value }))} />
-                  <div className="flex flex-wrap gap-2">
-                  <Button size="sm" disabled={makeupBusy !== null || !makeupReasons[right.id]?.trim()} onClick={() => void reviewMakeupChoice(right.id, 'APPROVED')}>Duyệt HLV</Button>
-                  <Button size="sm" variant="outline" disabled={makeupBusy !== null || !makeupReasons[right.id]?.trim()} onClick={() => void reviewMakeupChoice(right.id, 'REJECTED')}>Từ chối · yêu cầu chọn lại</Button>
+
+        {/* ================= TAB 4: ĐỔI HLV & HỌC BÙ ================= */}
+        <TabsContent value="coachChanges" className="space-y-4 pt-3">
+          {/* Section A: Đổi HLV cho buổi học bù */}
+          <Card className="border border-border/80 shadow-xs overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b pb-3 pt-3.5 px-4 sm:px-6">
+              <div className="flex flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-amber-600/10 text-amber-600">
+                    <UserCheck className="size-4" />
                   </div>
-                  <Button size="sm" variant="outline" disabled={makeupBusy !== null} onClick={() => void findMakeupCoaches(right)}>Tìm HLV khác để đề xuất nếu từ chối</Button>
-                  {(makeupCoaches[right.id] ?? []).map(coach => <Button key={coach.userId} size="sm" variant={makeupCoachIds[right.id] === coach.userId ? 'default' : 'outline'} onClick={() => setMakeupCoachIds(previous => ({ ...previous, [right.id]: coach.userId }))}>{coach.fullName}</Button>)}
-                  {makeupCoachIds[right.id] && <p className="text-xs text-muted-foreground">HLV được chọn ở đây chỉ là gợi ý khi từ chối. Hội viên sẽ tự chọn HLV và đặt ca sau khi được duyệt.</p>}
-                </>}
-                <Button size="sm" variant="ghost" onClick={() => setMakeupExceptionsOpen(previous => ({ ...previous, [right.id]: !previous[right.id] }))}>Xử lý ngoại lệ: Admin chủ động phân HLV</Button>
-                {makeupExceptionsOpen[right.id] && <div className="rounded-md border p-3 space-y-2">
-                  <p className="text-xs text-muted-foreground">Chỉ dùng khi HLV cũ không thể tiếp tục hoặc hội viên không thể tự chọn. Việc phân HLV được ghi audit log và thông báo hội viên.</p>
-                  <Button size="sm" variant="outline" disabled={makeupBusy !== null} onClick={() => void findMakeupCoaches(right)}>Tìm HLV đủ chuyên môn</Button>
-                  {(makeupCoaches[right.id] ?? []).map(coach => <Button key={coach.userId} size="sm" variant={makeupCoachIds[right.id] === coach.userId ? 'default' : 'outline'} onClick={() => setMakeupCoachIds(previous => ({ ...previous, [right.id]: coach.userId }))}>{coach.fullName}</Button>)}
-                  <Input placeholder="Lý do Admin phân HLV ngoại lệ" maxLength={500} value={makeupReasons[right.id] ?? ''} onChange={event => setMakeupReasons(previous => ({ ...previous, [right.id]: event.target.value }))} />
-                  <Button size="sm" variant="outline" disabled={makeupBusy !== null || !makeupCoachIds[right.id] || !makeupReasons[right.id]?.trim()} onClick={() => void assignMakeupCoach(right.id)}>Xác nhận phân HLV ngoại lệ</Button>
-                </div>}
-              </div>;
-            })}
-          </CardContent></Card>
-          <Card><CardHeader className="flex flex-row items-start justify-between gap-3"><div><CardTitle>Yêu cầu đổi HLV gói PT cần xử lý</CardTitle><CardDescription>Chỉ gói PT Paid nhiều buổi. Lịch thường đủ điều kiện giữ nguyên giờ và Credit; lịch không phù hợp mới hủy, hoàn Credit về đúng lô. Lịch và quyền học bù giữ HLV riêng.</CardDescription></div><Button size="sm" variant="outline" onClick={() => void load()}>Làm mới</Button></CardHeader><CardContent className="space-y-3">
-            {coachChanges.length === 0 && <p className="text-sm text-muted-foreground">Không có yêu cầu đang chờ.</p>}
-            {coachChanges.map(change => <div key={change.id} className="rounded-lg border p-3 text-sm">
-              <p className="font-semibold">Yêu cầu #{change.id} · {change.memberName} · Gói #{change.batchId} ({levelNames[change.batch.level] ?? change.batch.level})</p>
-              <p>{change.oldCoachName} → {change.newCoachName}</p>
-              <p className="text-muted-foreground">Lý do: {change.reason}</p>
-              <p className="text-xs text-muted-foreground">{formatDateTime(change.requestedAt)}</p>
-              <div className="mt-3 space-y-2">
-                <Button size="sm" variant="outline" disabled={coachPreviewBusy !== null || coachChangeBusy !== null}
-                  onClick={() => void loadCoachChangePreview(change.id)}>
-                  {coachPreviewBusy === change.id ? 'Đang kiểm tra lịch...' : 'Xem trước lịch có thể chuyển'}
-                </Button>
-                {coachPreviewErrors[change.id] && <p className="text-sm text-destructive">{coachPreviewErrors[change.id]}</p>}
-                {coachChangePreviews[change.id] && <div className="rounded-md border p-3 space-y-2">
-                  <p className="font-medium">Chuyển sang HLV mới: {coachChangePreviews[change.id].transferable.length} · Giữ HLV cũ vì còn dưới 2 giờ: {coachChangePreviews[change.id].keepOldCoach.length} · Cần hủy và hoàn Credit: {coachChangePreviews[change.id].toCancel.length}</p>
-                  {coachChangePreviews[change.id].transferable.map(item => <p key={item.bookingId} className="text-emerald-700">Chuyển lịch #{item.bookingId} · {formatDateTime(item.startTime)}</p>)}
-                  {coachChangePreviews[change.id].keepOldCoach.map(item => <p key={item.bookingId} className="text-blue-700">Giữ HLV cũ cho lịch #{item.bookingId} · {formatDateTime(item.startTime)} · {item.reason}</p>)}
-                  {coachChangePreviews[change.id].toCancel.map(item => <p key={item.bookingId} className="text-amber-700">Đặt lại lịch #{item.bookingId} · {formatDateTime(item.startTime)} · {item.reason}</p>)}
-                  <p className="text-xs text-muted-foreground">Kết quả tại {formatDateTime(coachChangePreviews[change.id].generatedAt)}. Hệ thống kiểm tra lại khi duyệt; nếu kết quả đổi, cần xem trước lại.</p>
-                </div>}
-              </div>
-              <div className="mt-3 space-y-2">
-                <Label htmlFor={`coach-change-note-${change.id}`}>Ghi chú cho hội viên (bắt buộc khi từ chối)</Label>
-                <Input id={`coach-change-note-${change.id}`} maxLength={500}
-                  placeholder="Nhập ghi chú duyệt hoặc lý do từ chối"
-                  value={coachChangeNotes[change.id] ?? ''}
-                  onChange={event => setCoachChangeNotes(previous => ({ ...previous, [change.id]: event.target.value }))} />
-                <p className="text-xs text-muted-foreground">Lịch còn dưới 2 giờ mà HLV mới không nhận được sẽ giữ với HLV cũ và giữ Credit. Chỉ những lịch “Đặt lại lịch” mới bị hủy và hoàn Credit về lô gốc. Lịch học bù giữ HLV riêng.</p>
-                <div className="flex gap-2">
-                  <Button size="sm" disabled={coachChangeBusy !== null || !coachChangePreviews[change.id]}
-                    onClick={() => void handleCoachChange(change.id, 'APPROVED')}>Duyệt theo kết quả xem trước</Button>
-                  <Button size="sm" variant="outline" disabled={coachChangeBusy !== null || !coachChangeNotes[change.id]?.trim()} onClick={() => void handleCoachChange(change.id, 'REJECTED')}>Từ chối</Button>
+                  <div>
+                    <CardTitle className="text-sm sm:text-base font-bold">
+                      Đổi HLV Cho Buổi Học Bù ({makeupRequests.length} yêu cầu)
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      {makeupRequests.filter(right => right.requestedCoachId).length} đang chờ duyệt, {makeupRequests.filter(right => !right.requestedCoachId).length} chờ hội viên chọn trên App.
+                    </CardDescription>
+                  </div>
                 </div>
+                <Button size="sm" variant="outline" className="h-8 text-xs font-semibold gap-1" onClick={() => void loadMakeup()}>
+                  <RefreshCw className="size-3.5" />
+                  Làm mới
+                </Button>
               </div>
-            </div>)}
-          </CardContent></Card>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-5 space-y-3.5">
+              {makeupRequests.length === 0 && (
+                <div className="py-8 text-center text-xs text-muted-foreground">
+                  Hiện không có quyền học bù nào cần Admin phê duyệt.
+                </div>
+              )}
+              {makeupRequests.map(right => {
+                const currentCoachId = right.assignedCoachId ?? right.originalBooking.coachId;
+                return (
+                  <div key={right.id} className="rounded-xl border p-4 text-xs space-y-3 bg-card shadow-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-foreground">
+                          Quyền học bù #{right.id}
+                        </span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {right.originalBooking.member?.fullName ?? `Hội viên #${right.originalBooking.memberId}`}
+                        </Badge>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground">
+                        Hạn xử lý: <strong>{formatDateTime(right.expiresAt)}</strong>
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground">
+                      <p>
+                        HLV hiện tại: <strong className="text-foreground">{currentCoachId === right.originalBooking.coachId ? right.originalBooking.coach?.fullName ?? `#${currentCoachId}` : `HLV #${currentCoachId}`}</strong>
+                      </p>
+                      <p>
+                        Lịch gốc: <strong className="text-foreground">{formatDateTime(right.originalBooking.startTime)}</strong>
+                      </p>
+                      <p>
+                        HLV vắng: <strong className="text-rose-600">{right.coachAbsenceCount} lần</strong> • Gia hạn: {right.extensionCount} lần
+                      </p>
+                    </div>
+
+                    {right.requestedCoachId ? (
+                      <div className="rounded-lg border border-amber-300 bg-amber-50/70 dark:bg-amber-950/20 p-3 space-y-1.5 text-xs">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="border-amber-400 bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200 text-[10px] font-bold">
+                            Chờ Admin Phê Duyệt
+                          </Badge>
+                          <span className="text-[11px] text-muted-foreground">
+                            Gửi lúc {formatDateTime(right.coachChangeRequestedAt)}
+                          </span>
+                        </div>
+                        <p className="text-foreground font-semibold">
+                          HLV hội viên chọn: <span className="text-primary">{right.requestedCoachName ?? `#${right.requestedCoachId}`}</span>
+                        </p>
+                        <p className="text-muted-foreground">
+                          Lý do của hội viên: <span className="italic text-foreground">"{right.requestReason}"</span>
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-muted bg-muted/30 p-3 text-xs">
+                        <Badge variant="secondary" className="text-[10px]">Chờ hội viên chọn HLV</Badge>
+                        <p className="mt-1 text-muted-foreground">
+                          Hội viên cần mở Mobile → Lịch PT → “Chọn HLV mong muốn” để gửi lựa chọn cho Admin duyệt.
+                        </p>
+                      </div>
+                    )}
+
+                    {right.requestedCoachId && (
+                      <div className="space-y-2.5 pt-2 border-t">
+                        <Label className="text-xs font-semibold">Lý do duyệt hoặc từ chối (bắt buộc lưu audit log)</Label>
+                        <Input
+                          placeholder="Nhập lý do phê duyệt hoặc nguyên nhân từ chối..."
+                          maxLength={500}
+                          className="h-8 text-xs"
+                          value={makeupReasons[right.id] ?? ''}
+                          onChange={event => setMakeupReasons(previous => ({ ...previous, [right.id]: event.target.value }))}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+                            disabled={makeupBusy !== null || !makeupReasons[right.id]?.trim()}
+                            onClick={() => void reviewMakeupChoice(right.id, 'APPROVED')}
+                          >
+                            {makeupBusy === right.id ? <Loader2 className="size-3 animate-spin mr-1" /> : <Check className="size-3 mr-1" />}
+                            Duyệt HLV
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
+                            disabled={makeupBusy !== null || !makeupReasons[right.id]?.trim()}
+                            onClick={() => void reviewMakeupChoice(right.id, 'REJECTED')}
+                          >
+                            <X className="size-3 mr-1" />
+                            Từ chối · Yêu cầu chọn lại
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Admin Exception Assignment */}
+                    <div className="pt-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-muted-foreground hover:text-foreground p-0"
+                        onClick={() => setMakeupExceptionsOpen(previous => ({ ...previous, [right.id]: !previous[right.id] }))}
+                      >
+                        {makeupExceptionsOpen[right.id] ? <ChevronUp className="size-3 mr-1" /> : <ChevronDown className="size-3 mr-1" />}
+                        Xử lý ngoại lệ: Admin chủ động phân HLV thay thế
+                      </Button>
+
+                      {makeupExceptionsOpen[right.id] && (
+                        <div className="mt-2 rounded-lg border border-dashed p-3 space-y-2.5 bg-muted/20">
+                          <p className="text-[11px] text-muted-foreground">
+                            Chỉ dùng khi HLV cũ không thể tiếp tục hoặc hội viên không thể tự chọn.
+                          </p>
+                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={makeupBusy !== null} onClick={() => void findMakeupCoaches(right)}>
+                            Tìm HLV đủ cấp chuyên môn
+                          </Button>
+                          {(makeupCoaches[right.id] ?? []).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {(makeupCoaches[right.id] ?? []).map(coach => (
+                                <Button
+                                  key={coach.userId}
+                                  size="sm"
+                                  variant={makeupCoachIds[right.id] === coach.userId ? 'default' : 'outline'}
+                                  className="h-7 text-xs"
+                                  onClick={() => setMakeupCoachIds(previous => ({ ...previous, [right.id]: coach.userId }))}
+                                >
+                                  {coach.fullName}
+                                </Button>
+                              ))}
+                            </div>
+                          )}
+                          <Input
+                            placeholder="Lý do Admin phân HLV ngoại lệ..."
+                            maxLength={500}
+                            className="h-8 text-xs"
+                            value={makeupReasons[right.id] ?? ''}
+                            onChange={event => setMakeupReasons(previous => ({ ...previous, [right.id]: event.target.value }))}
+                          />
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="h-7 text-xs font-semibold"
+                            disabled={makeupBusy !== null || !makeupCoachIds[right.id] || !makeupReasons[right.id]?.trim()}
+                            onClick={() => void assignMakeupCoach(right.id)}
+                          >
+                            Xác nhận phân HLV ngoại lệ
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* Section B: Yêu cầu đổi HLV gói PT cần xử lý */}
+          <Card className="border border-border/80 shadow-xs overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b pb-3 pt-3.5 px-4 sm:px-6">
+              <div className="flex flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <ShieldAlert className="size-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm sm:text-base font-bold">
+                      Yêu Cầu Đổi HLV Gói PT ({coachChanges.length} yêu cầu)
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Chuyển lịch và hoàn credit tự động cho hội viên khi đổi huấn luyện viên gói PT.
+                    </CardDescription>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" className="h-8 text-xs font-semibold gap-1" onClick={() => void load()}>
+                  <RefreshCw className="size-3.5" />
+                  Làm mới
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-5 space-y-3.5">
+              {coachChanges.length === 0 && (
+                <div className="py-8 text-center text-xs text-muted-foreground">
+                  Hiện không có yêu cầu đổi HLV gói PT nào đang chờ xử lý.
+                </div>
+              )}
+              {coachChanges.map(change => (
+                <div key={change.id} className="rounded-xl border p-4 text-xs space-y-3 bg-card shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-foreground">
+                        Yêu cầu #{change.id}
+                      </span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {change.memberName}
+                      </Badge>
+                      <Badge variant="secondary" className="text-[10px]">
+                        Gói #{change.batchId} ({levelNames[change.batch.level] ?? change.batch.level})
+                      </Badge>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground">{formatDateTime(change.requestedAt)}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <span className="text-muted-foreground">{change.oldCoachName}</span>
+                    <ArrowRight className="size-4 text-primary" />
+                    <span className="text-primary font-bold">{change.newCoachName}</span>
+                  </div>
+
+                  <p className="text-muted-foreground text-xs">
+                    Lý do yêu cầu: <span className="italic text-foreground">"{change.reason}"</span>
+                  </p>
+
+                  <div className="space-y-2 pt-2 border-t">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs font-semibold gap-1"
+                      disabled={coachPreviewBusy !== null || coachChangeBusy !== null}
+                      onClick={() => void loadCoachChangePreview(change.id)}
+                    >
+                      {coachPreviewBusy === change.id ? <Loader2 className="size-3.5 animate-spin" /> : <Eye className="size-3.5" />}
+                      {coachPreviewBusy === change.id ? 'Đang kiểm tra lịch...' : 'Xem trước tác động đổi lịch'}
+                    </Button>
+
+                    {coachPreviewErrors[change.id] && (
+                      <p className="text-xs text-rose-600 font-medium">{coachPreviewErrors[change.id]}</p>
+                    )}
+
+                    {coachChangePreviews[change.id] && (
+                      <div className="rounded-lg border p-3 space-y-2 bg-muted/20 text-xs">
+                        <p className="font-bold text-foreground">
+                          Chuyển sang HLV mới: {coachChangePreviews[change.id].transferable.length} • Giữ HLV cũ (dưới 2h): {coachChangePreviews[change.id].keepOldCoach.length} • Hủy & hoàn Credit: {coachChangePreviews[change.id].toCancel.length}
+                        </p>
+                        {coachChangePreviews[change.id].transferable.map(item => (
+                          <p key={item.bookingId} className="text-emerald-700 dark:text-emerald-400 font-medium">
+                            ✓ Chuyển lịch #{item.bookingId} • {formatDateTime(item.startTime)}
+                          </p>
+                        ))}
+                        {coachChangePreviews[change.id].keepOldCoach.map(item => (
+                          <p key={item.bookingId} className="text-blue-700 dark:text-blue-400 font-medium">
+                            ℹ Giữ HLV cũ cho lịch #{item.bookingId} • {formatDateTime(item.startTime)} ({item.reason})
+                          </p>
+                        ))}
+                        {coachChangePreviews[change.id].toCancel.map(item => (
+                          <p key={item.bookingId} className="text-amber-700 dark:text-amber-400 font-medium">
+                            ⚠ Đặt lại lịch #{item.bookingId} • {formatDateTime(item.startTime)} ({item.reason})
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t">
+                    <Label htmlFor={`coach-change-note-${change.id}`} className="text-xs font-semibold">
+                      Ghi chú cho hội viên (bắt buộc khi từ chối)
+                    </Label>
+                    <Input
+                      id={`coach-change-note-${change.id}`}
+                      maxLength={500}
+                      placeholder="Nhập ghi chú phê duyệt hoặc lý do từ chối..."
+                      className="h-8 text-xs"
+                      value={coachChangeNotes[change.id] ?? ''}
+                      onChange={event => setCoachChangeNotes(previous => ({ ...previous, [change.id]: event.target.value }))}
+                    />
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs font-semibold bg-primary"
+                        disabled={coachChangeBusy !== null || !coachChangePreviews[change.id]}
+                        onClick={() => void handleCoachChange(change.id, 'APPROVED')}
+                      >
+                        {coachChangeBusy === change.id ? <Loader2 className="size-3 animate-spin mr-1" /> : <Check className="size-3 mr-1" />}
+                        Duyệt theo kết quả xem trước
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs text-rose-600 hover:text-rose-700 border-rose-200"
+                        disabled={coachChangeBusy !== null || !coachChangeNotes[change.id]?.trim()}
+                        onClick={() => void handleCoachChange(change.id, 'REJECTED')}
+                      >
+                        <X className="size-3 mr-1" />
+                        Từ chối
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

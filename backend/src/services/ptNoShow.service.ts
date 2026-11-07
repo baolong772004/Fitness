@@ -12,6 +12,14 @@ const NO_SHOW_GRACE_MS = 15 * 60 * 1000;
 const SCAN_INTERVAL_MS = 60 * 1000;
 
 export async function isPtAbsenceSchemaReady() {
+  if (
+    typeof (prisma as any).ptAttendanceReview?.findMany !== 'function' ||
+    typeof (prisma as any).ptAttendanceReviewEvent?.create !== 'function' ||
+    typeof (prisma as any).ptMakeUpEvent?.create !== 'function' ||
+    typeof (prisma as any).makeUpRequest?.findMany !== 'function'
+  ) {
+    return false;
+  }
   const rows = await prisma.$queryRaw<Array<{ ready: number }>>`
     SELECT CASE WHEN OBJECT_ID(N'dbo.PtAttendanceReview', N'U') IS NOT NULL
       AND OBJECT_ID(N'dbo.PtAttendanceReviewEvent', N'U') IS NOT NULL
