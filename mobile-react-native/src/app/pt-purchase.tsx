@@ -11,7 +11,16 @@ import { Button, Card, Empty, Hero, Page, Pill, showError } from '../components/
 
 type PtPackage = { id: number; name: string; level: string; sessionCount: number; durationDays: number; price: number; benefits: string | null };
 type SingleOffer = Awaited<ReturnType<typeof api.ptSingleOffers>>[number];
-const levelNames: Record<string, string> = { BEGINNER: 'Beginner', INTERMEDIATE: 'Intermediate', ADVANCED: 'Advanced' };
+const levelNames: Record<string, string> = {
+  BEGINNER: 'Gói Cơ bản (Basic)',
+  INTERMEDIATE: 'Gói Trung cấp (Intermediate)',
+  ADVANCED: 'Gói Nâng cao (Advanced)',
+};
+const exerciseCheckerBenefitsByLevel: Record<string, string> = {
+  BEGINNER: 'Lượt dùng Exercise Checker (Phân tích video): Giới hạn 2 video / tuần (chỉ xem chỉ số góc khớp tự động).',
+  INTERMEDIATE: 'Lượt dùng Exercise Checker (Phân tích video): 5 video / tuần + được PT nhận xét trực tiếp trên video.',
+  ADVANCED: 'Lượt dùng Exercise Checker (Phân tích video): Không giới hạn + ưu tiên PT phản hồi trong vòng 24h.',
+};
 
 export default function PtPurchase() {
   const params = useLocalSearchParams<{ level?: string; tab?: string }>();
@@ -97,6 +106,7 @@ export default function PtPurchase() {
               <Text style={{ color: aura.darkCoffee, fontWeight: '700' }}>{product.sessionCount} buổi · {product.durationDays} ngày sử dụng</Text>
               <Text style={{ color: aura.muted, fontSize: 12 }}>Trung bình {money(average)} / buổi</Text>
               {!!savings && <Text style={{ color: aura.green, fontSize: 12, fontWeight: '800' }}>Tiết kiệm {money(savings)} so với mua lẻ</Text>}
+              <Text style={{ color: aura.darkCoffee, fontSize: 12, fontWeight: '700', lineHeight: 18 }}>{exerciseCheckerBenefitsByLevel[level]}</Text>
               <Text style={{ color: aura.muted, fontSize: 12, lineHeight: 18 }}>{product.benefits || 'Đặt lịch PT, QR check-in, báo vắng bảo lưu tối đa 3 lần và đổi Coach theo điều kiện.'}</Text>
             </Card>
           </Pressable>;
@@ -120,7 +130,7 @@ export default function PtPurchase() {
         </View>
         <View style={singleStyles.infoRow}>
           <View style={singleStyles.infoIcon}><Ionicons name="checkmark-circle-outline" size={17} color={aura.darkCoffee} /></View>
-          <View style={{ flex: 1 }}><Text style={singleStyles.infoTitle}>Quyền lợi</Text><Text style={singleStyles.infoText}>{offer.benefits || 'Đặt lịch PT, QR check-in và bảo lưu 1 lần khi báo vắng sớm.'}</Text></View>
+          <View style={{ flex: 1 }}><Text style={singleStyles.infoTitle}>Quyền lợi</Text><Text style={singleStyles.infoText}>{exerciseCheckerBenefitsByLevel[level]} {offer.benefits || 'Đặt lịch PT, QR check-in và bảo lưu 1 lần khi báo vắng sớm.'}</Text></View>
         </View>
         <View style={singleStyles.divider} />
         <View style={singleStyles.quantityRow}>

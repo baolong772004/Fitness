@@ -132,7 +132,7 @@ export function startExerciseAnalysisWorker() {
     try {
       await processOne();
       const expiry = new Date(Date.now() - 7 * 24 * 60 * 60_000);
-      const old = await prisma.exerciseAnalysis.findMany({ where: { createdAt: { lt: expiry }, mediaStorageKey: { not: null }, status: { in: ['COMPLETED', 'INSUFFICIENT_DATA', 'NEEDS_REVIEW', 'FAILED'] } }, select: { id: true, mediaStorageKey: true } });
+      const old = await prisma.exerciseAnalysis.findMany({ where: { createdAt: { lt: expiry }, mediaStorageKey: { not: null }, shares: { none: { revokedAt: null } }, status: { in: ['COMPLETED', 'INSUFFICIENT_DATA', 'NEEDS_REVIEW', 'FAILED'] } }, select: { id: true, mediaStorageKey: true } });
       for (const row of old) {
         if (!row.mediaStorageKey) continue;
         await unlink(path.join(mediaDir, row.mediaStorageKey)).catch(error => { if (error?.code !== 'ENOENT') throw error; });

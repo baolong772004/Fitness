@@ -397,7 +397,6 @@ export default function Home() {
               index: '01',
               tag: 'VIP PASS',
               title: 'AuraRewards',
-              desc: 'Tích điểm VIP Gym',
               articleId: 'rewards',
               featured: true,
             },
@@ -405,7 +404,6 @@ export default function Home() {
               index: '02',
               tag: 'BẢNG GIÁ',
               title: 'Bảng Giá Thẻ',
-              desc: 'Gói Gym & PT 1:1',
               articleId: 'pricing',
               featured: false,
             },
@@ -413,7 +411,6 @@ export default function Home() {
               index: '03',
               tag: 'THIẾT BỊ',
               title: 'Cơ Sở Vật Chất',
-              desc: 'Dàn tạ & máy khối',
               articleId: 'about',
               featured: false,
             },
@@ -421,7 +418,6 @@ export default function Home() {
               index: '04',
               tag: 'QUY CHUẨN',
               title: 'Quy Định Tập',
-              desc: 'Form chuẩn an toàn',
               articleId: 'booking',
               featured: false,
             },
@@ -468,15 +464,6 @@ export default function Home() {
                   ]}
                 >
                   {item.title}
-                </Text>
-                <Text
-                  style={[
-                    styles.editorialCardDesc,
-                    item.featured ? styles.textLatteMuted : styles.textMutedDark,
-                  ]}
-                  numberOfLines={2}
-                >
-                  {item.desc}
                 </Text>
               </View>
 
@@ -619,7 +606,7 @@ export default function Home() {
 
       {/* 6. Chọn Định Hướng Tập Gym (Hero Cards Ngang) */}
       <FadeInUp delay={340}>
-        <Section title="ĐỊNH HƯỚNG TẬP GYM" subtitle="Lựa chọn lộ trình tập luyện phù hợp với thể trạng" />
+        <Section title="ĐỊNH HƯỚNG TẬP GYM" />
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -675,9 +662,6 @@ export default function Home() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.nutritionTitle}>Dinh Dưỡng Thể Hình & Tăng Cơ</Text>
-              <Text style={styles.nutritionSub}>
-                Tính toán Macro (Protein, Carbs, Fat) chuẩn khoa học kết hợp giáo án tập Gym cùng Coach.
-              </Text>
             </View>
           </View>
           <View style={styles.nutritionBtnWrap}>
@@ -693,8 +677,9 @@ export default function Home() {
 
       <Card style={{ marginTop: 14, padding: 16, borderRadius: 18 }}>
         <Text style={{ color: aura.ink, fontSize: 17, fontWeight: '900' }}>Kiểm tra kỹ thuật Squat bằng AI</Text>
-        <Text style={{ color: aura.muted, marginTop: 5 }}>Quay hoặc tải video và xem nhận xét dựa trên chuyển động thực tế.</Text>
-        <Button title="Kiểm tra kỹ thuật" onPress={() => router.push('/exercise-analysis')} />
+        <View style={{ marginTop: 10 }}>
+          <Button title="Kiểm tra kỹ thuật" onPress={() => router.push('/exercise-analysis')} />
+        </View>
       </Card>
 
       {/* 8. Bài Viết & Kiến Thức Tập Luyện (News & Guides) */}
@@ -1030,11 +1015,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.2,
   },
-  editorialCardDesc: {
-    fontSize: 9,
-    lineHeight: 12,
-    marginTop: 1,
-  },
   editorialCardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1303,12 +1283,6 @@ const styles = StyleSheet.create({
     color: aura.darkCoffee,
     fontSize: 16,
     fontWeight: '900',
-  },
-  nutritionSub: {
-    color: aura.muted,
-    fontSize: 11.5,
-    lineHeight: 16,
-    marginTop: 2,
   },
   nutritionBtnWrap: {
     marginTop: 12,

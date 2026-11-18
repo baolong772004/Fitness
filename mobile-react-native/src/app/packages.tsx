@@ -8,10 +8,21 @@ import { aura, money } from '../lib/theme';
 import { hasActiveGymMembership } from '../lib/membership';
 import { Button, Card, Empty, Hero, Page, Pill, Section, showError } from '../components/ui';
 
+const ptLevelTitles: Record<string, string> = {
+  BEGINNER: 'Gói Cơ bản (Basic)',
+  INTERMEDIATE: 'Gói Trung cấp (Intermediate)',
+  ADVANCED: 'Gói Nâng cao (Advanced)',
+};
+const ptExerciseCheckerDescriptions: Record<string, string> = {
+  BEGINNER: 'Lượt dùng Exercise Checker (Phân tích video): Giới hạn 2 video / tuần (chỉ xem chỉ số góc khớp tự động).',
+  INTERMEDIATE: 'Lượt dùng Exercise Checker (Phân tích video): 5 video / tuần + được PT nhận xét trực tiếp trên video.',
+  ADVANCED: 'Lượt dùng Exercise Checker (Phân tích video): Không giới hạn + ưu tiên PT phản hồi trong vòng 24h.',
+};
+
 export default function Packages() {
   const { user } = useAuth(); const [rows, setRows] = useState<any[]>([]); const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [filter, setFilter] = useState('ALL'); const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
-  const load = useCallback(async () => { setLoading(true); setError(null); try { const [packages, products, offers, currentSubscriptions] = await Promise.all([api.packages('MEMBERSHIP'), api.ptProducts(), api.ptSingleOffers(), user ? api.subscriptions() : Promise.resolve([])]); const levels = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED']; const ptRows = levels.flatMap(level => { const choices = products.filter((item: any) => item.level === level); const offer = offers.find(item => item.level === level); if (!choices.length && !offer) return []; const first = choices[0]; const prices = [...choices.map((item: any) => Number(item.price)), ...(offer ? [Number(offer.price)] : [])]; return [{ id: `pt-${level}`, type: 'PT', name: `PT ${level.charAt(0)}${level.slice(1).toLowerCase()}`, ptLevel: level, totalPtSessions: first?.sessionCount ?? 1, durationDays: first?.durationDays ?? offer?.durationDays, price: Math.min(...prices), singleOnly: !first, description: 'Chọn gói tập hoặc số buổi lẻ phù hợp với bạn.' }]; }); setRows([...packages, ...ptRows]); setSubscriptions(currentSubscriptions); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không tải được gói tập.'); } finally { setLoading(false); } }, [user]);
+  const load = useCallback(async () => { setLoading(true); setError(null); try { const [packages, products, offers, currentSubscriptions] = await Promise.all([api.packages('MEMBERSHIP'), api.ptProducts(), api.ptSingleOffers(), user ? api.subscriptions() : Promise.resolve([])]); const levels = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED']; const ptRows = levels.flatMap(level => { const choices = products.filter((item: any) => item.level === level); const offer = offers.find(item => item.level === level); if (!choices.length && !offer) return []; const first = choices[0]; const prices = [...choices.map((item: any) => Number(item.price)), ...(offer ? [Number(offer.price)] : [])]; return [{ id: `pt-${level}`, type: 'PT', name: ptLevelTitles[level] || `PT ${level}`, ptLevel: level, totalPtSessions: first?.sessionCount ?? 1, durationDays: first?.durationDays ?? offer?.durationDays, price: Math.min(...prices), singleOnly: !first, description: ptExerciseCheckerDescriptions[level] || 'Chọn gói tập hoặc số buổi lẻ phù hợp với bạn.' }]; }); setRows([...packages, ...ptRows]); setSubscriptions(currentSubscriptions); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không tải được gói tập.'); } finally { setLoading(false); } }, [user]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
   const canBuyPt = hasActiveGymMembership(subscriptions);
   const goCheckout = (checkout: any, pkg: any, kind: string) => {

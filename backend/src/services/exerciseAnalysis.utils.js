@@ -37,10 +37,13 @@ export function analysisSummary(row) {
 }
 
 export function videoAvailable(row, now = Date.now()) {
-  return typeof row.mediaStorageKey === 'string'
+  const hasKey = typeof row.mediaStorageKey === 'string'
     && /^[0-9a-f-]{36}\.video$/i.test(row.mediaStorageKey)
-    && !row.mediaDeletedAt
-    && new Date(row.createdAt).getTime() > now - 7 * 24 * 60 * 60_000;
+    && !row.mediaDeletedAt;
+  if (!hasKey) return false;
+  if (row.sharedAt && new Date(row.sharedAt).getTime() > now - 30 * 24 * 60 * 60_000) return true;
+  if (Array.isArray(row.shares) && row.shares.some(s => !s.revokedAt && s.sharedAt && new Date(s.sharedAt).getTime() > now - 30 * 24 * 60 * 60_000)) return true;
+  return new Date(row.createdAt).getTime() > now - 7 * 24 * 60 * 60_000;
 }
 
 export function analysisQuota({ paid, trial, configured }) {
@@ -48,6 +51,43 @@ export function analysisQuota({ paid, trial, configured }) {
   const fallback = tier === 'PT_PAID' ? 10 : tier === 'PT_TRIAL' ? 5 : 3;
   const amount = Number(configured);
   return { tier, limit: Number.isSafeInteger(amount) && amount > 0 ? amount : fallback };
+}
+
+export const EXERCISE_CHECKER_TIER_POLICIES = {
+  BEGINNER: {
+    level: 'BEGINNER',
+    name: 'Gói Cơ bản (Basic)',
+    weeklyLimit: 2,
+    canShareForPtFeedback: false,
+    priority24h: false,
+    autoJointAnglesOnly: true,
+    description: 'Giới hạn 2 video / tuần (chỉ xem chỉ số góc khớp tự động).',
+  },
+  INTERMEDIATE: {
+    level: 'INTERMEDIATE',
+    name: 'Gói Trung cấp (Intermediate)',
+    weeklyLimit: 5,
+    canShareForPtFeedback: true,
+    priority24h: false,
+    autoJointAnglesOnly: false,
+    description: '5 video / tuần + được PT nhận xét trực tiếp trên video.',
+  },
+  ADVANCED: {
+    level: 'ADVANCED',
+    name: 'Gói Nâng cao (Advanced)',
+    weeklyLimit: null,
+    canShareForPtFeedback: true,
+    priority24h: true,
+    autoJointAnglesOnly: false,
+    description: 'Không giới hạn + ưu tiên PT phản hồi trong vòng 24h.',
+  },
+};
+
+export function exerciseCheckerTierPolicy(level) {
+  const normalized = String(level || '').toUpperCase();
+  if (normalized === 'ADVANCED') return EXERCISE_CHECKER_TIER_POLICIES.ADVANCED;
+  if (normalized === 'INTERMEDIATE') return EXERCISE_CHECKER_TIER_POLICIES.INTERMEDIATE;
+  return EXERCISE_CHECKER_TIER_POLICIES.BEGINNER;
 }
 
 export function parseAnalysisOptions(raw) {

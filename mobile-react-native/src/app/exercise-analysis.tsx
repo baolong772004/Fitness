@@ -6,7 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Page } from '../components/ui';
 import { ExerciseAnalysisResult } from '../components/ExerciseAnalysisResult';
-import { exerciseAnalysis, type Analysis, type AnalysisOptions, type ExerciseCode, type VideoProvenanceInput } from '../lib/exerciseAnalysis';
+import { exerciseAnalysis, type Analysis, type AnalysisOptions, type ExerciseCheckerTierPolicy, type ExerciseCode, type VideoProvenanceInput } from '../lib/exerciseAnalysis';
 import { useAuth } from '../lib/auth';
 import { aura } from '../lib/theme';
 
@@ -34,31 +34,43 @@ export default function ExerciseAnalysisScreen() {
   const [options, setOptions] = useState<AnalysisOptions>({ cameraView: 'AUTO', depthTarget: 'NONE', descentTargetSeconds: null });
   const [selectedExercise, setSelectedExercise] = useState<ExerciseCode>('SQUAT');
   const [selectedVariant, setSelectedVariant] = useState('BODYWEIGHT');
-  const [shareVideo, setShareVideo] = useState(false);
   const [externalVideoConsent, setExternalVideoConsent] = useState(false);
   const [shareNotice, setShareNotice] = useState('');
   const [comparison, setComparison] = useState<Analysis | null>(null);
   const [current, setCurrent] = useState<Analysis | null>(null);
   const [history, setHistory] = useState<Analysis[]>([]);
   const [supported, setSupported] = useState<{ code: ExerciseCode; name: string; cameraAngle: string; measurementStatus: string; techniqueStatus: string; variants?: string[] }[]>([]);
-  const [coaches, setCoaches] = useState<{ id: number; fullName: string }[]>([]);
+  const [coaches, setCoaches] = useState<{ id: number; fullName: string; ptLevel?: string }[]>([]);
+  const [tierPolicy, setTierPolicy] = useState<ExerciseCheckerTierPolicy | null>(null);
+  const [usedThisWeek, setUsedThisWeek] = useState<number>(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const currentId = current?.id;
   const currentStatus = current?.status;
   const videoDurationSeconds = video?.duration == null ? null : video.duration / 1000;
   const selectedMeta = supported.find(item => item.code === selectedExercise);
-  useEffect(() => { setShareVideo(false); setExternalVideoConsent(false); setShareNotice(''); setComparison(null); }, [currentId]);
+  useEffect(() => { setExternalVideoConsent(false); setShareNotice(''); setComparison(null); }, [currentId]);
 
   const refresh = useCallback(async () => {
     if (!user || (user.role !== 'MEMBER' && !developerMode)) return;
     try {
-      const [exercises, rows, options] = developerMode
-        ? [await exerciseAnalysis.supported(), await exerciseAnalysis.developerHistory(), [] as { id: number; fullName: string }[]]
-        : await Promise.all([exerciseAnalysis.supported(), exerciseAnalysis.history(), exerciseAnalysis.shareOptions()]);
-      setSupported(exercises);
-      setHistory(rows);
-      setCoaches(options);
+      if (developerMode) {
+        const [exercises, rows] = await Promise.all([exerciseAnalysis.supported(), exerciseAnalysis.developerHistory()]);
+        setSupported(exercises);
+        setHistory(rows);
+        setCoaches([]);
+      } else {
+        const [exercises, rows, shareMeta] = await Promise.all([
+          exerciseAnalysis.supported(),
+          exerciseAnalysis.history(),
+          exerciseAnalysis.shareOptionsWithQuota(),
+        ]);
+        setSupported(exercises);
+        setHistory(rows);
+        setCoaches(shareMeta.data || []);
+        if (shareMeta.tierPolicy) setTierPolicy(shareMeta.tierPolicy);
+        if (typeof shareMeta.usedThisWeek === 'number') setUsedThisWeek(shareMeta.usedThisWeek);
+      }
     } catch (e) { setError((e as Error).message); }
   }, [user, developerMode]);
   useEffect(() => { void refresh(); }, [refresh]);
@@ -124,8 +136,9 @@ export default function ExerciseAnalysisScreen() {
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   };
-  const changeShare = async (coachId: number, revoke: boolean, includeVideo = shareVideo) => {
+  const changeShare = async (coachId: number, revoke: boolean) => {
     if (!current) return;
+    const includeVideo = true;
     setBusy(true); setError(''); setShareNotice('');
     try {
       if (revoke) await exerciseAnalysis.revoke(current.id, coachId);
@@ -134,10 +147,7 @@ export default function ExerciseAnalysisScreen() {
       const active = updated.shares?.find(item => item.coachId === coachId && !item.revokedAt);
       if (!revoke && (!active || active.includeVideo !== includeVideo)) throw new Error('Máy chủ chưa xác nhận quyền video. Vui lòng tải lại và thử lại.');
       setCurrent(updated);
-      setShareNotice(revoke ? 'Đã thu hồi quyền xem của Coach.' : includeVideo
-        ? 'Máy chủ đã xác nhận Coach được xem video gốc và gắn nhãn.'
-        : 'Đã chia sẻ kết quả; Coach chưa được xem video gốc.');
-      setShareVideo(false);
+      setShareNotice(revoke ? 'Đã thu hồi quyền xem video của Coach.' : 'Đã gửi kết quả và video cho Coach.');
       await refresh();
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
@@ -148,15 +158,30 @@ export default function ExerciseAnalysisScreen() {
   return <Page refresh={refresh}>
     {developerMode && <View style={[box, { borderColor: '#C77800', borderWidth: 2 }]}><Text style={{ color: '#8A4B00', fontWeight: '900' }}>DEVELOPER MODE · EXPERIMENTAL EVALUATION</Text><Text style={{ color: aura.ink, marginTop: 5 }}>Chỉ tài khoản Coach/Admin trong bản phát triển. Kết quả là dự đoán chưa kiểm chứng, không xuất hiện trong Member Mode.</Text></View>}
     <View style={{ backgroundColor: aura.espresso, borderRadius: 25, padding: 22, marginBottom: 16 }}>
-      <Text style={{ color: '#F9C77C', fontWeight: '900', fontSize: 11, letterSpacing: 1.5 }}>AI FORM CHECK  ·  BETA</Text>
-      <Text style={{ color: '#fff', fontSize: 25, fontWeight: '900', marginTop: 7 }}>Trợ lý phân tích kỹ thuật tập luyện</Text>
-      <Text style={{ color: '#FFFFFFBA', lineHeight: 20, marginTop: 8 }}>Tự tập ngoài lịch PT, nhận nhận xét dựa trên chuyển động trong video. Lượt phân tích được giới hạn theo gói.</Text>
+      <Text style={{ color: '#fff', fontSize: 25, fontWeight: '900' }}>Trợ lý phân tích kỹ thuật tập luyện</Text>
       {studentPlanId > 0 && <Text style={{ color: '#F9C77C', marginTop: 10, fontWeight: '700' }}>Đang liên kết với giáo án của bạn</Text>}
     </View>
+    {!developerMode && tierPolicy && (
+      <View style={[box, { backgroundColor: '#FFF9F2', borderColor: aura.caramel }]}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <Text style={{ color: aura.darkCoffee, fontWeight: '900', fontSize: 15, flexShrink: 1 }}>
+            Quyền lợi hiện tại: {tierPolicy.name}
+          </Text>
+          <View style={{ backgroundColor: '#F5E6D3', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 }}>
+            <Text style={{ color: aura.darkCoffee, fontWeight: '800', fontSize: 12 }}>
+              {tierPolicy.weeklyLimit === null ? `Không giới hạn (${usedThisWeek} video/tuần)` : `Đã dùng ${usedThisWeek}/${tierPolicy.weeklyLimit} video/tuần`}
+            </Text>
+          </View>
+        </View>
+        <Text style={{ color: aura.ink, fontSize: 13, marginTop: 8, lineHeight: 19 }}>
+          • {tierPolicy.description}
+        </Text>
+      </View>
+    )}
     <Text style={{ fontSize: 17, fontWeight: '900', color: aura.ink, marginBottom: 10 }}>Chọn cách kiểm tra</Text>
     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 18 }}>
-      <View style={[box, { flex: 1, opacity: .65 }]}><Ionicons name="camera-outline" size={25} color={aura.caramel} /><Text style={{ color: aura.ink, fontWeight: '800', marginTop: 8 }}>Chụp ảnh</Text><Text style={{ color: aura.muted, fontSize: 11, marginTop: 4 }}>Tư thế tĩnh · sắp hỗ trợ</Text></View>
-      <Pressable accessibilityRole="button" onPress={() => void pick(false)} style={[box, { flex: 1, borderColor: aura.caramel, backgroundColor: '#FFF9F2' }]}><Ionicons name="videocam-outline" size={25} color={aura.caramel} /><Text style={{ color: aura.ink, fontWeight: '800', marginTop: 8 }}>Tải video</Text><Text style={{ color: aura.muted, fontSize: 11, marginTop: 4 }}>Phân tích chuyển động</Text></Pressable>
+      <View style={[box, { flex: 1, opacity: .65 }]}><Ionicons name="camera-outline" size={25} color={aura.caramel} /><Text style={{ color: aura.ink, fontWeight: '800', marginTop: 8 }}>Chụp ảnh</Text></View>
+      <Pressable accessibilityRole="button" onPress={() => void pick(false)} style={[box, { flex: 1, borderColor: aura.caramel, backgroundColor: '#FFF9F2' }]}><Ionicons name="videocam-outline" size={25} color={aura.caramel} /><Text style={{ color: aura.ink, fontWeight: '800', marginTop: 8 }}>Tải video</Text></Pressable>
     </View>
     <Text style={{ fontSize: 17, fontWeight: '900', color: aura.ink, marginBottom: 10 }}>Chọn bài tập cần kiểm tra</Text>
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>{supported.map(item => <Pressable key={item.code} accessibilityRole="button" onPress={() => { setSelectedExercise(item.code); setSelectedVariant(defaultVariant[item.code]); setOptions({ cameraView: 'AUTO', depthTarget: 'NONE', descentTargetSeconds: null }); }} style={{ backgroundColor: selectedExercise === item.code ? aura.darkCoffee : aura.latte, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11 }}><Text style={{ color: selectedExercise === item.code ? '#fff' : aura.ink, fontWeight: '800' }}>{item.name}</Text><Text style={{ color: selectedExercise === item.code ? '#FFF' : aura.muted, fontSize: 9 }}>{item.measurementStatus === 'SQUAT_REPETITIONS' ? 'Đếm rep thử nghiệm' : 'Chỉ đo khớp'}</Text></Pressable>)}</View>
@@ -164,13 +189,10 @@ export default function ExerciseAnalysisScreen() {
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>{(selectedMeta?.variants || [defaultVariant[selectedExercise], 'UNSPECIFIED']).map(value => <Pressable key={value} onPress={() => setSelectedVariant(value)} style={[button, { backgroundColor: value === selectedVariant ? aura.darkCoffee : aura.latte }]}><Text style={{ color: value === selectedVariant ? '#fff' : aura.ink }}>{variantNames[value] || value}</Text></Pressable>)}</View>
     <View style={box}>
       <Text style={{ fontWeight: '800', fontSize: 18, color: aura.ink }}>Hướng dẫn quay {selectedMeta?.name || 'Squat'}</Text>
-      <Text style={{ color: aura.muted, marginTop: 8, lineHeight: 21 }}>{selectedMeta?.cameraAngle || 'Đặt camera ngang, thấy trọn vai, hông, gối và cổ chân.'} Quay 3–30 giây. Video Squat không tạ tối đa 12 MB để Gemini nhận xét; bài khác tối đa 25 MB. Hỗ trợ MP4/MOV hoặc WebM.</Text>
-      <Text style={{ color: aura.caramel, fontWeight: '700', marginTop: 9, fontSize: 12 }}>{selectedExercise === 'SQUAT' ? 'Góc ngang: độ sâu, thân người và nhịp. Chính diện: hướng dịch chuyển gối trên ảnh và nhịp.' : 'Bài này hiện chỉ đo khớp trên ảnh; chưa đếm rep hay kết luận kỹ thuật.'} Các tiêu chí kỹ thuật đang chờ Coach kiểm chứng.</Text>
-      {selectedExercise === 'SQUAT' && <Text style={{ color: aura.muted, marginTop: 8 }}>Quay chính diện hoặc góc ngang: toàn thân trong khung, máy cố định và đủ sáng.</Text>}
+      <Text style={{ color: aura.caramel, fontWeight: '700', marginTop: 9, fontSize: 12 }}>{selectedExercise === 'SQUAT' ? 'Góc ngang đánh giá độ sâu và thân người; chính diện theo dõi hướng gối.' : 'Bài này chỉ đo khớp trên ảnh, chưa đếm rep hay kết luận kỹ thuật.'} Kết quả cần Coach xác nhận.</Text>
       <Text style={{ color: aura.ink, fontWeight: '800', marginTop: 14 }}>Góc quay của video</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{(['AUTO', 'SIDE', 'FRONT'] as const).map(value => <Pressable key={value} onPress={() => setOptions(old => ({ ...old, cameraView: value }))} style={[button, { backgroundColor: options.cameraView === value ? aura.darkCoffee : aura.latte, padding: 10 }]}><Text style={{ color: options.cameraView === value ? '#fff' : aura.ink }}>{value === 'AUTO' ? 'Tự nhận diện' : value === 'SIDE' ? 'Ngang' : 'Chính diện'}</Text></Pressable>)}</View>
       {selectedExercise === 'SQUAT' && <><Text style={{ color: aura.ink, fontWeight: '800', marginTop: 14 }}>Mục tiêu riêng (tuỳ chọn)</Text>
-      <Text style={{ color: aura.muted, marginTop: 6 }}>Chọn mục tiêu phù hợp đã thống nhất với Coach. Đây là mốc để đối chiếu, không phải chuẩn bắt buộc cho mọi người.</Text>
       <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: options.depthTarget !== 'NONE' }} onPress={() => setOptions(old => ({ ...old, depthTarget: old.depthTarget === 'NONE' ? 'HIP_AT_KNEE' : 'NONE' }))} style={{ marginTop: 10 }}><Text style={{ color: aura.ink }}>{options.depthTarget === 'NONE' ? '☐' : '☑'} Muốn hông gần ngang gối ở đáy (chỉ góc ngang)</Text></Pressable>
       <Text style={{ color: aura.muted, marginTop: 12 }}>Thời gian hạ người mục tiêu</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{[null, 2, 3].map(value => <Pressable key={value ?? 'none'} onPress={() => setOptions(old => ({ ...old, descentTargetSeconds: value }))} style={[button, { backgroundColor: options.descentTargetSeconds === value ? aura.darkCoffee : aura.latte, padding: 10 }]}><Text style={{ color: options.descentTargetSeconds === value ? '#fff' : aura.ink }}>{value == null ? 'Chưa đặt' : `${value} giây xuống`}</Text></Pressable>)}</View>
@@ -195,7 +217,6 @@ export default function ExerciseAnalysisScreen() {
     {!!error && <Text style={{ color: '#B3261E', marginBottom: 14 }}>{error}</Text>}
     {current && <View style={box}>
       <Text style={{ fontWeight: '800', color: aura.ink, fontSize: 18 }}>Kết quả #{current.id}</Text>
-      <Text style={{ color: aura.muted, marginTop: 4 }}>Nguồn: {current.videoOrigin || 'chưa ghi'}{current.sourceReference ? ` · mẫu ${current.sourceReference}` : ''} · Người tập: {current.performerDeclaration === 'SELF_DECLARED' ? 'chủ tài khoản tự khai báo' : 'chưa xác minh'}</Text>
       {['PENDING', 'PROCESSING'].includes(current.status) ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 }}><ActivityIndicator color={aura.caramel} /><Text>Đang phân tích video...</Text></View> : current.status === 'FAILED' ? <View>
         <Text style={{ marginTop: 10 }}>Không thể phân tích lúc này ({current.errorCode || 'lỗi dịch vụ'}). Hãy thử lại sau.</Text>
         {current.videoAvailable && /^(AI_UNAVAILABLE|AI_TIMEOUT|AI_HTTP_50[0-4])$/.test(current.errorCode || '') &&
@@ -217,25 +238,39 @@ export default function ExerciseAnalysisScreen() {
         <Pressable style={button} onPress={() => void pick(true)}><Text style={{ color: '#fff', fontWeight: '800' }}>Quay lại để thử điều chỉnh</Text></Pressable>
         {history.some(row => comparable(row, current)) && <View style={{ marginTop: 16 }}>
           <Text style={{ color: aura.ink, fontWeight: '800' }}>Đối chiếu với lần trước</Text>
-          <Text style={{ color: aura.muted, marginTop: 6 }}>Nên dùng cùng góc quay, vị trí camera và bài tập. Nhận xét AI cần Coach xác nhận.</Text>
           {history.filter(row => comparable(row, current)).slice(0, 3).map(row => <Pressable key={row.id} style={[button, { backgroundColor: aura.latte }]} onPress={() => void (developerMode ? exerciseAnalysis.developerDetail(row.id) : exerciseAnalysis.detail(row.id)).then(setComparison).catch(e => setError((e as Error).message))}><Text style={{ color: aura.ink }}>Xem lần #{row.id} · {new Date(row.createdAt).toLocaleDateString('vi-VN')}</Text></Pressable>)}
           {comparison && <View style={{ marginTop: 14, borderTopWidth: 1, borderColor: aura.border }}><Text style={{ fontWeight: '800', marginTop: 12 }}>Lần trước #{comparison.id}</Text>{comparison.ruleVersion !== current.ruleVersion && <Text style={{ color: aura.muted }}>Hai kết quả dùng phiên bản AI khác nhau; nhận xét có thể khác nhau.</Text>}<ExerciseAnalysisResult key={comparison.id} analysis={comparison} showExperimental={developerMode} /><Pressable onPress={() => setComparison(null)}><Text style={{ marginTop: 12 }}>Đóng đối chiếu</Text></Pressable></View>}
         </View>}
         {!developerMode && <View style={{ borderTopWidth: 1, borderColor: aura.border, marginTop: 16, paddingTop: 14 }}>
           <Text style={{ color: aura.ink, fontWeight: '800' }}>Gửi kết quả cho Coach</Text>
-          {!!current.videoAvailable && <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: shareVideo }} onPress={() => setShareVideo(value => !value)} style={{ marginTop: 10 }}><Text style={{ color: aura.ink }}>{shareVideo ? '☑' : '☐'} Cho phép Coach xem cả video gốc khi chia sẻ. Video hết hạn sau 7 ngày tính từ lúc gửi.</Text></Pressable>}
-          {coaches.length === 0 ? <Text style={{ color: aura.muted, marginTop: 7 }}>Chỉ chia sẻ khi bạn có quan hệ PT còn hiệu lực.</Text> : coaches.map(coach => {
-            const activeShare = current.shares?.find(item => item.coachId === coach.id && !item.revokedAt);
-            return <View key={coach.id}>
-              {activeShare && <Text style={{ color: aura.muted, marginTop: 9 }}>{activeShare.includeVideo ? `Coach ${coach.fullName} đã được phép xem video gốc và gắn nhãn.` : `Coach ${coach.fullName} hiện chỉ thấy kết quả; cần cấp thêm quyền xem video để gắn nhãn.`}</Text>}
-              {!activeShare && <Pressable disabled={busy} style={button} onPress={() => void changeShare(coach.id, false)}><Text style={{ color: '#fff', fontWeight: '800' }}>{shareVideo ? `Chia sẻ kết quả và video với Coach ${coach.fullName}` : `Chia sẻ kết quả với Coach ${coach.fullName}`}</Text></Pressable>}
-              {activeShare && !activeShare.includeVideo && !!current.videoAvailable && <>
-                <Pressable disabled={busy || !shareVideo} style={[button, { opacity: shareVideo ? 1 : .5 }]} onPress={() => void changeShare(coach.id, false, true)}><Text style={{ color: '#fff', fontWeight: '800' }}>{`Cấp quyền xem video gốc cho Coach ${coach.fullName}`}</Text></Pressable>
-                {!shareVideo && <Text style={{ color: aura.muted, marginTop: 5 }}>Tích ô cho phép xem video ở trên để bật nút này.</Text>}
-              </>}
-              {!!activeShare && <Pressable disabled={busy} style={[button, { backgroundColor: aura.latte }]} onPress={() => void changeShare(coach.id, true)}><Text style={{ color: aura.ink, fontWeight: '800' }}>{`Thu hồi quyền xem của Coach ${coach.fullName}`}</Text></Pressable>}
-            </View>;
-          })}
+          {tierPolicy && !tierPolicy.canShareForPtFeedback ? (
+            <View style={{ marginTop: 8 }}>
+              <Text style={{ color: aura.muted, lineHeight: 19 }}>
+                Gói Cơ bản (Basic) giới hạn 2 video / tuần và chỉ xem chỉ số góc khớp tự động. Hãy nâng cấp lên Gói Trung cấp (5 video/tuần + được PT nhận xét trực tiếp trên video) hoặc Gói Nâng cao (Không giới hạn + ưu tiên PT phản hồi trong vòng 24h).
+              </Text>
+              <Pressable style={[button, { backgroundColor: aura.caramel }]} onPress={() => router.push('/packages')}>
+                <Text style={{ color: '#fff', fontWeight: '800' }}>Nâng cấp lên Gói Trung cấp / Nâng cao</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              <Text style={{ color: aura.muted, marginTop: 7 }}>
+                {tierPolicy?.priority24h
+                  ? '⚡ Gói Nâng cao (Advanced): Không giới hạn video + ưu tiên PT phản hồi trong vòng 24h.'
+                  : 'Gói Trung cấp (Intermediate): Được PT nhận xét trực tiếp trên video của bạn.'}
+              </Text>
+              {!current.videoAvailable && <Text style={{ color: '#B3261E', marginTop: 7 }}>Video này đã hết hạn hoặc không còn được lưu. Hãy tải video mới lên để Coach xem được clip.</Text>}
+              {coaches.length === 0 ? <Text style={{ color: aura.muted, marginTop: 7 }}>Chỉ chia sẻ khi bạn có gói PT Trung cấp / Nâng cao còn hiệu lực với Coach.</Text> : coaches.map(coach => {
+                const activeShare = current.shares?.find(item => item.coachId === coach.id && !item.revokedAt);
+                return <View key={coach.id}>
+                  {activeShare && <Text style={{ color: aura.muted, marginTop: 9 }}>{activeShare.includeVideo && current.videoAvailable ? `Đã gửi kết quả và video cho Coach ${coach.fullName}.` : activeShare.includeVideo ? `Đã chia sẻ kết quả với Coach ${coach.fullName}, nhưng video đã hết hạn.` : `Chia sẻ cũ với Coach ${coach.fullName} chỉ gồm kết quả; gửi lại để kèm video.`}</Text>}
+                  {!activeShare && <Pressable disabled={busy} style={button} onPress={() => void changeShare(coach.id, false)}><Text style={{ color: '#fff', fontWeight: '800' }}>{current.videoAvailable ? `Gửi kết quả và video cho Coach ${coach.fullName}` : `Chia sẻ kết quả với Coach ${coach.fullName}`}</Text></Pressable>}
+                  {activeShare && !activeShare.includeVideo && <Pressable disabled={busy || !current.videoAvailable} style={[button, { opacity: busy || !current.videoAvailable ? .5 : 1 }]} onPress={() => void changeShare(coach.id, false)}><Text style={{ color: '#fff', fontWeight: '800' }}>{current.videoAvailable ? `Gửi lại kết quả kèm video cho Coach ${coach.fullName}` : 'Video không còn để gửi'}</Text></Pressable>}
+                  {!!activeShare && <Pressable disabled={busy} style={[button, { backgroundColor: aura.latte }]} onPress={() => void changeShare(coach.id, true)}><Text style={{ color: aura.ink, fontWeight: '800' }}>{`Thu hồi quyền xem của Coach ${coach.fullName}`}</Text></Pressable>}
+                </View>;
+              })}
+            </>
+          )}
           {!!shareNotice && <Text accessibilityRole="alert" style={{ color: aura.darkCoffee, marginTop: 10 }}>{shareNotice}</Text>}
           {!!current.feedback?.length && <View style={{ marginTop: 15 }}><Text style={{ color: aura.ink, fontWeight: '800' }}>Góp ý từ Coach</Text>{current.feedback.map(item => <View key={item.id} style={{ backgroundColor: aura.cream, borderRadius: 12, padding: 11, marginTop: 8 }}><Text style={{ color: aura.darkCoffee, fontWeight: '700' }}>{item.coach.fullName}</Text><Text style={{ color: aura.ink, marginTop: 4 }}>{item.comment}</Text></View>)}</View>}
         </View>}
