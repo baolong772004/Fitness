@@ -256,7 +256,7 @@ function buildChartPoints(
     }
     return slots.map(s => ({
       label: s.label,
-      rev: Number((s.rev / 1000000).toFixed(2)),
+      rev: Number((s.rev / 1000000).toFixed(4)),
       checkins: s.checkins
     }));
   }
@@ -283,7 +283,7 @@ function buildChartPoints(
     }
     return days.map(d => ({
       label: d.label,
-      rev: Number((d.rev / 1000000).toFixed(2)),
+      rev: Number((d.rev / 1000000).toFixed(4)),
       checkins: d.checkins
     }));
   }
@@ -315,7 +315,7 @@ function buildChartPoints(
     }
     return weeks.map(w => ({
       label: w.label,
-      rev: Number((w.rev / 1000000).toFixed(2)),
+      rev: Number((w.rev / 1000000).toFixed(4)),
       checkins: w.checkins
     }));
   }
@@ -340,7 +340,7 @@ function buildChartPoints(
     }
     return months.map(m => ({
       label: m.label,
-      rev: Number((m.rev / 1000000).toFixed(2)),
+      rev: Number((m.rev / 1000000).toFixed(4)),
       checkins: m.checkins
     }));
   }
@@ -362,7 +362,7 @@ function buildChartPoints(
   }
   return quarters.map(q => ({
     label: q.label,
-    rev: Number((q.rev / 1000000).toFixed(2)),
+    rev: Number((q.rev / 1000000).toFixed(4)),
     checkins: q.checkins
   }));
 }

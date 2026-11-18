@@ -15,21 +15,15 @@ import {
   FileText,
   PanelLeftClose,
   PanelLeftOpen,
-  Sun,
-  Moon,
   LogIn,
   UserPlus,
-  Settings,
-  LogOut,
-  ChevronDown,
   GripVertical,
   Wrench,
   Layers,
-  Bell,
   MessageSquare
 } from 'lucide-react';
 import { AuraLogo } from '../common/AuraLogo';
-import { api, ApiNotification } from '../../services/api';
+import { api } from '../../services/api';
 
 interface NavbarProps {
   currentRole: UserRole;
@@ -76,58 +70,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   });
 
   const [isDragging, setIsDragging] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
-  const [notifications, setNotifications] = useState<ApiNotification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close user dropdown menu when clicking outside or pressing Escape
-  useEffect(() => {
-    if (!showUserMenu) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
-        setShowUserMenu(false);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShowUserMenu(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [showUserMenu]);
-
-  const loadNotifications = async () => {
-    if (!currentUser || !api.auth.getToken()) return;
-    try {
-      const res = await api.notifications.getMyNotifications({ limit: 12 });
-      let list = res.data || [];
-      // Đối với role coach, các thông báo về tin nhắn được hiển thị riêng biệt ở nút "Tin nhắn"
-      if (currentRole === 'coach') {
-        list = list.filter(item => !item.title.toLowerCase().includes('tin nhắn'));
-        const unread = list.filter(item => !item.isRead).length;
-        setNotifications(list);
-        setUnreadCount(unread);
-      } else {
-        setNotifications(list);
-        setUnreadCount(res.unreadCount || 0);
-      }
-    } catch {
-      // A notification failure must not interrupt normal navigation.
-    }
-  };
 
   const loadUnreadMessages = async () => {
     if (currentRole !== 'coach' || !currentUser || !api.auth.getToken()) return;
@@ -139,13 +83,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       // Silently fail
     }
   };
-
-  useEffect(() => {
-    loadNotifications();
-    if (!currentUser || !api.auth.getToken()) return;
-    const timer = window.setInterval(loadNotifications, 60000);
-    return () => window.clearInterval(timer);
-  }, [currentUser?.id, currentRole]);
 
   useEffect(() => {
     if (currentRole !== 'coach' || !currentUser || !api.auth.getToken()) return;
@@ -166,24 +103,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       window.removeEventListener('aura:chat-updated', handleChatUpdated);
     };
   }, [currentRole, currentUser?.id, activeTab]);
-
-  const handleNotificationClick = async (notification: ApiNotification) => {
-    if (!notification.isRead) {
-      try {
-        await api.notifications.markRead(notification.id);
-        setNotifications(items => items.map(item => item.id === notification.id ? { ...item, isRead: true } : item));
-        setUnreadCount(count => Math.max(0, count - 1));
-      } catch { /* keep notification visible for a later retry */ }
-    }
-  };
-
-  const markAllNotificationsRead = async () => {
-    try {
-      await api.notifications.markAllRead();
-      setNotifications(items => items.map(item => ({ ...item, isRead: true })));
-      setUnreadCount(0);
-    } catch { /* leave state unchanged */ }
-  };
 
   // Sync collapsed state to localStorage
   useEffect(() => {
@@ -217,14 +136,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging]);
-
-  const roleLabels: Record<UserRole, string> = {
-    admin: 'Quản Trị Viên (Admin)',
-    staff: 'Nhân Viên Quầy (Staff)',
-    coach: 'Huấn Luyện Viên (Coach)',
-    member: 'Hội Viên (Member)',
-    guest: 'Khách Vãng Lai'
-  };
 
   const getTabsForRole = (role: UserRole): NavTabItem[] => {
     switch (role) {
@@ -316,23 +227,26 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* 1. TOP HEADER: BRAND LOGO & COLLAPSE / EXPAND BUTTON */}
       <div
         style={{
-          minHeight: isCollapsed ? 82 : 68,
+          height: 68,
+          minHeight: 68,
+          maxHeight: 68,
+          boxSizing: 'border-box',
           display: 'flex',
           alignItems: 'center',
           justifyContent: isCollapsed ? 'center' : 'space-between',
-          padding: isCollapsed ? '8px 10px' : '0 16px',
+          padding: isCollapsed ? '4px 8px' : '0 16px',
           borderBottom: '1px solid var(--aura-border)',
           gap: 10
         }}
       >
         {isCollapsed ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: '100%' }}>
             <div
               onClick={() => handleTabClick('home')}
               style={{ cursor: 'pointer' }}
               title="Aura Fitness (Về Trang Chủ)"
             >
-              <AuraLogo size={38} showText={false} />
+              <AuraLogo size={34} showText={false} />
             </div>
             <button
               onClick={() => setIsCollapsed(false)}
@@ -342,7 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 width: 34,
-                height: 24,
+                height: 20,
                 borderRadius: 'var(--radius-sm)',
                 background: 'var(--bg-app)',
                 border: '1px solid var(--aura-border)',
@@ -410,12 +324,14 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
       </div>
 
-      {currentUser && (
+      {currentUser && currentRole === 'coach' && (
         <div style={{ padding: isCollapsed ? '8px 10px 2px' : '10px 14px 2px', position: 'relative', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <button
             type="button"
-            onClick={() => { setShowNotifications(open => !open); loadNotifications(); }}
-            title="Thông báo"
+            onClick={() => {
+              handleTabClick('messages');
+            }}
+            title="Tin nhắn"
             style={{
               width: '100%',
               display: 'flex',
@@ -423,10 +339,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               justifyContent: isCollapsed ? 'center' : 'space-between',
               gap: 8,
               padding: '9px 10px',
-              border: showNotifications ? '1px solid var(--color-primary)' : '1px solid var(--aura-border)',
+              border: activeTab === 'messages' ? '1px solid var(--color-primary)' : '1px solid var(--aura-border)',
               borderRadius: 'var(--radius-sm)',
-              background: showNotifications ? 'var(--color-primary-light)' : 'var(--bg-card)',
-              color: showNotifications ? 'var(--color-primary)' : 'var(--text-primary)',
+              background: activeTab === 'messages' ? 'var(--color-primary-light)' : 'var(--bg-card)',
+              color: activeTab === 'messages' ? 'var(--color-primary)' : 'var(--text-primary)',
               cursor: 'pointer',
               fontSize: 12,
               fontWeight: 700,
@@ -435,10 +351,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Bell size={16} />
-              <span style={{ display: isCollapsed ? 'none' : 'inline' }}>Thông báo</span>
+              <MessageSquare size={16} />
+              <span style={{ display: isCollapsed ? 'none' : 'inline' }}>Tin nhắn</span>
             </span>
-            {unreadCount > 0 && (
+            {unreadMessageCount > 0 && (
               <span style={{
                 minWidth: 18,
                 height: 18,
@@ -452,67 +368,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 fontWeight: 700,
                 ...(isCollapsed ? { position: 'absolute', top: 2, right: 4 } : {})
               }}>
-                {unreadCount > 99 ? '99+' : unreadCount}
+                {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
               </span>
             )}
           </button>
-
-          {currentRole === 'coach' && (
-            <button
-              type="button"
-              onClick={() => {
-                setShowNotifications(false);
-                handleTabClick('messages');
-              }}
-              title="Tin nhắn"
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: isCollapsed ? 'center' : 'space-between',
-                gap: 8,
-                padding: '9px 10px',
-                border: activeTab === 'messages' ? '1px solid var(--color-primary)' : '1px solid var(--aura-border)',
-                borderRadius: 'var(--radius-sm)',
-                background: activeTab === 'messages' ? 'var(--color-primary-light)' : 'var(--bg-card)',
-                color: activeTab === 'messages' ? 'var(--color-primary)' : 'var(--text-primary)',
-                cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 700,
-                position: 'relative',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <MessageSquare size={16} />
-                <span style={{ display: isCollapsed ? 'none' : 'inline' }}>Tin nhắn</span>
-              </span>
-              {unreadMessageCount > 0 && (
-                <span style={{
-                  minWidth: 18,
-                  height: 18,
-                  padding: '0 5px',
-                  display: 'grid',
-                  placeItems: 'center',
-                  borderRadius: 9,
-                  background: 'var(--color-danger)',
-                  color: '#fff',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  ...(isCollapsed ? { position: 'absolute', top: 2, right: 4 } : {})
-                }}>
-                  {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                </span>
-              )}
-            </button>
-          )}
-
-          {showNotifications && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: isCollapsed ? 'calc(100% + 8px)' : 14, width: 320, maxWidth: 'calc(100vw - 100px)', zIndex: 500, padding: 10, background: 'var(--bg-panel)', border: '1px solid var(--aura-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px 10px' }}><strong style={{ fontSize: 13 }}>Thông báo</strong><button type="button" onClick={markAllNotificationsRead} disabled={!unreadCount} style={{ border: 0, background: 'transparent', color: 'var(--color-primary)', cursor: unreadCount ? 'pointer' : 'default', fontSize: 11, fontWeight: 700 }}>Đọc tất cả</button></div>
-              {notifications.length ? notifications.map(item => <button type="button" key={item.id} onClick={() => handleNotificationClick(item)} style={{ width: '100%', textAlign: 'left', padding: '10px 8px', border: 0, borderTop: '1px solid var(--aura-border)', background: item.isRead ? 'transparent' : 'var(--color-primary-light)', color: 'var(--text-primary)', cursor: 'pointer' }}><div style={{ fontSize: 12, fontWeight: 800 }}>{item.title}</div><div style={{ marginTop: 3, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>{item.message}</div><div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-muted)' }}>{new Date(item.createdAt).toLocaleString('vi-VN')}</div></button>) : <div style={{ padding: '20px 8px', color: 'var(--text-muted)', fontSize: 12, textAlign: 'center' }}>Chưa có thông báo.</div>}
-            </div>
-          )}
         </div>
       )}
 
@@ -655,298 +514,81 @@ export const Navbar: React.FC<NavbarProps> = ({
         })}
       </div>
 
-      {/* 4. BOTTOM SECTION: THEME TOGGLE & USER PROFILE */}
-      <div
-        style={{
-          borderTop: '1px solid var(--aura-border)',
-          padding: isCollapsed ? '12px 8px' : '14px 14px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-          background: 'var(--bg-panel)'
-        }}
-      >
-        {/* Light / Dark Mode Toggle */}
-        {isCollapsed ? (
-          <button
-            onClick={onToggleTheme}
-            title={theme === 'light' ? 'Chuyển sang nền Tối' : 'Chuyển sang nền Sáng'}
-            style={{
-              width: '100%',
-              height: 38,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--bg-card)',
-              border: '1px solid var(--aura-border)',
-              color: 'var(--color-primary)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            {theme === 'light' ? <Moon size={17} /> : <Sun size={17} style={{ color: '#FFA726' }} />}
-          </button>
-        ) : (
-          <div
-            onClick={onToggleTheme}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '8px 12px',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--bg-card)',
-              border: '1px solid var(--aura-border)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            title="Nhấp để đổi giao diện Sáng / Tối"
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-              {theme === 'light' ? (
-                <>
-                  <Sun size={16} color="var(--color-primary)" />
-                  <span>Giao diện Sáng</span>
-                </>
-              ) : (
-                <>
-                  <Moon size={16} color="#FFA726" />
-                  <span>Giao diện Tối</span>
-                </>
-              )}
-            </div>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                padding: '2px 6px',
-                borderRadius: 'var(--radius-full)',
-                background: 'var(--color-primary-light)',
-                color: 'var(--color-primary)'
-              }}
-            >
-              {theme === 'light' ? 'Light' : 'Dark'}
-            </span>
-          </div>
-        )}
-
-        {/* User Profile or Guest Login/Register */}
-        {currentUser ? (
-          <div ref={userMenuRef} style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: isCollapsed ? '6px 0' : '6px 8px',
-                justifyContent: isCollapsed ? 'center' : 'flex-start',
-                background: showUserMenu ? 'var(--color-primary-light)' : 'var(--bg-card)',
-                border: showUserMenu ? '1px solid var(--color-primary)' : '1px solid var(--aura-border)',
-                borderRadius: 'var(--radius-sm)',
-                cursor: 'pointer',
-                transition: 'all 0.18s ease'
-              }}
-              title={currentUser.name}
-            >
-              <img
-                src={currentUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
-                alt={currentUser.name}
-                style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
-              />
-
-              {!isCollapsed && (
-                <>
-                  <div style={{ textAlign: 'left', flex: 1, minWidth: 0, lineHeight: 1.2 }}>
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: 'var(--text-primary)',
-                        display: 'block',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}
-                    >
-                      {currentUser.name}
-                    </span>
-                    <span style={{ fontSize: 10, color: 'var(--color-primary)', fontWeight: 600 }}>
-                      {roleLabels[currentUser.role] || currentUser.role.toUpperCase()}
-                    </span>
-                  </div>
-                  <ChevronDown
-                    size={14}
-                    style={{
-                      color: 'var(--text-muted)',
-                      transform: showUserMenu ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s ease'
-                    }}
-                  />
-                </>
-              )}
-            </button>
-
-            {/* User Dropdown Menu */}
-            {showUserMenu && (
-              <div
+      {/* 4. BOTTOM SECTION: GUEST LOGIN / REGISTER */}
+      {!currentUser && (
+        <div
+          style={{
+            borderTop: '1px solid var(--aura-border)',
+            padding: isCollapsed ? '12px 8px' : '14px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            background: 'var(--bg-panel)'
+          }}
+        >
+          {isCollapsed ? (
+            /* Collapsed Guest Login/Register Icons */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <button
+                onClick={onOpenLogin}
+                title="Đăng Nhập"
                 style={{
-                  position: 'absolute',
-                  left: isCollapsed ? 'calc(100% + 10px)' : 0,
-                  bottom: isCollapsed ? 0 : '115%',
-                  width: 240,
-                  background: 'var(--bg-panel)',
+                  width: '100%',
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--bg-app)',
                   border: '1px solid var(--aura-border)',
-                  borderRadius: 'var(--radius-md, 12px)',
-                  boxShadow: '0 12px 36px -4px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05)',
-                  padding: 10,
-                  zIndex: 999,
-                  backdropFilter: 'blur(16px)',
-                  WebkitBackdropFilter: 'blur(16px)',
-                  animation: 'auraToastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+                  color: 'var(--color-primary)',
+                  cursor: 'pointer'
                 }}
               >
-                <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--aura-border)', marginBottom: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)' }}>{currentUser.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{currentUser.email}</div>
-                  <span className="badge badge-primary" style={{ fontSize: 9.5, marginTop: 6, display: 'inline-block' }}>
-                    {roleLabels[currentUser.role]}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => {
-                    onOpenSettings();
-                    setShowUserMenu(false);
-                  }}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '9px 12px',
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: 'var(--radius-sm, 6px)',
-                    color: 'var(--text-primary)',
-                    fontSize: 12.5,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--color-primary-light)';
-                    e.currentTarget.style.color = 'var(--color-primary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = 'var(--text-primary)';
-                  }}
-                >
-                  <Settings size={16} color="var(--color-primary)" />
-                  <span>Cài Đặt & Tài Khoản</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    onLogout();
-                    setShowUserMenu(false);
-                  }}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '9px 12px',
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: 'var(--radius-sm, 6px)',
-                    color: 'var(--color-danger)',
-                    fontSize: 12.5,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    marginTop: 4,
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--color-danger-bg)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <LogOut size={16} />
-                  <span>Đăng Xuất Tài Khoản</span>
-                </button>
-              </div>
-            )}
-          </div>
-        ) : isCollapsed ? (
-          /* Collapsed Guest Login/Register Icons */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <button
-              onClick={onOpenLogin}
-              title="Đăng Nhập"
-              style={{
-                width: '100%',
-                height: 36,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--bg-app)',
-                border: '1px solid var(--aura-border)',
-                color: 'var(--color-primary)',
-                cursor: 'pointer'
-              }}
-            >
-              <LogIn size={16} />
-            </button>
-            <button
-              onClick={onOpenRegister}
-              title="Đăng Ký Tài Khoản"
-              style={{
-                width: '100%',
-                height: 36,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--color-primary)',
-                border: 'none',
-                color: '#FFFFFF',
-                cursor: 'pointer'
-              }}
-            >
-              <UserPlus size={16} />
-            </button>
-          </div>
-        ) : (
-          /* Expanded Guest Buttons */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <button
-              className="btn-ghost"
-              style={{ width: '100%', padding: '8px 12px', fontSize: 13, justifyContent: 'center' }}
-              onClick={onOpenLogin}
-            >
-              <LogIn size={15} />
-              <span>Đăng Nhập</span>
-            </button>
-            <button
-              className="btn-primary"
-              style={{ width: '100%', padding: '8px 12px', fontSize: 13, justifyContent: 'center' }}
-              onClick={onOpenRegister}
-            >
-              <UserPlus size={14} />
-              <span>Đăng Ký Tài Khoản</span>
-            </button>
-          </div>
-        )}
-      </div>
+                <LogIn size={16} />
+              </button>
+              <button
+                onClick={onOpenRegister}
+                title="Đăng Ký Tài Khoản"
+                style={{
+                  width: '100%',
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--color-primary)',
+                  border: 'none',
+                  color: '#FFFFFF',
+                  cursor: 'pointer'
+                }}
+              >
+                <UserPlus size={16} />
+              </button>
+            </div>
+          ) : (
+            /* Expanded Guest Buttons */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                className="btn-ghost"
+                style={{ width: '100%', padding: '8px 12px', fontSize: 13, justifyContent: 'center' }}
+                onClick={onOpenLogin}
+              >
+                <LogIn size={15} />
+                <span>Đăng Nhập</span>
+              </button>
+              <button
+                className="btn-primary"
+                style={{ width: '100%', padding: '8px 12px', fontSize: 13, justifyContent: 'center' }}
+                onClick={onOpenRegister}
+              >
+                <UserPlus size={14} />
+                <span>Đăng Ký Tài Khoản</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 5. INTERACTIVE HORIZONTAL RESIZER HANDLE (Right edge) */}
       <div
