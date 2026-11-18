@@ -121,9 +121,11 @@ export const FloatingAIChatbot: React.FC = () => {
           bottom: 94,
           right: 24,
           width: 380,
+          maxWidth: 'calc(100vw - 32px)',
           height: 520,
+          maxHeight: 'calc(100dvh - 118px)',
           background: 'var(--bg-panel)',
-          border: '1px solid rgba(254, 116, 19, 0.4)',
+          border: '1px solid var(--aura-border)',
           borderRadius: 'var(--radius-md)',
           boxShadow: 'var(--shadow-lg)',
           display: 'flex',
@@ -135,15 +137,15 @@ export const FloatingAIChatbot: React.FC = () => {
           {/* Chat Header */}
           <div style={{
             padding: '14px 18px',
-            background: 'linear-gradient(135deg, #142024, #1B292E)',
-            borderBottom: 'var(--border-subtle)',
+            background: 'linear-gradient(135deg, #5A2314, #3B180E)',
+            borderBottom: '1px solid var(--aura-border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
-                background: 'var(--color-primary)',
+                background: 'rgba(255, 255, 255, 0.16)',
                 color: '#fff',
                 padding: 6,
                 borderRadius: 'var(--radius-full)',
@@ -155,10 +157,24 @@ export const FloatingAIChatbot: React.FC = () => {
               </div>
               <div>
                 <strong style={{ fontSize: 14, color: '#fff', display: 'block' }}>AURA Fitness AI</strong>
-                <span style={{ fontSize: 11, color: 'var(--color-success)' }}>● Đang trực tuyến hỗ trợ</span>
+                <span style={{ fontSize: 11, color: '#86efac', fontWeight: 600 }}>● Đang trực tuyến hỗ trợ</span>
               </div>
             </div>
-            <button className="btn-ghost" style={{ padding: 4 }} onClick={() => setIsOpen(false)}>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              aria-label="Đóng chatbox AI"
+              style={{
+                padding: 4,
+                background: 'transparent',
+                border: 'none',
+                color: '#fff',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
               <X size={18} />
             </button>
           </div>
@@ -170,7 +186,8 @@ export const FloatingAIChatbot: React.FC = () => {
             padding: 16,
             display: 'flex',
             flexDirection: 'column',
-            gap: 12
+            gap: 12,
+            background: 'var(--bg-panel)'
           }}>
             {messages.map((m, idx) => {
               const isAi = m.sender === 'ai';
@@ -185,8 +202,9 @@ export const FloatingAIChatbot: React.FC = () => {
                     width: 28,
                     height: 28,
                     borderRadius: '50%',
-                    background: isAi ? 'var(--color-primary-light)' : 'rgba(255,255,255,0.1)',
+                    background: isAi ? 'var(--color-primary-light)' : 'var(--color-primary)',
                     color: isAi ? 'var(--color-primary)' : '#fff',
+                    border: isAi ? '1px solid var(--aura-border)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -199,18 +217,18 @@ export const FloatingAIChatbot: React.FC = () => {
                   <div style={{
                     maxWidth: '75%',
                     background: isAi ? 'var(--bg-app)' : 'var(--color-primary)',
-                    color: '#fff',
+                    color: isAi ? 'var(--text-primary)' : '#fff',
                     padding: '10px 14px',
                     borderRadius: 14,
                     fontSize: 13,
                     lineHeight: 1.45,
-                    border: isAi ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                    border: isAi ? '1px solid var(--aura-border)' : 'none',
                     boxShadow: 'var(--shadow-sm)'
                   }}>
                     {m.text}
                     <div style={{
                       fontSize: 10,
-                      color: isAi ? 'var(--text-dim)' : 'rgba(255,255,255,0.7)',
+                      color: isAi ? 'var(--text-muted)' : 'rgba(255,255,255,0.78)',
                       marginTop: 4,
                       textAlign: isAi ? 'left' : 'right'
                     }}>
@@ -229,6 +247,7 @@ export const FloatingAIChatbot: React.FC = () => {
                   borderRadius: '50%',
                   background: 'var(--color-primary-light)',
                   color: 'var(--color-primary)',
+                  border: '1px solid var(--aura-border)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
@@ -237,10 +256,11 @@ export const FloatingAIChatbot: React.FC = () => {
                 </div>
                 <div style={{
                   background: 'var(--bg-app)',
+                  border: '1px solid var(--aura-border)',
                   padding: '8px 14px',
                   borderRadius: 14,
                   fontSize: 12,
-                  color: 'var(--text-muted)'
+                  color: 'var(--text-secondary)'
                 }}>
                   AURA AI đang soạn câu trả lời...
                 </div>
@@ -252,7 +272,8 @@ export const FloatingAIChatbot: React.FC = () => {
           {/* Quick Questions Chips */}
           <div style={{
             padding: '8px 12px',
-            borderTop: '1px solid rgba(255,255,255,0.05)',
+            borderTop: '1px solid var(--aura-border)',
+            background: 'var(--bg-panel)',
             display: 'flex',
             gap: 6,
             overflowX: 'auto',
@@ -261,14 +282,16 @@ export const FloatingAIChatbot: React.FC = () => {
             {quickQuestions.map((q, i) => (
               <button
                 key={i}
+                type="button"
                 onClick={() => handleSendMessage(q)}
                 style={{
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'var(--bg-app)',
+                  border: '1px solid var(--aura-border)',
                   borderRadius: 'var(--radius-full)',
-                  color: 'var(--text-muted)',
+                  color: 'var(--text-primary)',
                   fontSize: 11,
-                  padding: '4px 10px',
+                  fontWeight: 600,
+                  padding: '5px 11px',
                   cursor: 'pointer',
                   flexShrink: 0
                 }}
@@ -286,7 +309,7 @@ export const FloatingAIChatbot: React.FC = () => {
             }}
             style={{
               padding: '12px',
-              borderTop: 'var(--border-subtle)',
+              borderTop: '1px solid var(--aura-border)',
               display: 'flex',
               gap: 8,
               background: 'var(--bg-panel)'
@@ -298,7 +321,13 @@ export const FloatingAIChatbot: React.FC = () => {
               placeholder="Đặt câu hỏi cho AI..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              style={{ fontSize: 13, padding: '8px 12px' }}
+              style={{
+                flex: 1,
+                fontSize: 13,
+                padding: '8px 12px',
+                background: 'var(--bg-input)',
+                color: 'var(--text-primary)'
+              }}
             />
             <button
               type="submit"

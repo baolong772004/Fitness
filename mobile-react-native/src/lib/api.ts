@@ -153,6 +153,7 @@ export const api = {
   renew: (subscriptionId: number, packageId: number) => post('/subscriptions/renew', { subscriptionId, packageId }),
   paymentStatus: (orderCode: string) => request('GET', `/payments/check-status/${encodeURIComponent(orderCode)}`, undefined, true),
   classSchedules: async (date: Date) => list<any>((await get(`/group-classes/schedules?date=${dayKey(date)}`)).data),
+  coachClassSchedules: async () => list<any>((await get('/group-classes/coach/my-schedules')).data),
   classBookings: async (date: Date) => {
     const from = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const to = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);

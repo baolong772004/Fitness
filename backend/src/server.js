@@ -13,6 +13,7 @@ import swaggerSpec from './config/swagger.js';
 import { configurePtChatSocket } from './sockets/ptChat.socket.js';
 import { startPtNoShowWorker } from './services/ptNoShow.service.js';
 import { assertGymMembershipSafetyReady, startGymMembershipWorker } from './services/membership.service.js';
+import { startGroupClassWorker } from './services/groupClass.service.js';
 import { assertPtWalletSchemaReady } from './services/ptWallet.service.js';
 import { migrateLegacyPtChatMessages } from './services/ptChat.service.js';
 import { startExerciseAnalysisWorker } from './services/exerciseAnalysis.service.js';
@@ -60,6 +61,7 @@ const startServer = async () => {
     if (mongoReady) await migrateLegacyPtChatMessages();
     startPtNoShowWorker();
     startGymMembershipWorker();
+    startGroupClassWorker();
     startExerciseAnalysisWorker();
     seedBusinessKnowledge().catch((error) => console.warn('Vector knowledge seed skipped:', error.message));
 

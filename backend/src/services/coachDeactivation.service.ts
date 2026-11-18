@@ -48,6 +48,23 @@ export interface CoachUpcomingGroupClass {
   status: string;
 }
 
+export interface CoachPendingCoachChangeRequest {
+  id: number;
+  batchId: number;
+  memberName: string;
+  level: string;
+  requestedAt: string;
+}
+
+export interface CoachPendingAttendanceReview {
+  id: number;
+  bookingId: number;
+  memberName: string;
+  startTime: string;
+  deadlineAt: string;
+  status: string;
+}
+
 export interface CoachDeactivationCheckResult {
   coachUserId: number;
   canDeactivate: boolean;
@@ -58,11 +75,15 @@ export interface CoachDeactivationCheckResult {
     upcomingPtBookingCount: number;
     pendingMakeupCount: number;
     upcomingGroupClassCount: number;
+    pendingCoachChangeCount: number;
+    pendingAttendanceReviewCount: number;
   };
   activePtPackages: CoachActivePtPackage[];
   upcomingPtBookings: CoachUpcomingPtBooking[];
   pendingMakeupRequests: CoachPendingMakeup[];
   upcomingGroupClasses: CoachUpcomingGroupClass[];
+  pendingCoachChangeRequests: CoachPendingCoachChangeRequest[];
+  pendingAttendanceReviews: CoachPendingAttendanceReview[];
 }
 
 export async function getCoachDeactivationCheck(
@@ -70,7 +91,7 @@ export async function getCoachDeactivationCheck(
   coachUserId: number,
   now = new Date(),
 ): Promise<CoachDeactivationCheckResult> {
-  const [batches, legacyPtMemberships, ptBookings, makeups, groupSchedules] = await Promise.all([
+  const [batches, legacyPtMemberships, ptBookings, makeups, groupSchedules, coachChangeRequests, attendanceReviews] = await Promise.all([
     db.ptCreditBatch.findMany({
       where: {
         coachId: coachUserId,
@@ -125,6 +146,7 @@ export async function getCoachDeactivationCheck(
         expiresAt: { gt: now },
         OR: [
           { assignedCoachId: coachUserId },
+          { requestedCoachId: coachUserId },
           { assignedCoachId: null, originalBooking: { coachId: coachUserId } },
         ],
       },
@@ -151,6 +173,34 @@ export async function getCoachDeactivationCheck(
         room: { select: { name: true } },
       },
       orderBy: { startTime: 'asc' },
+    }),
+
+    db.ptCoachChangeRequest.findMany({
+      where: {
+        status: 'PENDING_ADMIN',
+        newCoachId: coachUserId,
+      },
+      include: {
+        batch: { select: { level: true } },
+      },
+      orderBy: { requestedAt: 'asc' },
+    }),
+
+    db.ptAttendanceReview.findMany({
+      where: {
+        status: { in: ['PENDING_COACH', 'PENDING_ADMIN'] },
+        booking: { coachId: coachUserId },
+      },
+      include: {
+        booking: {
+          select: {
+            id: true,
+            startTime: true,
+            member: { select: { fullName: true } },
+          },
+        },
+      },
+      orderBy: { deadlineAt: 'asc' },
     }),
   ]);
 
@@ -222,17 +272,44 @@ export async function getCoachDeactivationCheck(
     status: sc.status,
   }));
 
+  const changeMemberIds = [...new Set(coachChangeRequests.map((item) => item.memberId))];
+  const changeMembers = changeMemberIds.length
+    ? await db.user.findMany({ where: { id: { in: changeMemberIds } }, select: { id: true, fullName: true } })
+    : [];
+  const changeMemberMap = new Map(changeMembers.map((u) => [u.id, u.fullName]));
+
+  const pendingCoachChangeRequests: CoachPendingCoachChangeRequest[] = coachChangeRequests.map((item) => ({
+    id: item.id,
+    batchId: item.batchId,
+    memberName: changeMemberMap.get(item.memberId) || `Hội viên #${item.memberId}`,
+    level: item.batch.level,
+    requestedAt: item.requestedAt.toISOString(),
+  }));
+
+  const pendingAttendanceReviews: CoachPendingAttendanceReview[] = attendanceReviews.map((rev) => ({
+    id: rev.id,
+    bookingId: rev.booking.id,
+    memberName: rev.booking.member.fullName,
+    startTime: rev.booking.startTime.toISOString(),
+    deadlineAt: rev.deadlineAt.toISOString(),
+    status: rev.status,
+  }));
+
   const activePtStudentCount = new Set(activePtPackages.map((item) => item.memberId)).size;
   const activePtPackageCount = activePtPackages.length;
   const upcomingPtBookingCount = upcomingPtBookings.length;
   const pendingMakeupCount = pendingMakeupRequests.length;
   const upcomingGroupClassCount = upcomingGroupClasses.length;
+  const pendingCoachChangeCount = pendingCoachChangeRequests.length;
+  const pendingAttendanceReviewCount = pendingAttendanceReviews.length;
 
   const canDeactivate =
     activePtStudentCount === 0 &&
     upcomingPtBookingCount === 0 &&
     pendingMakeupCount === 0 &&
-    upcomingGroupClassCount === 0;
+    upcomingGroupClassCount === 0 &&
+    pendingCoachChangeCount === 0 &&
+    pendingAttendanceReviewCount === 0;
 
   const parts: string[] = [];
   if (activePtStudentCount > 0) {
@@ -246,6 +323,12 @@ export async function getCoachDeactivationCheck(
   }
   if (upcomingGroupClassCount > 0) {
     parts.push(`${upcomingGroupClassCount} lớp học nhóm sắp diễn ra`);
+  }
+  if (pendingCoachChangeCount > 0) {
+    parts.push(`${pendingCoachChangeCount} yêu cầu đổi sang HLV này đang chờ duyệt`);
+  }
+  if (pendingAttendanceReviewCount > 0) {
+    parts.push(`${pendingAttendanceReviewCount} buổi PT đang chờ xác nhận điểm danh`);
   }
 
   const blockingMessage = canDeactivate
@@ -262,10 +345,14 @@ export async function getCoachDeactivationCheck(
       upcomingPtBookingCount,
       pendingMakeupCount,
       upcomingGroupClassCount,
+      pendingCoachChangeCount,
+      pendingAttendanceReviewCount,
     },
     activePtPackages,
     upcomingPtBookings,
     pendingMakeupRequests,
     upcomingGroupClasses,
+    pendingCoachChangeRequests,
+    pendingAttendanceReviews,
   };
 }

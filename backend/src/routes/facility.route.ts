@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { upsertRoom, getRooms, updateEquipmentStatus, createEquipment, deleteEquipment } from '../controllers/facility.controller.js';
+import { upsertRoom, getRooms, updateEquipmentStatus, createEquipment, updateEquipment, deleteEquipment } from '../controllers/facility.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -84,6 +84,7 @@ router.get('/rooms', getRooms);
  *         description: Đã đổi trạng thái
  */
 router.patch('/equipment/:id/status', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), updateEquipmentStatus);
+router.patch('/equipment/:id', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), updateEquipment);
 
 /**
  * @swagger

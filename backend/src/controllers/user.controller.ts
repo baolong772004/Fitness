@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../config/prisma.js';
-import { AuthRequest } from '../middlewares/auth.middleware.js';
+import { AuthRequest, isLockedAccountStatus } from '../middlewares/auth.middleware.js';
 import { getCoachDeactivationCheck } from '../services/coachDeactivation.service.js';
+import { lockPtCalendar, lockPtCoach } from '../services/ptBooking.service.js';
 
 
 
@@ -186,19 +187,20 @@ export class UserController {
       const userExists = await prisma.user.findUnique({ where: { id } });
       if (!userExists) return res.status(404).json({ success: false, message: 'User not found' });
 
-      if (userExists.role === 'COACH' && role !== 'COACH') {
-        const check = await getCoachDeactivationCheck(prisma, id);
-        if (!check.canDeactivate) {
-          return res.status(409).json({
-            success: false,
-            code: 'COACH_HAS_ACTIVE_OBLIGATIONS',
-            message: check.blockingMessage,
-            data: check,
+      const result = await prisma.$transaction(async (tx) => {
+        if (userExists.role === 'COACH' && role !== 'COACH') {
+          await lockPtCalendar(tx);
+          await lockPtCoach(tx, id);
+          const check = await getCoachDeactivationCheck(tx, id);
+          if (!check.canDeactivate && !req.body?.force) {
+            return { blocked: true as const, check };
+          }
+          await tx.coachProfile.updateMany({
+            where: { userId: id },
+            data: { status: 'INACTIVE' },
           });
         }
-      }
 
-      const updatedUser = await prisma.$transaction(async (tx) => {
         const user = await tx.user.update({
           where: { id },
           data: { role },
@@ -212,8 +214,6 @@ export class UserController {
         });
 
         if (role === 'COACH') {
-          // Changing the role alone does not create the related profile row.
-          // Keep an existing profile intact, or create its default profile once.
           await tx.coachProfile.upsert({
             where: { userId: id },
             update: {},
@@ -221,10 +221,19 @@ export class UserController {
           });
         }
 
-        return user;
+        return { blocked: false as const, user };
       });
 
-      res.status(200).json({ success: true, message: 'Role updated successfully', data: updatedUser });
+      if (result.blocked) {
+        return res.status(409).json({
+          success: false,
+          code: 'COACH_HAS_ACTIVE_OBLIGATIONS',
+          message: result.check.blockingMessage,
+          data: result.check,
+        });
+      }
+
+      res.status(200).json({ success: true, message: 'Role updated successfully', data: result.user });
     } catch (error) {
       next(error);
     }
@@ -252,31 +261,76 @@ export class UserController {
          return res.status(403).json({ success: false, message: 'Bạn không thể tự khóa tài khoản của chính mình' });
       }
 
-      if (userExists.role === 'COACH' && status !== 'ACTIVE') {
-        const check = await getCoachDeactivationCheck(prisma, id);
-        if (!check.canDeactivate) {
-          return res.status(409).json({
-            success: false,
-            code: 'COACH_HAS_ACTIVE_OBLIGATIONS',
-            message: check.blockingMessage,
-            data: check,
-          });
-        }
+      if (userExists.status === 'PENDING' && !userExists.emailVerified && status === 'ACTIVE') {
+        return res.status(400).json({
+          success: false,
+          code: 'EMAIL_VERIFICATION_PENDING',
+          message: 'Tài khoản đang chờ hội viên xác thực email qua OTP, không thể kích hoạt thủ công.',
+        });
       }
 
-      const updatedUser = await prisma.user.update({
-        where: { id },
-        data: { status },
-        select: {
-          id: true,
-          email: true,
-          fullName: true,
-          status: true,
-          updatedAt: true
+      const statusResult = await prisma.$transaction(async (tx) => {
+        if (userExists.role === 'COACH' && status !== 'ACTIVE') {
+          await lockPtCalendar(tx);
+          await lockPtCoach(tx, id);
+          const check = await getCoachDeactivationCheck(tx, id);
+          if (!check.canDeactivate && !req.body?.force) {
+            return { blocked: true as const, check };
+          }
+          await tx.coachProfile.updateMany({
+            where: { userId: id },
+            data: { status: 'INACTIVE' },
+          });
         }
+
+        const updated = await tx.user.update({
+          where: { id },
+          data: { status },
+          select: {
+            id: true,
+            email: true,
+            fullName: true,
+            role: true,
+            status: true,
+            updatedAt: true
+          }
+        });
+
+        const auditAction = isLockedAccountStatus(status)
+          ? (userExists.role === 'MEMBER' ? 'MEMBER_LOCKED' : 'USER_ACCOUNT_LOCKED')
+          : status === 'ACTIVE'
+            ? (userExists.role === 'MEMBER' ? 'MEMBER_UNLOCKED' : 'USER_ACCOUNT_ACTIVATED')
+            : 'USER_STATUS_UPDATED';
+
+        await tx.actionLog.create({
+          data: {
+            userId: req.user!.userId,
+            action: auditAction,
+            details: JSON.stringify({
+              targetUserId: id,
+              targetFullName: userExists.fullName,
+              targetEmail: userExists.email,
+              targetRole: userExists.role,
+              previousStatus: userExists.status,
+              newStatus: status,
+              ipAddress: req.ip || null,
+            }),
+          },
+        });
+
+        return { blocked: false as const, updated };
       });
 
-      res.status(200).json({ success: true, message: `User status updated to ${status}`, data: updatedUser });
+      if (statusResult.blocked) {
+        return res.status(409).json({
+          success: false,
+          code: 'COACH_HAS_ACTIVE_OBLIGATIONS',
+          message: statusResult.check.blockingMessage,
+          data: statusResult.check,
+        });
+      }
+
+      res.status(200).json({ success: true, message: `User status updated to ${status}`, data: statusResult.updated });
     } catch (error) {
       next(error);
     }

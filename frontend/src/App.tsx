@@ -123,12 +123,6 @@ export default function App() {
     }
   };
 
-  const handleOpenQuickCheckIn = () => {
-    setViewMode('main');
-    setActiveTab('checkin');
-    soundEffects.playSuccessBeep();
-  };
-
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     setCurrentRole(user.role);
@@ -161,6 +155,16 @@ export default function App() {
   useEffect(() => {
     const handleSessionExpired = (e: any) => {
       const detail = e.detail || {};
+      if (detail.code === 'ACCOUNT_SUSPENDED') {
+        soundEffects.playErrorBeep();
+        toast.error(
+          detail.message || 'Tài khoản của bạn đã bị khóa hoặc tạm ngừng hoạt động.',
+          'Tài Khoản Bị Khóa'
+        );
+        performLogout();
+        return;
+      }
+
       const savedUser = tokenStorage.getUser();
       const roleStr = String(detail.role || savedUser?.role || currentRole || '').toUpperCase();
       const isStaff =
@@ -231,7 +235,6 @@ export default function App() {
       <Navbar
         currentRole={currentRole}
         currentUser={currentUser}
-        onOpenQuickCheckIn={handleOpenQuickCheckIn}
         activeTab={activeTab}
         onTabChange={(tab) => {
           setViewMode('main');
@@ -328,14 +331,7 @@ export default function App() {
               />
             )}
 
-            {currentRole === 'admin' && activeTab === 'checkin' ? (
-              <ReceptionistDashboard
-                activeTab="checkin"
-                onTabChange={setActiveTab}
-                autoOpenScanner
-                onLogout={handleLogout}
-              />
-            ) : currentRole === 'admin' && (
+            {currentRole === 'admin' && (
               <AdminDashboard
                 activeTab={activeTab}
                 onTabChange={setActiveTab}

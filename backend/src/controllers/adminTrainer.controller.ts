@@ -1,10 +1,11 @@
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../config/prisma.js';
-import { AuthRequest } from '../middlewares/auth.middleware.js';
+import { AuthRequest, isLockedAccountStatus } from '../middlewares/auth.middleware.js';
 import { lockPtCalendar, lockPtCoach, PtBookingError } from '../services/ptBooking.service.js';
 import { PT_LEVELS } from '../services/ptWallet.service.js';
 import { getCoachDeactivationCheck } from '../services/coachDeactivation.service.js';
+import { assertCoachCanRemovePtLevels } from '../services/ptCoachEligibility.service.js';
 
 
 /**
@@ -15,6 +16,23 @@ export const getTrainersList = async (req: AuthRequest, res: Response) => {
   try {
     const { search, specialization, status, page = 1, limit = 10 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
+
+    // Tự động tạo CoachProfile mặc định nếu tài khoản role COACH chưa có hồ sơ
+    const coachesWithoutProfile = await prisma.user.findMany({
+      where: { role: 'COACH', coachProfile: { is: null } },
+      select: { id: true },
+    });
+    if (coachesWithoutProfile.length > 0) {
+      await Promise.all(
+        coachesWithoutProfile.map((u) =>
+          prisma.coachProfile.upsert({
+            where: { userId: u.id },
+            update: {},
+            create: { userId: u.id },
+          })
+        )
+      );
+    }
 
     const whereCondition: Prisma.CoachProfileWhereInput = { user: { role: 'COACH' } };
 
@@ -43,7 +61,7 @@ export const getTrainersList = async (req: AuthRequest, res: Response) => {
         include: {
           specializations: { select: { level: true } },
           user: {
-            select: { fullName: true, email: true, phone: true, avatar: true }
+            select: { fullName: true, email: true, phone: true, avatar: true, status: true }
           }
         },
         skip: Number(skip),
@@ -156,7 +174,14 @@ export const updateTrainerPricing = async (req: AuthRequest, res: Response) => {
 
     const profile = await prisma.coachProfile.findUnique({
       where: { id },
-      select: { id: true, userId: true, user: { select: { role: true } } }
+      select: {
+        id: true,
+        userId: true,
+        hourlyRate: true,
+        commissionPercent: true,
+        rank: true,
+        user: { select: { role: true, fullName: true } },
+      }
     });
     if (!profile || profile.user.role !== 'COACH') {
       return res.status(404).json({ success: false, message: 'Không tìm thấy hồ sơ HLV hợp lệ.' });
@@ -171,12 +196,7 @@ export const updateTrainerPricing = async (req: AuthRequest, res: Response) => {
         const removed = previous.map(row => row.level).filter(level => !levels.includes(level));
         const added = levels.filter((level: string) => !previous.some(row => row.level === level));
         if (removed.length) {
-          const affected = await tx.booking.findFirst({ where: { coachId: profile.userId, type: 'PT',
-            status: { in: ['PENDING', 'UPCOMING', 'CONFIRMED', 'IN_PROGRESS'] },
-            startTime: { gt: new Date() },
-            ptCreditAllocation: { is: { batch: { level: { in: removed } } } },
-          }, select: { id: true } });
-          if (affected) throw new PtBookingError(409, `Coach còn Booking #${affected.id} ở cấp độ đang xóa.`);
+          await assertCoachCanRemovePtLevels(tx, profile.userId, removed);
           await tx.coachSpecialization.deleteMany({ where: { coachProfileId: id,
             level: { in: removed } } });
         }
@@ -188,8 +208,34 @@ export const updateTrainerPricing = async (req: AuthRequest, res: Response) => {
           details: JSON.stringify({ coachId: profile.userId, levels }),
         } });
       }
-      return tx.coachProfile.update({ where: { id }, data: { hourlyRate, commissionPercent, rank },
-        include: { specializations: { select: { level: true } } } });
+      const savedProfile = await tx.coachProfile.update({
+        where: { id },
+        data: { hourlyRate, commissionPercent, rank },
+        include: { specializations: { select: { level: true } } },
+      });
+
+      const prevRate = Number(profile.hourlyRate);
+      if (prevRate !== hourlyRate || profile.commissionPercent !== commissionPercent || profile.rank !== rank) {
+        await tx.actionLog.create({
+          data: {
+            userId: req.user!.userId,
+            action: 'COACH_PRICING_UPDATE',
+            details: JSON.stringify({
+              coachUserId: profile.userId,
+              coachProfileId: id,
+              coachName: profile.user.fullName,
+              previousHourlyRate: prevRate,
+              newHourlyRate: hourlyRate,
+              previousCommission: profile.commissionPercent,
+              newCommission: commissionPercent,
+              previousRank: profile.rank,
+              newRank: rank,
+            }),
+          },
+        });
+      }
+
+      return savedProfile;
     });
     return res.status(200).json({ success: true, data: updated, message: 'Đã lưu cấu hình HLV.' });
   } catch (error) {
@@ -245,7 +291,8 @@ export const getTrainerDeactivationCheck = async (req: AuthRequest, res: Respons
 export const toggleTrainerStatus = async (req: AuthRequest, res: Response) => {
   try {
     const trainerProfileId = Number(req.params.id);
-    const { status } = req.body; // 'ACTIVE' | 'BLOCKED' | 'INACTIVE'
+    const { status, force } = req.body; // 'ACTIVE' | 'BLOCKED' | 'INACTIVE'
+    const forceDeactivate = Boolean(force);
 
     if (!Number.isInteger(trainerProfileId) || trainerProfileId <= 0) {
       return res.status(400).json({ success: false, message: 'ID hồ sơ HLV không hợp lệ.' });
@@ -257,10 +304,17 @@ export const toggleTrainerStatus = async (req: AuthRequest, res: Response) => {
 
     const profile = await prisma.coachProfile.findUnique({
       where: { id: trainerProfileId },
-      include: { user: { select: { id: true, fullName: true } } },
+      include: { user: { select: { id: true, fullName: true, status: true } } },
     });
     if (!profile) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy hồ sơ HLV.' });
+    }
+
+    if (status === 'ACTIVE' && (isLockedAccountStatus(profile.user.status) || profile.user.status !== 'ACTIVE')) {
+      return res.status(409).json({
+        success: false,
+        message: 'Tài khoản người dùng của HLV này đang bị khóa hoặc chưa kích hoạt, không thể bật nhận lịch.',
+      });
     }
 
     if (status !== 'ACTIVE') {
@@ -269,7 +323,7 @@ export const toggleTrainerStatus = async (req: AuthRequest, res: Response) => {
         await lockPtCoach(tx, profile.userId);
 
         const check = await getCoachDeactivationCheck(tx, profile.userId);
-        if (!check.canDeactivate) {
+        if (!check.canDeactivate && !forceDeactivate) {
           return { blocked: true as const, check };
         }
 
@@ -287,6 +341,7 @@ export const toggleTrainerStatus = async (req: AuthRequest, res: Response) => {
               coachUserId: profile.userId,
               previousStatus: profile.status,
               newStatus: status,
+              ...(forceDeactivate && !check.canDeactivate ? { forced: true } : {}),
             }),
           },
         });

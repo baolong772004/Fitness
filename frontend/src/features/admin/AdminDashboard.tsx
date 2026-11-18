@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Member, Coach, PackagePlan, AuditLog, Invoice, SupportTicket } from '../../types';
 import { api, ApiPackage, ApiUser, ApiCoachProfile, ApiCoachDeactivationCheck, ApiSubscription, ApiRoom, ApiEquipment, ApiGroupClass, ApiGroupClassSchedule, ApiMemberProfile360, ApiAdminAnalytics } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
+import { toast } from '@/components/common/ToastNotification';
 import {
   BarChart3,
   Users,
@@ -10,7 +11,7 @@ import {
   ShieldAlert,
   TrendingUp,
   Calendar,
-  DollarSign,
+  Coins,
   Edit3,
   Trash2,
   Plus,
@@ -34,7 +35,8 @@ import {
   Activity,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,6 +57,115 @@ import { PtCreditAdmin } from './PtCreditAdmin';
 const ptLevels = ['TRIAL', 'BEGINNER', 'INTERMEDIATE', 'ADVANCED'] as const;
 const memberDate = (value?: string | null) => value
   ? new Date(value).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
+const isMemberAccountLocked = (status?: string | null) =>
+  ['BANNED', 'SUSPENDED', 'INACTIVE', 'BLOCKED'].includes(String(status || '').trim().toUpperCase());
+const isMemberAccountPending = (status?: string | null) =>
+  String(status || '').trim().toUpperCase() === 'PENDING';
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  MEMBER_LOCKED: 'Khóa hội viên',
+  MEMBER_UNLOCKED: 'Mở khóa hội viên',
+  USER_ACCOUNT_LOCKED: 'Khóa tài khoản',
+  USER_ACCOUNT_ACTIVATED: 'Mở khóa tài khoản',
+  USER_STATUS_UPDATED: 'Đổi trạng thái TK',
+  STAFF_CLOCK_IN: 'Mở ca lễ tân',
+  STAFF_CLOCK_OUT: 'Đóng ca lễ tân',
+  GYM_CALENDAR_UPDATE: 'Đổi lịch phòng tập',
+  COACH_WEEKLY_AVAILABILITY: 'Lịch tuần HLV',
+  COACH_DATE_AVAILABILITY: 'Lịch ngày HLV',
+  COACH_DATE_RESET: 'Đặt lại lịch ngày HLV',
+  COACH_SPECIALIZATION_UPDATE: 'Đổi cấp độ HLV',
+  COACH_PRICING_UPDATE: 'Cập nhật giá & hoa hồng HLV',
+  COACH_STATUS_UPDATE: 'Đổi trạng thái HLV',
+  GROUP_CLASS_TRAINER_REASSIGN: 'Đổi HLV lớp nhóm',
+  GROUP_CLASS_CANCELLED: 'Hủy ca lớp nhóm',
+  MEMBERSHIP_FREEZE_BY_STAFF: 'Bảo lưu gói tập',
+  MEMBERSHIP_UNFREEZE_BY_STAFF: 'Mở lại gói bảo lưu',
+  EQUIPMENT_STATUS_UPDATE: 'Cập nhật thiết bị',
+  FACILITY_EQUIPMENT_CREATE: 'Thêm thiết bị',
+  FACILITY_EQUIPMENT_UPDATE: 'Cập nhật thiết bị',
+  FACILITY_EQUIPMENT_DELETE: 'Xóa thiết bị',
+  FACILITY_ROOM_CREATE: 'Tạo phòng tập',
+  FACILITY_ROOM_UPDATE: 'Cập nhật phòng tập',
+  WALK_IN_REGISTRATION: 'Đăng ký Walk-in',
+  OFFLINE_PAYMENT_PROCESSED: 'Thu tiền tại quầy',
+  STAFF_CREATE_MEMBER_ACCOUNT: 'Tạo TK hội viên',
+  PT_MANUAL_CHECKIN: 'Check-in PT thủ công',
+};
+
+const formatAuditDisplay = (log: AuditLog) => {
+  const actionLabel = AUDIT_ACTION_LABELS[log.action] || log.action;
+  let target = log.target;
+  let details = log.details || '';
+
+  // Dự phòng format gọn nếu server chưa restart và trả về JSON thô hoặc key model (membershipId, coachId...)
+  if (details.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(details);
+      if (log.action === 'GYM_CALENDAR_UPDATE' && (parsed.before || parsed.after)) {
+        const b = parsed.before || {};
+        const a = parsed.after || {};
+        const diffs: string[] = [];
+        if (b.openTime !== a.openTime || b.closeTime !== a.closeTime) {
+          diffs.push(`Giờ mở cửa: ${b.openTime ?? '?'}–${b.closeTime ?? '?'} → ${a.openTime ?? '?'}–${a.closeTime ?? '?'}`);
+        }
+        if (b.slotMinutes !== a.slotMinutes) diffs.push(`Thời lượng ca: ${b.slotMinutes ?? '?'}p → ${a.slotMinutes ?? '?'}p`);
+        if (b.breakMinutes !== a.breakMinutes) diffs.push(`Nghỉ giữa ca: ${b.breakMinutes ?? '?'}p → ${a.breakMinutes ?? '?'}p`);
+        target = 'Lịch hoạt động Gym';
+        details = diffs.join(' • ') || `Mở ${a.openTime || '06:00'}–${a.closeTime || '22:00'}`;
+      } else if (log.action === 'COACH_WEEKLY_AVAILABILITY' && (parsed.before !== undefined || parsed.after !== undefined)) {
+        target = 'Lịch rảnh tuần HLV';
+        details = `Số ca rảnh/tuần: ${Array.isArray(parsed.before) ? parsed.before.length : 0} → ${Array.isArray(parsed.after) ? parsed.after.length : 0} ca`;
+      } else if (parsed.after?.date || parsed.before?.date) {
+        const dStr = parsed.after?.date || parsed.before?.date;
+        target = `Lịch HLV ngày ${new Date(dStr).toLocaleDateString('vi-VN')}`;
+        const shifts = Array.isArray(parsed.after?.shifts) ? parsed.after.shifts : [];
+        details = shifts.length > 0 ? `${shifts.length} ca (${shifts[0].startTime}–${shifts[shifts.length - 1].endTime})` : 'Đặt lại ca trong ngày';
+      } else if (log.action === 'MEMBERSHIP_FREEZE_BY_STAFF') {
+        target = parsed.userId ? `HV #${parsed.userId}` : target;
+        const parts: string[] = [];
+        if (parsed.freezeDays !== undefined) parts.push(`Bảo lưu ${parsed.freezeDays} ngày`);
+        if (parsed.projectedEndDate) parts.push(`Hạn mới: ${memberDate(parsed.projectedEndDate)}`);
+        if (parsed.reason) parts.push(`Lý do: ${parsed.reason}`);
+        details = parts.join(' • ') || 'Tạm bảo lưu gói tập';
+      } else if (log.action === 'MEMBERSHIP_UNFREEZE_BY_STAFF') {
+        target = parsed.membershipId ? `Gói #${parsed.membershipId}` : target;
+        const parts: string[] = [];
+        if (parsed.unusedDaysRecovered !== undefined) parts.push(`Hoàn ${parsed.unusedDaysRecovered} ngày`);
+        if (parsed.adjustedEndDate) parts.push(`Hạn mới: ${memberDate(parsed.adjustedEndDate)}`);
+        if (parsed.notes) parts.push(String(parsed.notes));
+        details = parts.join(' • ') || 'Mở lại gói bảo lưu';
+      } else if (log.action === 'COACH_SPECIALIZATION_UPDATE' && Array.isArray(parsed.levels)) {
+        target = parsed.coachId ? `HLV #${parsed.coachId}` : target;
+        details = `Cấp độ PT: ${parsed.levels.join(', ')}`;
+      }
+    } catch {
+      // ignore
+    }
+  } else if (/(?:^|\b)(?:type|membershipId|actualFrozenDays|unusedDaysRecovered|coachId|userId):/i.test(details)) {
+    // Chuyển fallback "key: value • ..." từ server cũ sang ngôn ngữ tự nhiên
+    if (log.action === 'MEMBERSHIP_UNFREEZE_BY_STAFF') {
+      const recovered = details.match(/unusedDaysRecovered:\s*(\d+)/)?.[1];
+      const adjusted = details.match(/adjustedEndDate:\s*([^\s•]+)/)?.[1];
+      const mId = details.match(/membershipId:\s*(\d+)/)?.[1];
+      if (mId && target === 'Hệ thống') target = `Gói #${mId}`;
+      const parts: string[] = [];
+      if (recovered !== undefined) parts.push(`Hoàn ${recovered} ngày`);
+      if (adjusted) parts.push(`Hạn mới: ${memberDate(adjusted)}`);
+      if (parts.length > 0) details = parts.join(' • ');
+    } else if (log.action === 'COACH_SPECIALIZATION_UPDATE') {
+      const cId = details.match(/coachId:\s*(\d+)/)?.[1];
+      if (cId && target === 'Hệ thống') target = `HLV #${cId}`;
+      details = 'Cập nhật cấp độ giảng dạy PT';
+    }
+  }
+
+  const formattedDetails = details
+    .replace(/\s*•\s*/g, '\n')
+    .trim();
+
+  return { actionLabel, target, details: formattedDetails };
+};
 
 interface AdminDashboardProps {
   activeTab: string;
@@ -76,9 +187,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isLoadingPtProducts, setIsLoadingPtProducts] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
+  const [auditLogError, setAuditLogError] = useState<string | null>(null);
+  const [auditSearchQuery, setAuditSearchQuery] = useState('');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [analyticsData, setAnalyticsData] = useState<ApiAdminAnalytics | null>(null);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [chartMetric, setChartMetric] = useState<'revenue' | 'checkins'>('revenue');
 
   // Member 360 Modal State (Luồng 8)
   const [inspectingMember, setInspectingMember] = useState<Member | null>(null);
@@ -88,8 +203,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Coach Price Editing Modal State (Luồng 9)
   const [editingCoach, setEditingCoach] = useState<Coach | null>(null);
-  const [newHourlyRate, setNewHourlyRate] = useState(400000);
-  const [newCommission, setNewCommission] = useState(50);
+  const [newHourlyRate, setNewHourlyRate] = useState<number | ''>(400000);
+  const [newCommission, setNewCommission] = useState<number | ''>(50);
   const [newRank, setNewRank] = useState<'junior' | 'senior' | 'master'>('senior');
   const [newPtLevels, setNewPtLevels] = useState<string[]>([]);
   const [savingCoachConfig, setSavingCoachConfig] = useState(false);
@@ -101,6 +216,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [deactivationLoading, setDeactivationLoading] = useState(false);
   const [deactivationSubmitting, setDeactivationSubmitting] = useState(false);
   const [deactivationError, setDeactivationError] = useState('');
+  const [forceDeactivateCoach, setForceDeactivateCoach] = useState(false);
+  const [groupClassActionLoadingId, setGroupClassActionLoadingId] = useState<number | null>(null);
+  const [reassignTrainerBySchedule, setReassignTrainerBySchedule] = useState<Record<number, number>>({});
+  const [editingScheduleForReassign, setEditingScheduleForReassign] = useState<ApiGroupClassSchedule | null>(null);
+  const [nextScheduleTrainerId, setNextScheduleTrainerId] = useState<number>(0);
 
   // Incident & Support Ticket Management State
   const [ticketSearchQuery, setTicketSearchQuery] = useState('');
@@ -129,9 +249,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [rooms, setRooms] = useState<ApiRoom[]>([]);
   const [isLoadingFacilities, setIsLoadingFacilities] = useState(false);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
-  const [roomForm, setRoomForm] = useState({ name: '', type: 'FITNESS', capacity: 30 });
+  const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
+  const [roomForm, setRoomForm] = useState({ name: '', type: 'FITNESS', capacity: 30, isActive: true });
   const [isCreatingEquipment, setIsCreatingEquipment] = useState(false);
-  const [equipmentForm, setEquipmentForm] = useState({ name: '', code: '', roomId: 0, note: '' });
+  const [editingEquipmentId, setEditingEquipmentId] = useState<number | null>(null);
+  const [equipmentForm, setEquipmentForm] = useState({ name: '', code: '', roomId: 0, status: 'AVAILABLE', note: '' });
 
   // Group Classes & Schedules State
   const [groupClasses, setGroupClasses] = useState<ApiGroupClass[]>([]);
@@ -142,14 +264,96 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isCreatingClass, setIsCreatingClass] = useState(false);
   const [classForm, setClassForm] = useState({ name: '', description: '', durationMin: 60, imageUrl: '' });
   const [isCreatingSchedule, setIsCreatingSchedule] = useState(false);
-  const [scheduleForm, setScheduleForm] = useState({
+  const [scheduleForm, setScheduleForm] = useState<{
+    classId: number;
+    trainerId: number;
+    roomId: number;
+    startTime: string;
+    capacity: number;
+    repeatMode: 'SINGLE' | 'DAILY' | 'WEEKLY';
+    repeatCount: number;
+    repeatDays: number[];
+  }>({
     classId: 0,
     trainerId: 1,
     roomId: 0,
     startTime: '',
-    endTime: '',
-    capacity: 20
+    capacity: 20,
+    repeatMode: 'SINGLE',
+    repeatCount: 1,
+    repeatDays: [],
   });
+
+  const VIETNAM_OFFSET_MS = 7 * 3600000;
+  const DAY_MS = 24 * 3600000;
+  const VN_WEEKDAY_LABELS: Array<{ day: number; label: string }> = [
+    { day: 1, label: 'T2' },
+    { day: 2, label: 'T3' },
+    { day: 3, label: 'T4' },
+    { day: 4, label: 'T5' },
+    { day: 5, label: 'T6' },
+    { day: 6, label: 'T7' },
+    { day: 7, label: 'CN' },
+  ];
+  const toGymDateTimeLocal = (date: Date) =>
+    new Date(date.getTime() + VIETNAM_OFFSET_MS).toISOString().slice(0, 16);
+  const parseGymDateTimeLocal = (value: string) => {
+    if (!value) return new Date(NaN);
+    const normalized = value.length === 16 ? `${value}:00` : value;
+    return new Date(`${normalized}+07:00`);
+  };
+  const getGymIsoWeekday = (date: Date) =>
+    new Date(date.getTime() + VIETNAM_OFFSET_MS).getUTCDay() || 7;
+  const getDefaultScheduleStartLocal = () => {
+    const vnNow = new Date(Date.now() + VIETNAM_OFFSET_MS);
+    const nextHour = vnNow.getUTCHours() + 1;
+    if (nextHour >= 6 && nextHour <= 20) {
+      vnNow.setUTCHours(nextHour, 0, 0, 0);
+      return vnNow.toISOString().slice(0, 16);
+    }
+    const base = new Date(Date.now() + VIETNAM_OFFSET_MS);
+    if (nextHour > 20) {
+      base.setUTCDate(base.getUTCDate() + 1);
+    }
+    base.setUTCHours(9, 0, 0, 0);
+    return base.toISOString().slice(0, 16);
+  };
+  const computeScheduleEndLocal = (startLocal: string, durationMin: number) => {
+    const start = parseGymDateTimeLocal(startLocal);
+    if (Number.isNaN(start.getTime())) return '';
+    return toGymDateTimeLocal(new Date(start.getTime() + durationMin * 60_000));
+  };
+  const buildSchedulePreviewSlots = (
+    startLocal: string,
+    durationMin: number,
+    repeatMode: 'SINGLE' | 'DAILY' | 'WEEKLY',
+    repeatCount: number,
+    repeatDays: number[],
+  ) => {
+    const firstStart = parseGymDateTimeLocal(startLocal);
+    if (Number.isNaN(firstStart.getTime())) return [] as Array<{ start: Date; end: Date }>;
+    const durationMs = durationMin * 60_000;
+    const count = repeatMode === 'SINGLE' ? 1 : Math.min(30, Math.max(1, Number(repeatCount) || 1));
+    if (repeatMode === 'SINGLE' || count === 1) {
+      return [{ start: firstStart, end: new Date(firstStart.getTime() + durationMs) }];
+    }
+    if (repeatMode === 'DAILY') {
+      return Array.from({ length: count }, (_, idx) => {
+        const start = new Date(firstStart.getTime() + idx * DAY_MS);
+        return { start, end: new Date(start.getTime() + durationMs) };
+      });
+    }
+    const firstWeekday = getGymIsoWeekday(firstStart);
+    const daySet = new Set(repeatDays.length > 0 ? [...repeatDays, firstWeekday] : [firstWeekday]);
+    const slots: Array<{ start: Date; end: Date }> = [];
+    for (let offset = 0; slots.length < count && offset < 366; offset++) {
+      const start = new Date(firstStart.getTime() + offset * DAY_MS);
+      if (daySet.has(getGymIsoWeekday(start))) {
+        slots.push({ start, end: new Date(start.getTime() + durationMs) });
+      }
+    }
+    return slots;
+  };
 
   // Package Edit State
   const [isEditingPackage, setIsEditingPackage] = useState(false);
@@ -171,6 +375,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [memberProfileError, setMemberProfileError] = useState('');
   const memberProfileRequestId = useRef(0);
   const [correctingNoShowId, setCorrectingNoShowId] = useState<number | null>(null);
+  const [confirmToggleMember, setConfirmToggleMember] = useState<Member | null>(null);
+  const [isTogglingMemberStatus, setIsTogglingMemberStatus] = useState(false);
 
   const loadPackages = async () => {
     setIsLoadingPackages(true);
@@ -218,6 +424,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const loadAuditLogs = async (searchValue?: string) => {
+    setIsLoadingAuditLogs(true);
+    setAuditLogError(null);
+    try {
+      const term = searchValue !== undefined ? searchValue : auditSearchQuery;
+      const logs = await api.admin.getAuditLogs({
+        limit: 80,
+        search: term.trim() || undefined,
+      });
+      setAuditLogs((logs || []) as AuditLog[]);
+    } catch (e: any) {
+      setAuditLogError(e?.message || 'Không tải được nhật ký kiểm toán.');
+    } finally {
+      setIsLoadingAuditLogs(false);
+    }
+  };
+
   const reloadData = async () => {
     setIsLoadingGroupClasses(true);
     setGroupClassError(null);
@@ -240,6 +463,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           birthYear: u.dateOfBirth ? new Date(u.dateOfBirth).getFullYear() : 0,
           emergencyContact: { name: '', phone: '', relationship: '' },
           status: u.status === 'ACTIVE' ? 'active' : 'expired',
+          accountStatus: u.status,
           activePackageId: String(u.currentGymMembership?.id ?? ''),
           packageName: u.currentGymMembership?.package?.name || 'Chưa có gói Gym',
           packageType: 'standard_gym',
@@ -281,7 +505,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           hourlyRateVND: Number(t.hourlyRate),
           commissionPercent: t.commissionPercent,
           workingHours: { shift: 'Toàn thời gian', start: '07:00', end: '21:00', daysOfWeek: [1, 2, 3, 4, 5, 6] },
-          isAcceptingBookings: t.status === 'ACTIVE',
+          isAcceptingBookings: t.status === 'ACTIVE' && (!t.user?.status || t.user.status === 'ACTIVE'),
+          userAccountStatus: t.user?.status,
           activeTraineeCount: 8
         }));
         setCoaches(mappedCoaches);
@@ -356,6 +581,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } finally {
       setIsLoadingGroupClasses(false);
     }
+
+    await loadAuditLogs();
   };
 
   useEffect(() => {
@@ -369,6 +596,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     if (activeTab === 'group-classes') {
       void reloadData();
+    }
+    if (activeTab === 'audit-rbac') {
+      void loadAuditLogs();
     }
   }, [activeTab]);
 
@@ -452,18 +682,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     if (!editingCoach) return;
 
+    const rateValue = Number(newHourlyRate);
+    const commissionValue = Number(newCommission);
+    if (newHourlyRate === '' || !Number.isFinite(rateValue) || rateValue < 0) {
+      setCoachFormError('Đơn giá buổi dạy phải là số không âm.');
+      return;
+    }
+    if (newCommission === '' || !Number.isInteger(commissionValue) || commissionValue < 0 || commissionValue > 100) {
+      setCoachFormError('Tỷ lệ hoa hồng phải là số nguyên từ 0% đến 100%.');
+      return;
+    }
+
     setSavingCoachConfig(true);
     setCoachFormError('');
     try {
       await api.adminTrainers.updateTrainerPricing(editingCoach.id, {
-        hourlyRate: newHourlyRate,
-        commissionPercent: newCommission,
+        hourlyRate: rateValue,
+        commissionPercent: commissionValue,
         rank: newRank,
         levels: newPtLevels,
       });
       soundEffects.playSuccessBeep();
-      await reloadData();
+      toast.success(`Đã lưu cấu hình HLV ${editingCoach.name}.`, 'Cập Nhật HLV');
       setEditingCoach(null);
+      await reloadData();
     } catch (err: any) {
       soundEffects.playErrorBeep();
       setCoachFormError(err.message || 'Không thể lưu cấu hình HLV.');
@@ -605,19 +847,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Toggle Member Status (ACTIVE / BANNED)
-  const handleToggleMemberStatus = async (userId: string | number, currentStatus: string) => {
-    const nextStatus = currentStatus === 'active' ? 'BANNED' : 'ACTIVE';
+  // Toggle Member Status (ACTIVE / BANNED) with confirmation dialog
+  const handleToggleMemberStatus = (member: Member) => {
+    if (isMemberAccountPending(member.accountStatus)) {
+      soundEffects.playErrorBeep();
+      toast.warning('Tài khoản hội viên đang chờ xác thực email OTP, chưa thể mở khóa thủ công.', 'Chưa Xác Thực Email');
+      return;
+    }
+    setConfirmToggleMember(member);
+  };
+
+  const executeToggleMemberStatus = async () => {
+    if (!confirmToggleMember || isTogglingMemberStatus) return;
+    const isLocked = isMemberAccountLocked(confirmToggleMember.accountStatus);
+    const nextStatus = isLocked ? 'ACTIVE' : 'BANNED';
+    setIsTogglingMemberStatus(true);
     try {
-      await api.users.updateUserStatus(userId, nextStatus);
+      await api.users.updateUserStatus(confirmToggleMember.id, nextStatus);
       soundEffects.playSuccessBeep();
+      toast.success(
+        nextStatus === 'BANNED'
+          ? `Đã khóa tài khoản hội viên ${confirmToggleMember.name}.`
+          : `Đã mở khóa tài khoản hội viên ${confirmToggleMember.name}.`,
+        nextStatus === 'BANNED' ? 'Đã Khóa Hội Viên' : 'Đã Mở Khóa Hội Viên'
+      );
+      if (inspectingMember?.id === confirmToggleMember.id) {
+        setInspectingMember(null);
+      }
+      setConfirmToggleMember(null);
       await reloadData();
-      alert(`Đã đổi trạng thái tài khoản thành công sang ${nextStatus}!`);
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(`Lỗi đổi trạng thái: ${err.message}`);
+      toast.error(err.message || 'Không thể cập nhật trạng thái tài khoản.', 'Lỗi Cập Nhật');
+    } finally {
+      setIsTogglingMemberStatus(false);
     }
   };
+
+  const activeGroupClassTrainers = groupClassTrainers.filter(
+    (t) => t.status === 'ACTIVE' && (!t.user?.status || t.user.status === 'ACTIVE')
+  );
 
   // Toggle Coach Status (ACTIVE / INACTIVE) with deactivation obligation check
   const handleToggleCoachStatus = async (coach: Coach) => {
@@ -625,6 +894,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setDeactivatingCoach(coach);
       setDeactivationCheck(null);
       setDeactivationError('');
+      setForceDeactivateCoach(false);
       setDeactivationLoading(true);
       try {
         const res = await api.adminTrainers.getDeactivationCheck(coach.id);
@@ -638,29 +908,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
 
+    if (!coach.isAcceptingBookings && coach.userAccountStatus && coach.userAccountStatus !== 'ACTIVE') {
+      soundEffects.playErrorBeep();
+      toast.warning(
+        `Tài khoản người dùng của HLV ${coach.name} đang ở trạng thái ${coach.userAccountStatus}, không thể kích hoạt nhận lịch.`,
+        'Tài Khoản Đang Khóa'
+      );
+      return;
+    }
+
     try {
       await api.adminTrainers.toggleTrainerStatus(coach.id, 'ACTIVE');
       soundEffects.playSuccessBeep();
       await reloadData();
-      alert(`Đã kích hoạt lại HLV ${coach.name} thành công!`);
+      toast.success(`Đã kích hoạt lại HLV ${coach.name} thành công!`, 'Kích Hoạt HLV');
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(`Lỗi cập nhật trạng thái HLV: ${err.message}`);
+      toast.error(err.message || 'Không thể cập nhật trạng thái HLV.', 'Lỗi Cập Nhật HLV');
     }
   };
 
   const handleConfirmDeactivateCoach = async () => {
-    if (!deactivatingCoach || !deactivationCheck?.canDeactivate) return;
+    if (!deactivatingCoach || (!deactivationCheck?.canDeactivate && !forceDeactivateCoach)) return;
     setDeactivationSubmitting(true);
     setDeactivationError('');
     try {
-      await api.adminTrainers.toggleTrainerStatus(deactivatingCoach.id, 'INACTIVE');
+      await api.adminTrainers.toggleTrainerStatus(deactivatingCoach.id, 'INACTIVE', forceDeactivateCoach);
       soundEffects.playSuccessBeep();
       const coachName = deactivatingCoach.name;
       setDeactivatingCoach(null);
       setDeactivationCheck(null);
+      setForceDeactivateCoach(false);
       await reloadData();
-      alert(`Đã tạm ngưng HLV ${coachName} thành công!`);
+      toast.success(`Đã tạm ngưng HLV ${coachName} thành công!`, 'Tạm Ngưng HLV');
     } catch (err: any) {
       soundEffects.playErrorBeep();
       setDeactivationError(err.message || 'Không thể tạm ngưng HLV.');
@@ -670,6 +950,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       } catch {}
     } finally {
       setDeactivationSubmitting(false);
+    }
+  };
+
+  const handleReassignGroupClassSchedule = async (scheduleId: number, trainerId: number) => {
+    if (!trainerId) {
+      toast.warning('Vui lòng chọn HLV thay thế đang hoạt động.', 'Thiếu HLV');
+      return;
+    }
+    setGroupClassActionLoadingId(scheduleId);
+    try {
+      await api.groupClasses.reassignScheduleTrainer(scheduleId, trainerId);
+      soundEffects.playSuccessBeep();
+      toast.success('Đã chuyển HLV phụ trách lớp học nhóm.', 'Đổi HLV Thành Công');
+      setEditingScheduleForReassign(null);
+      await reloadData();
+      if (deactivatingCoach) {
+        const refreshed = await api.adminTrainers.getDeactivationCheck(deactivatingCoach.id);
+        setDeactivationCheck(refreshed.data);
+      }
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      toast.error(err.message || 'Không thể đổi HLV lớp học nhóm.', 'Lỗi Đổi HLV');
+    } finally {
+      setGroupClassActionLoadingId(null);
+    }
+  };
+
+  const handleCancelGroupClassSchedule = async (scheduleId: number) => {
+    setGroupClassActionLoadingId(scheduleId);
+    try {
+      await api.groupClasses.cancelSchedule(scheduleId);
+      soundEffects.playSuccessBeep();
+      toast.success('Đã hủy ca lớp học nhóm.', 'Hủy Ca Lớp');
+      await reloadData();
+      if (deactivatingCoach) {
+        const refreshed = await api.adminTrainers.getDeactivationCheck(deactivatingCoach.id);
+        setDeactivationCheck(refreshed.data);
+      }
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      toast.error(err.message || 'Không thể hủy ca lớp học nhóm.', 'Lỗi Hủy Ca');
+    } finally {
+      setGroupClassActionLoadingId(null);
     }
   };
 
@@ -721,38 +1044,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     try {
       await api.facility.upsertRoom({
+        ...(editingRoomId ? { id: editingRoomId } : {}),
         name: roomForm.name,
         type: roomForm.type,
-        capacity: Number(roomForm.capacity)
+        capacity: Number(roomForm.capacity),
+        isActive: roomForm.isActive,
       });
       soundEffects.playSuccessBeep();
       await reloadData();
       setIsCreatingRoom(false);
-      setRoomForm({ name: '', type: 'FITNESS', capacity: 30 });
-      alert('Đã lưu phòng tập mới vào cơ sở dữ liệu!');
+      setEditingRoomId(null);
+      setRoomForm({ name: '', type: 'FITNESS', capacity: 30, isActive: true });
+      toast.success(editingRoomId ? 'Đã cập nhật thông tin phòng tập.' : 'Đã thêm phòng tập mới.', 'Phòng Tập');
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(`Lỗi tạo phòng tập: ${err.message}`);
+      toast.error(err.message || 'Không thể lưu phòng tập.', 'Lỗi Phòng Tập');
+    }
+  };
+
+  const handleToggleRoomActive = async (room: ApiRoom) => {
+    try {
+      const nextActive = room.isActive === false;
+      await api.facility.upsertRoom({
+        id: room.id,
+        name: room.name,
+        type: room.type,
+        capacity: room.capacity,
+        isActive: nextActive,
+      });
+      soundEffects.playSuccessBeep();
+      await reloadData();
+      toast.success(nextActive ? `Đã kích hoạt lại phòng ${room.name}.` : `Đã tạm ngưng phòng ${room.name}.`, 'Phòng Tập');
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      toast.error(err.message || 'Không thể đổi trạng thái phòng tập.', 'Lỗi Phòng Tập');
     }
   };
 
   const handleSaveEquipment = async (e: React.FormEvent) => {
     e.preventDefault();
+    const targetRoomId = Number(equipmentForm.roomId || rooms[0]?.id || 0);
+    if (!targetRoomId) {
+      soundEffects.playErrorBeep();
+      toast.warning('Vui lòng tạo ít nhất 1 phòng tập trước khi thêm thiết bị.', 'Thiếu Phòng Tập');
+      return;
+    }
     try {
-      await api.facility.createEquipment({
-        name: equipmentForm.name,
-        code: equipmentForm.code,
-        roomId: Number(equipmentForm.roomId || (rooms[0]?.id || 1)),
-        note: equipmentForm.note
-      });
+      if (editingEquipmentId) {
+        await api.facility.updateEquipment(editingEquipmentId, {
+          name: equipmentForm.name,
+          code: equipmentForm.code,
+          roomId: targetRoomId,
+          status: equipmentForm.status,
+          note: equipmentForm.note,
+        });
+        toast.success('Đã cập nhật thông tin & ghi chú thiết bị.', 'Thiết Bị');
+      } else {
+        await api.facility.createEquipment({
+          name: equipmentForm.name,
+          code: equipmentForm.code,
+          roomId: targetRoomId,
+          note: equipmentForm.note
+        });
+        toast.success('Đã thêm thiết bị mới vào hệ thống.', 'Thiết Bị');
+      }
       soundEffects.playSuccessBeep();
       await reloadData();
       setIsCreatingEquipment(false);
-      setEquipmentForm({ name: '', code: '', roomId: 0, note: '' });
-      alert('Đã thêm thiết bị mới vào hệ thống!');
+      setEditingEquipmentId(null);
+      setEquipmentForm({ name: '', code: '', roomId: 0, status: 'AVAILABLE', note: '' });
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(`Lỗi thêm thiết bị: ${err.message}`);
+      toast.error(err.message || 'Không thể lưu thiết bị.', 'Lỗi Thiết Bị');
     }
   };
 
@@ -761,9 +1124,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await api.facility.updateEquipmentStatus(id, { status });
       soundEffects.playSuccessBeep();
       await reloadData();
+      toast.success('Đã cập nhật trạng thái thiết bị.', 'Thiết Bị');
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(`Lỗi cập nhật thiết bị: ${err.message}`);
+      toast.error(err.message || 'Lỗi cập nhật trạng thái thiết bị.', 'Lỗi Thiết Bị');
     }
   };
 
@@ -773,9 +1137,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await api.facility.deleteEquipment(id);
       soundEffects.playSuccessBeep();
       await reloadData();
+      toast.success('Đã xóa thiết bị khỏi danh sách.', 'Thiết Bị');
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(`Lỗi xoá thiết bị: ${err.message}`);
+      toast.error(err.message || 'Lỗi xóa thiết bị.', 'Lỗi Thiết Bị');
     }
   };
 
@@ -796,31 +1161,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (res?.data?.id) {
         setScheduleForm(prev => ({ ...prev, classId: res.data.id }));
       }
-      alert('Đã tạo lớp học nhóm mới thành công!');
+      toast.success('Đã tạo danh mục lớp học mới thành công!', 'Lớp Học Nhóm');
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(`Lỗi tạo lớp học: ${err.message}`);
+      toast.error(err.message || 'Không thể tạo lớp học.', 'Lỗi Tạo Lớp Học');
     }
+  };
+
+  const openCreateScheduleModal = (preferredClassId?: number) => {
+    const defaultStartLocal = getDefaultScheduleStartLocal();
+    const firstDt = parseGymDateTimeLocal(defaultStartLocal);
+    const firstWeekday = Number.isNaN(firstDt.getTime()) ? 1 : getGymIsoWeekday(firstDt);
+    setScheduleForm(prev => ({
+      ...prev,
+      classId:
+        preferredClassId ??
+        (prev.classId && groupClasses.some(c => c.id === prev.classId) ? prev.classId : (groupClasses[0]?.id ?? 0)),
+      trainerId: activeGroupClassTrainers[0]?.userId ?? 0,
+      roomId: rooms.find(r => r.isActive !== false)?.id ?? 0,
+      startTime: defaultStartLocal,
+      repeatMode: 'SINGLE',
+      repeatCount: 1,
+      repeatDays: [firstWeekday],
+    }));
+    setIsCreatingSchedule(true);
   };
 
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
+    const selectedClass = groupClasses.find(c => c.id === Number(scheduleForm.classId));
+    const durationMin = selectedClass?.durationMin || 60;
+    const startDt = parseGymDateTimeLocal(scheduleForm.startTime);
+    if (Number.isNaN(startDt.getTime())) {
+      soundEffects.playErrorBeep();
+      toast.error('Vui lòng chọn ngày và giờ bắt đầu hợp lệ.', 'Giờ Bắt Đầu');
+      return;
+    }
+    if (startDt.getTime() <= Date.now()) {
+      soundEffects.playErrorBeep();
+      toast.error('Không thể mở ca lịch cho thời điểm trong quá khứ.', 'Giờ Bắt Đầu');
+      return;
+    }
+    const isRecurring = scheduleForm.repeatMode !== 'SINGLE';
+    const parsedRepeatCount = isRecurring ? Number(scheduleForm.repeatCount || 0) : 1;
+    if (isRecurring && (!Number.isInteger(parsedRepeatCount) || parsedRepeatCount < 2 || parsedRepeatCount > 30)) {
+      soundEffects.playErrorBeep();
+      toast.error('Số buổi lặp lại phải từ 2 đến 30 buổi.', 'Số Buổi Lặp Lại');
+      return;
+    }
+    const firstWeekday = getGymIsoWeekday(startDt);
+    const normalizedRepeatDays =
+      scheduleForm.repeatMode === 'WEEKLY'
+        ? [...new Set([...scheduleForm.repeatDays, firstWeekday])].sort((a, b) => a - b)
+        : undefined;
+    const endDt = new Date(startDt.getTime() + durationMin * 60_000);
     try {
-      await api.groupClasses.createSchedule({
+      const res = await api.groupClasses.createSchedule({
         classId: Number(scheduleForm.classId),
         trainerId: Number(scheduleForm.trainerId),
         roomId: scheduleForm.roomId ? Number(scheduleForm.roomId) : undefined,
-        startTime: new Date(scheduleForm.startTime).toISOString(),
-        endTime: new Date(scheduleForm.endTime).toISOString(),
-        capacity: Number(scheduleForm.capacity || 20)
+        startTime: startDt.toISOString(),
+        endTime: endDt.toISOString(),
+        capacity: Number(scheduleForm.capacity || 20),
+        repeatCount: parsedRepeatCount,
+        repeatFrequency: scheduleForm.repeatMode === 'SINGLE' ? 'NONE' : scheduleForm.repeatMode,
+        repeatDays: normalizedRepeatDays,
       });
       soundEffects.playSuccessBeep();
       await reloadData();
       setIsCreatingSchedule(false);
-      alert('Đã mở lịch ca tập mới thành công!');
+      setScheduleForm(prev => ({ ...prev, startTime: '', repeatMode: 'SINGLE', repeatCount: 1 }));
+      toast.success(res.message || 'Đã mở lịch ca tập mới thành công!', 'Lịch Lớp Nhóm');
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(`Lỗi lên lịch: ${err.message}`);
+      toast.error(err.message || 'Không thể lên lịch ca tập.', 'Lỗi Lên Lịch');
     }
   };
 
@@ -944,7 +1358,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {[
           {
             tab: 'analytics',
-            icon: DollarSign,
+            icon: Coins,
             label: 'Doanh thu',
             value: `${timeFilteredData.revenue.toLocaleString('vi-VN')}đ`,
             meta: (
@@ -1001,7 +1415,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           },
           {
             tab: 'tickets-management',
-            icon: LifeBuoy,
+            icon: AlertTriangle,
             label: 'Sự cố',
             value: String(openTicketsCount),
             meta: openTicketsCount > 0 ? (
@@ -1060,26 +1474,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </CardTitle>
               </div>
 
-              {/* Chart Legend & Summary Chips */}
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/50 text-xs font-semibold">
+              {/* Chart Legend & Summary Toggle Buttons */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChartMetric('revenue');
+                    soundEffects.playSuccessBeep();
+                  }}
+                  aria-pressed={chartMetric === 'revenue'}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                    chartMetric === 'revenue'
+                      ? 'border-primary bg-primary/10 ring-1 ring-primary/40 shadow-xs'
+                      : 'bg-muted/40 border-border opacity-75 hover:opacity-100 hover:bg-muted/70'
+                  }`}
+                >
                   <span className="size-2.5 rounded-full bg-primary" />
                   <span className="text-foreground">Doanh Thu:</span>
                   <span className="text-primary font-bold">{timeFilteredData.revenue.toLocaleString('vi-VN')} đ</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-muted/50 text-xs font-semibold">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChartMetric('checkins');
+                    soundEffects.playSuccessBeep();
+                  }}
+                  aria-pressed={chartMetric === 'checkins'}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                    chartMetric === 'checkins'
+                      ? 'border-sky-500 bg-sky-500/10 ring-1 ring-sky-500/40 shadow-xs'
+                      : 'bg-muted/40 border-border opacity-75 hover:opacity-100 hover:bg-muted/70'
+                  }`}
+                >
                   <span className="size-2.5 rounded-full bg-sky-500" />
                   <span className="text-foreground">Check-in:</span>
                   <span className="text-sky-600 dark:text-sky-400 font-bold">{timeFilteredData.activeCheckIns} lượt</span>
-                </div>
+                </button>
               </div>
             </CardHeader>
             <CardContent>
               {/* SVG Growth Curve Area & Line Chart */}
-              <div className="w-full overflow-x-auto">
-                <div className="min-w-[580px] h-[220px] w-full pt-2">
+              <div className="w-full overflow-x-auto overflow-y-hidden">
+                <div className="min-w-[580px] h-[220px] w-full">
                   {(() => {
                     const data = timeFilteredData.chartData;
+                    const isCheckins = chartMetric === 'checkins';
                     const topY = 34;
                     const midY = 102;
                     const botY = 170;
@@ -1088,19 +1527,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     const plotRight = 672;
                     const innerLeft = 92;
                     const innerRight = 656;
-                    const maxRev = Math.max(...data.map(d => d.rev), 0);
 
-                    const formatRevShort = (rev: number) => {
-                      if (rev >= 1) return `${Number(rev.toFixed(2))}M`;
-                      if (rev > 0) return `${Math.round(rev * 1000)}k`;
+                    const seriesValues = data.map(d => (isCheckins ? (d.checkins ?? 0) : d.rev));
+                    const maxVal = Math.max(...seriesValues, 0);
+
+                    const formatValue = (val: number) => {
+                      if (isCheckins) {
+                        const rounded = Number.isInteger(val) ? val : Number(val.toFixed(1));
+                        return `${rounded} lượt`;
+                      }
+                      if (val >= 1) return `${Number(val.toFixed(2))}M`;
+                      if (val > 0) return `${Math.round(val * 1000)}k`;
                       return '0đ';
                     };
 
+                    const strokeColor = isCheckins ? '#0284c7' : 'var(--color-primary)';
+                    const gradId = isCheckins ? 'auraCheckinGrad' : 'auraRevenueGrad';
+
                     const stepX = data.length > 1 ? (innerRight - innerLeft) / (data.length - 1) : 0;
                     const points = data.map((d, i) => {
+                      const val = isCheckins ? (d.checkins ?? 0) : d.rev;
                       const x = data.length === 1 ? (innerLeft + innerRight) / 2 : innerLeft + i * stepX;
-                      const y = maxRev > 0 ? botY - (d.rev / maxRev) * plotHeight : botY;
-                      return { x, y, isPeak: maxRev > 0 && d.rev === maxRev, ...d };
+                      const y = maxVal > 0 ? botY - (val / maxVal) * plotHeight : botY;
+                      return { x, y, val, isPeak: maxVal > 0 && val === maxVal, label: d.label };
                     });
 
                     const pathD = points.reduce((acc, p, i) => {
@@ -1115,56 +1564,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       : '';
 
                     return (
-                      <svg viewBox="0 0 700 205" className="w-full h-full overflow-visible">
+                      <svg viewBox="0 0 700 205" className="block w-full h-full">
                         <defs>
-                          <linearGradient id="auraRevenueGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.32" />
-                            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.0" />
+                          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={strokeColor} stopOpacity={isCheckins ? '0.26' : '0.32'} />
+                            <stop offset="100%" stopColor={strokeColor} stopOpacity="0.0" />
                           </linearGradient>
                         </defs>
 
                         {/* Horizontal Grid lines (34, 68, 102, 136, 170) */}
-                        <line x1={plotLeft} y1={topY} x2={plotRight} y2={topY} stroke="var(--color-primary)" strokeOpacity={maxRev > 0 ? 0.35 : 0.1} strokeDasharray="4 3" />
+                        <line x1={plotLeft} y1={topY} x2={plotRight} y2={topY} stroke={strokeColor} strokeOpacity={maxVal > 0 ? 0.35 : 0.1} strokeDasharray="4 3" />
                         <line x1={plotLeft} y1={68} x2={plotRight} y2={68} stroke="currentColor" strokeOpacity="0.07" strokeDasharray="3 3" />
                         <line x1={plotLeft} y1={midY} x2={plotRight} y2={midY} stroke="currentColor" strokeOpacity="0.1" strokeDasharray="3 3" />
                         <line x1={plotLeft} y1={136} x2={plotRight} y2={136} stroke="currentColor" strokeOpacity="0.07" strokeDasharray="3 3" />
                         <line x1={plotLeft} y1={botY} x2={plotRight} y2={botY} stroke="currentColor" strokeOpacity="0.18" />
 
-                        {/* Y-axis labels anchored to highest revenue = Cao */}
-                        <text x={plotLeft - 8} y={topY + 4} textAnchor="end" className="text-[10px] fill-primary font-bold">
-                          {maxRev > 0 ? `Cao · ${formatRevShort(maxRev)}` : 'Cao'}
+                        {/* Y-axis labels anchored to highest value = Cao */}
+                        <text x={plotLeft - 8} y={topY + 4} textAnchor="end" fill={strokeColor} className="text-[10px] font-bold">
+                          {maxVal > 0 ? `Cao · ${formatValue(maxVal)}` : 'Cao'}
                         </text>
                         <text x={plotLeft - 8} y={midY + 4} textAnchor="end" className="text-[10px] fill-foreground/60 font-semibold">
-                          {maxRev > 0 ? `TB · ${formatRevShort(maxRev / 2)}` : 'TB'}
+                          {maxVal > 0 ? `TB · ${formatValue(maxVal / 2)}` : 'TB'}
                         </text>
                         <text x={plotLeft - 8} y={botY + 4} textAnchor="end" className="text-[10px] fill-foreground/60 font-semibold">
-                          0đ
+                          {isCheckins ? '0' : '0đ'}
                         </text>
 
                         {points.length > 0 && (
                           <>
-                            <path d={areaD} fill="url(#auraRevenueGrad)" />
-                            <path d={pathD} fill="none" stroke="var(--color-primary)" strokeWidth="3" strokeLinecap="round" />
+                            <path d={areaD} fill={`url(#${gradId})`} />
+                            <path d={pathD} fill="none" stroke={strokeColor} strokeWidth="3" strokeLinecap="round" />
                             {points.map((p, i) => (
                               <g key={i}>
                                 {p.isPeak && (
-                                  <circle cx={p.x} cy={p.y} r="8" fill="var(--color-primary)" fillOpacity="0.18" />
+                                  <circle cx={p.x} cy={p.y} r="8" fill={strokeColor} fillOpacity="0.18" />
                                 )}
                                 <circle
                                   cx={p.x}
                                   cy={p.y}
                                   r={p.isPeak ? 5.5 : 4.5}
-                                  fill={p.isPeak ? 'var(--color-primary)' : 'var(--bg-card)'}
-                                  stroke="var(--color-primary)"
+                                  fill={p.isPeak ? strokeColor : 'var(--bg-card)'}
+                                  stroke={strokeColor}
                                   strokeWidth="2.5"
                                 />
                                 <text
                                   x={p.x}
                                   y={p.y - 11}
                                   textAnchor="middle"
-                                  className={`text-[10px] font-bold ${p.isPeak ? 'fill-primary' : 'fill-foreground/80'}`}
+                                  fill={p.isPeak ? strokeColor : undefined}
+                                  className={`text-[10px] font-bold ${p.isPeak ? '' : 'fill-foreground/80'}`}
                                 >
-                                  {formatRevShort(p.rev)}
+                                  {formatValue(p.val)}
                                 </text>
                                 <text x={p.x} y="192" textAnchor="middle" className="text-[11px] font-semibold fill-foreground/80">
                                   {p.label}
@@ -1246,7 +1696,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <Card>
               <CardHeader>
                 <CardTitle>Giao Dịch Gần Đây</CardTitle>
-                <CardDescription className="text-foreground/75 font-medium">Nhật ký hóa đơn vừa thanh toán</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-3 max-h-[500px] overflow-y-auto">
@@ -1315,8 +1764,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedMembers.map(m => (
-                  <TableRow key={m.id}>
+                  paginatedMembers.map(m => {
+                    const isLocked = isMemberAccountLocked(m.accountStatus);
+                    const isPending = isMemberAccountPending(m.accountStatus);
+                    return (
+                  <TableRow key={m.id} className={isLocked ? 'bg-destructive/5' : undefined}>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="size-9">
@@ -1324,7 +1776,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <AvatarFallback>{m.name.slice(0, 1)}</AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium text-foreground">{m.name}</div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-medium text-foreground">{m.name}</span>
+                            {isLocked ? (
+                              <Badge variant="destructive" className="px-1.5 py-0 text-[10px]">Đã khóa</Badge>
+                            ) : isPending ? (
+                              <Badge variant="outline" className="px-1.5 py-0 text-[10px] border-amber-500/50 text-amber-600 dark:text-amber-400">Chờ OTP</Badge>
+                            ) : (
+                              <Badge variant="success" className="px-1.5 py-0 text-[10px]">Hoạt động</Badge>
+                            )}
+                          </div>
                           <div className="text-xs text-muted-foreground">{m.code}{m.phone ? ` • ${m.phone}` : ''}</div>
                         </div>
                       </div>
@@ -1346,17 +1807,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <Eye className="size-4" /> Chi Tiết
                         </Button>
                         <Button
-                          variant={m.status === 'active' ? 'ghost' : 'outline'}
+                          variant={isLocked ? 'outline' : 'ghost'}
                           size="sm"
-                          className={m.status === 'active' ? 'text-destructive hover:text-destructive' : 'text-success'}
-                          onClick={() => handleToggleMemberStatus(m.id, m.status)}
+                          disabled={isPending}
+                          title={isPending ? 'Hội viên chưa xác thực email OTP' : undefined}
+                          className={
+                            isPending
+                              ? 'text-muted-foreground'
+                              : isLocked
+                              ? 'text-success border-success/40 hover:text-success'
+                              : 'text-destructive hover:text-destructive'
+                          }
+                          onClick={() => handleToggleMemberStatus(m)}
                         >
-                          {m.status === 'active' ? 'Khóa' : 'Mở'}
+                          {isPending ? 'Chờ OTP' : isLocked ? 'Mở khóa' : 'Khóa'}
                         </Button>
                       </div>
                     </TableCell>
                   </TableRow>
-                  ))
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -1470,16 +1940,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             Lần cuối: {new Date(inspectingMember360.checkInHistory[0].checkInTime).toLocaleString('vi-VN')}
                           </div>
                         )}
-                        <div className="mt-3">
-                          <Button
-                            variant={inspectingMember.status === 'active' ? 'destructive' : 'default'}
-                            size="sm"
-                            onClick={() => {
-                              handleToggleMemberStatus(inspectingMember.id, inspectingMember.status);
-                              setInspectingMember(null);
-                            }}
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant={
+                              isMemberAccountLocked(inspectingMember.accountStatus)
+                                ? 'destructive'
+                                : isMemberAccountPending(inspectingMember.accountStatus)
+                                ? 'outline'
+                                : 'success'
+                            }
                           >
-                            {inspectingMember.status === 'active' ? 'Khóa Tài Khoản Hội Viên' : 'Kích Hoạt Tài Khoản'}
+                            {isMemberAccountLocked(inspectingMember.accountStatus)
+                              ? 'Tài khoản đang khóa'
+                              : isMemberAccountPending(inspectingMember.accountStatus)
+                              ? 'Chờ xác thực OTP'
+                              : 'Đang hoạt động'}
+                          </Badge>
+                          <Button
+                            variant={isMemberAccountLocked(inspectingMember.accountStatus) ? 'default' : 'destructive'}
+                            size="sm"
+                            disabled={isMemberAccountPending(inspectingMember.accountStatus)}
+                            onClick={() => handleToggleMemberStatus(inspectingMember)}
+                          >
+                            {isMemberAccountPending(inspectingMember.accountStatus)
+                              ? 'Chờ xác thực OTP'
+                              : isMemberAccountLocked(inspectingMember.accountStatus)
+                              ? 'Mở Khóa Tài Khoản'
+                              : 'Khóa Tài Khoản Hội Viên'}
                           </Button>
                         </div>
                       </div>
@@ -1547,6 +2034,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Member Lock / Unlock Dialog */}
+      <Dialog open={!!confirmToggleMember} onOpenChange={(open) => { if (!open && !isTogglingMemberStatus) setConfirmToggleMember(null); }}>
+        <DialogContent className="max-w-md">
+          {confirmToggleMember && (() => {
+            const willUnlock = isMemberAccountLocked(confirmToggleMember.accountStatus);
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Lock className={`size-5 ${willUnlock ? 'text-success' : 'text-destructive'}`} />
+                    {willUnlock ? 'Xác nhận mở khóa hội viên' : 'Xác nhận khóa tài khoản hội viên'}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {willUnlock
+                      ? `Bạn có chắc muốn mở khóa tài khoản của ${confirmToggleMember.name} (${confirmToggleMember.code})? Hội viên sẽ có thể đăng nhập và check-in trở lại.`
+                      : `Bạn có chắc muốn khóa tài khoản của ${confirmToggleMember.name} (${confirmToggleMember.code})?`}
+                  </DialogDescription>
+                </DialogHeader>
+                {!willUnlock && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="size-4" />
+                    <AlertTitle className="text-xs font-bold">Hiệu lực ngay lập tức</AlertTitle>
+                    <AlertDescription className="text-xs">
+                      Hội viên sẽ bị đăng xuất khỏi phiên hiện tại, không thể đăng nhập lại và bị chặn check-in (cả QR lẫn thủ công tại quầy).
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <DialogFooter>
+                  <Button variant="outline" disabled={isTogglingMemberStatus} onClick={() => setConfirmToggleMember(null)}>
+                    Hủy
+                  </Button>
+                  <Button
+                    variant={willUnlock ? 'default' : 'destructive'}
+                    disabled={isTogglingMemberStatus}
+                    onClick={executeToggleMemberStatus}
+                  >
+                    {isTogglingMemberStatus && <Loader2 className="size-4 animate-spin" />}
+                    {willUnlock ? 'Xác nhận mở khóa' : 'Xác nhận khóa'}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -1737,7 +2270,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {coaches.map(c => (
+              {coaches.map(c => {
+                const isUserLocked = Boolean(c.userAccountStatus && c.userAccountStatus !== 'ACTIVE');
+                return (
                 <div key={c.id} className="flex flex-col justify-between rounded-xl border bg-card p-4 shadow-sm">
                   <div>
                     <div className="mb-4 flex items-start gap-3">
@@ -1749,9 +2284,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-foreground">{c.name}</span>
                           <Badge variant={rankVariant(c.rank)}>{c.rank.toUpperCase()}</Badge>
-                          <Badge variant={c.isAcceptingBookings ? "success" : "secondary"} className="text-[10px]">
-                            {c.isAcceptingBookings ? "ACTIVE" : "OFF"}
-                          </Badge>
+                          {isUserLocked ? (
+                            <Badge variant="destructive" className="text-[10px]">TK BỊ KHÓA</Badge>
+                          ) : (
+                            <Badge variant={c.isAcceptingBookings ? "success" : "secondary"} className="text-[10px]">
+                              {c.isAcceptingBookings ? "ACTIVE" : "OFF"}
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground">{c.code} • {c.phone}</div>
                       </div>
@@ -1797,14 +2336,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <Button
                       variant={c.isAcceptingBookings ? "ghost" : "outline"}
                       size="sm"
-                      className={c.isAcceptingBookings ? "text-destructive hover:text-destructive" : "text-success"}
+                      disabled={isUserLocked && !c.isAcceptingBookings}
+                      title={isUserLocked ? 'Tài khoản HLV đang bị khóa ở cấp hệ thống' : undefined}
+                      className={
+                        isUserLocked && !c.isAcceptingBookings
+                          ? 'text-muted-foreground'
+                          : c.isAcceptingBookings
+                          ? 'text-destructive hover:text-destructive'
+                          : 'text-success'
+                      }
                       onClick={() => handleToggleCoachStatus(c)}
                     >
                       {c.isAcceptingBookings ? "Tạm Ngưng" : "Kích Hoạt"}
                     </Button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -1844,23 +2392,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <Field label="Đơn Giá Dạy Lẻ 1 Buổi (VNĐ) *">
                   <Input
                     type="number"
-                    step="50000"
+                    min={0}
                     required
                     placeholder="250000"
-                    value={newHourlyRate === 0 ? '' : newHourlyRate}
-                    onChange={(e) => setNewHourlyRate(e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0)}
+                    value={newHourlyRate}
+                    onChange={(e) => setNewHourlyRate(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
                   />
                 </Field>
 
-                <Field label="Tỷ Lệ Hoa Hồng Thực Nhận (%)">
+                <Field label="Tỷ Lệ Hoa Hồng Thực Nhận (% — từ 0 đến 100)">
                   <Input
                     type="number"
-                    min="30"
-                    max="80"
+                    min={0}
+                    max={100}
                     required
                     placeholder="50"
-                    value={newCommission === 0 ? '' : newCommission}
-                    onChange={(e) => setNewCommission(e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0)}
+                    value={newCommission}
+                    onChange={(e) => setNewCommission(e.target.value === '' ? '' : Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)))}
                   />
                 </Field>
               </div>
@@ -1905,7 +2453,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <Loader2 className="size-5 animate-spin" />
                     Đang kiểm tra học viên và lịch dạy của HLV...
                   </div>
-                ) : deactivationCheck ? (
+                ) : !deactivationCheck ? (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="size-4" />
+                    <AlertTitle>Không tải được dữ liệu kiểm tra</AlertTitle>
+                    <AlertDescription>
+                      {deactivationError || 'Không thể kiểm tra học viên và lịch dạy của HLV lúc này. Vui lòng thử lại.'}
+                    </AlertDescription>
+                  </Alert>
+                ) : (
                   <>
                     {/* 3 Clean Summary KPI Cards */}
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -1919,15 +2475,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <Users className={`size-6 opacity-70 ${deactivationCheck.summary.activePtStudentCount > 0 ? 'text-destructive' : 'text-emerald-600'}`} />
                       </div>
 
-                      <div className={`flex items-center justify-between rounded-xl border px-4 py-3.5 ${(deactivationCheck.summary.upcomingPtBookingCount + deactivationCheck.summary.pendingMakeupCount) > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-emerald-200 bg-emerald-50/70'}`}>
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground">Lịch dạy PT chưa hoàn thành</p>
-                          <p className={`mt-1 text-2xl font-bold tracking-tight ${(deactivationCheck.summary.upcomingPtBookingCount + deactivationCheck.summary.pendingMakeupCount) > 0 ? 'text-destructive' : 'text-emerald-700'}`}>
-                            {deactivationCheck.summary.upcomingPtBookingCount} buổi
-                          </p>
-                        </div>
-                        <Calendar className={`size-6 opacity-70 ${(deactivationCheck.summary.upcomingPtBookingCount + deactivationCheck.summary.pendingMakeupCount) > 0 ? 'text-destructive' : 'text-emerald-600'}`} />
-                      </div>
+                      {(() => {
+                        const ptPendingExtra =
+                          deactivationCheck.summary.pendingMakeupCount +
+                          (deactivationCheck.summary.pendingCoachChangeCount ?? 0) +
+                          (deactivationCheck.summary.pendingAttendanceReviewCount ?? 0);
+                        const hasPtObligation = deactivationCheck.summary.upcomingPtBookingCount > 0 || ptPendingExtra > 0;
+                        return (
+                          <div className={`flex items-center justify-between rounded-xl border px-4 py-3.5 ${hasPtObligation ? 'border-destructive/30 bg-destructive/5' : 'border-emerald-200 bg-emerald-50/70'}`}>
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground">Lịch dạy PT & yêu cầu chờ</p>
+                              <p className={`mt-1 text-2xl font-bold tracking-tight ${hasPtObligation ? 'text-destructive' : 'text-emerald-700'}`}>
+                                {deactivationCheck.summary.upcomingPtBookingCount} buổi
+                                {ptPendingExtra > 0 && (
+                                  <span className="ml-1.5 text-sm font-semibold">+{ptPendingExtra} chờ xử lý</span>
+                                )}
+                              </p>
+                            </div>
+                            <Calendar className={`size-6 opacity-70 ${hasPtObligation ? 'text-destructive' : 'text-emerald-600'}`} />
+                          </div>
+                        );
+                      })()}
 
                       <div className={`flex items-center justify-between rounded-xl border px-4 py-3.5 ${deactivationCheck.summary.upcomingGroupClassCount > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-emerald-200 bg-emerald-50/70'}`}>
                         <div>
@@ -2066,20 +2634,104 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <Badge variant="secondary">{deactivationCheck.upcomingGroupClasses.length} lớp</Badge>
                               </div>
                               <div className="divide-y">
-                                {deactivationCheck.upcomingGroupClasses.map((cls) => (
-                                  <div key={cls.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
-                                    <div className="min-w-0">
-                                      <div className="font-semibold text-foreground">{cls.className}</div>
-                                      <div className="mt-0.5 text-muted-foreground">
-                                        {new Date(cls.startTime).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}
-                                        {' - '}
-                                        {new Date(cls.endTime).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}
-                                        {' • '}
-                                        {new Date(cls.startTime).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit' })}
-                                        {cls.roomName ? ` • ${cls.roomName}` : ''}
+                                {deactivationCheck.upcomingGroupClasses.map((cls) => {
+                                  const otherActiveTrainers = activeGroupClassTrainers.filter(
+                                    (t) => t.userId !== deactivationCheck.coachUserId
+                                  );
+                                  const selectedTarget =
+                                    reassignTrainerBySchedule[cls.id] ?? otherActiveTrainers[0]?.userId ?? 0;
+                                  const isBusy = groupClassActionLoadingId === cls.id;
+                                  return (
+                                  <div key={cls.id} className="space-y-2 px-4 py-2.5 text-xs">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="font-semibold text-foreground">{cls.className}</div>
+                                        <div className="mt-0.5 text-muted-foreground">
+                                          {new Date(cls.startTime).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}
+                                          {' - '}
+                                          {new Date(cls.endTime).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}
+                                          {' • '}
+                                          {new Date(cls.startTime).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit' })}
+                                          {cls.roomName ? ` • ${cls.roomName}` : ''}
+                                        </div>
                                       </div>
+                                      <Badge variant="outline" className="shrink-0 text-[10px]">{cls.bookedCount}/{cls.capacity}</Badge>
                                     </div>
-                                    <Badge variant="outline" className="shrink-0 text-[10px]">{cls.bookedCount}/{cls.capacity}</Badge>
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      {otherActiveTrainers.length > 0 && (
+                                        <>
+                                          <Select
+                                            value={String(selectedTarget)}
+                                            onValueChange={(v) =>
+                                              setReassignTrainerBySchedule((prev) => ({ ...prev, [cls.id]: Number(v) }))
+                                            }
+                                            disabled={isBusy}
+                                          >
+                                            <SelectTrigger size="sm" className="h-7 flex-1 min-w-[140px] text-xs">
+                                              <SelectValue placeholder="Chọn HLV thay" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {otherActiveTrainers.map((t) => (
+                                                <SelectItem key={t.userId} value={String(t.userId)}>
+                                                  {t.user?.fullName || `HLV #${t.userId}`}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 text-xs"
+                                            disabled={isBusy || !selectedTarget}
+                                            onClick={() => void handleReassignGroupClassSchedule(cls.id, selectedTarget)}
+                                          >
+                                            {isBusy ? <Loader2 className="size-3 animate-spin" /> : 'Đổi HLV'}
+                                          </Button>
+                                        </>
+                                      )}
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 text-xs text-destructive hover:text-destructive"
+                                        disabled={isBusy}
+                                        onClick={() => void handleCancelGroupClassSchedule(cls.id)}
+                                      >
+                                        Hủy ca
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {(deactivationCheck.pendingCoachChangeRequests?.length > 0 ||
+                            deactivationCheck.pendingAttendanceReviews?.length > 0) && (
+                            <div className="rounded-xl border bg-card">
+                              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
+                                <h4 className="flex items-center gap-2 text-sm font-semibold">
+                                  <AlertCircle className="size-4 text-amber-600" />
+                                  Yêu cầu đổi HLV / điểm danh chờ chốt
+                                </h4>
+                                <Badge variant="secondary">
+                                  {(deactivationCheck.pendingCoachChangeRequests?.length || 0) +
+                                    (deactivationCheck.pendingAttendanceReviews?.length || 0)}
+                                </Badge>
+                              </div>
+                              <div className="divide-y">
+                                {(deactivationCheck.pendingCoachChangeRequests || []).map((req) => (
+                                  <div key={`cc-${req.id}`} className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
+                                    <span>Xin đổi sang HLV này: <strong>{req.memberName}</strong> ({req.level})</span>
+                                    <Badge variant="outline" className="text-[10px]">Chờ duyệt</Badge>
+                                  </div>
+                                ))}
+                                {(deactivationCheck.pendingAttendanceReviews || []).map((rev) => (
+                                  <div key={`ar-${rev.id}`} className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
+                                    <span>Buổi #{rev.bookingId} — <strong>{rev.memberName}</strong></span>
+                                    <Badge variant="outline" className="text-[10px]">Chờ điểm danh</Badge>
                                   </div>
                                 ))}
                               </div>
@@ -2088,10 +2740,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
                     )}
+                    {!deactivationCheck.canDeactivate && (
+                      <label className="flex items-start gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 size-4 accent-destructive cursor-pointer"
+                          checked={forceDeactivateCoach}
+                          onChange={(e) => setForceDeactivateCoach(e.target.checked)}
+                        />
+                        <span className="leading-relaxed text-foreground">
+                          <strong>Bỏ qua ràng buộc nghĩa vụ và tạm ngưng ngay</strong> (dùng khi HLV nghỉ đột xuất/vi phạm kỷ luật; học viên còn gói PT sẽ tự động được miễn phí đổi HLV).
+                        </span>
+                      </label>
+                    )}
                   </>
-                ) : null}
+                )}
 
-                {deactivationError && (
+                {deactivationCheck && deactivationError && (
                   <p role="alert" className="text-sm text-destructive">{deactivationError}</p>
                 )}
               </div>
@@ -2105,6 +2770,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     setDeactivatingCoach(null);
                     setDeactivationCheck(null);
                     setDeactivationError('');
+                    setForceDeactivateCoach(false);
                   }}
                 >
                   Đóng
@@ -2112,7 +2778,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <Button
                   type="button"
                   variant="destructive"
-                  disabled={deactivationLoading || deactivationSubmitting || !deactivationCheck?.canDeactivate}
+                  disabled={deactivationLoading || deactivationSubmitting || (!deactivationCheck?.canDeactivate && !forceDeactivateCoach)}
                   onClick={handleConfirmDeactivateCoach}
                 >
                   {deactivationSubmitting ? 'Đang xử lý...' : 'Xác nhận Tạm Ngưng HLV'}
@@ -2477,10 +3143,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <CardTitle>Quản Lý Cơ Sở Vật Chất & Thiết Bị Phòng Tập</CardTitle>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => setIsCreatingRoom(true)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditingRoomId(null);
+                      setRoomForm({ name: '', type: 'FITNESS', capacity: 30, isActive: true });
+                      setIsCreatingRoom(true);
+                    }}
+                  >
                     <Plus className="size-4" /> Thêm Phòng Mới
                   </Button>
-                  <Button onClick={() => setIsCreatingEquipment(true)}>
+                  <Button
+                    disabled={rooms.length === 0}
+                    title={rooms.length === 0 ? 'Vui lòng tạo phòng tập trước khi thêm thiết bị' : undefined}
+                    onClick={() => {
+                      setEditingEquipmentId(null);
+                      setEquipmentForm({ name: '', code: '', roomId: rooms[0]?.id ?? 0, status: 'AVAILABLE', note: '' });
+                      setIsCreatingEquipment(true);
+                    }}
+                  >
                     <Plus className="size-4" /> Thêm Thiết Bị
                   </Button>
                 </div>
@@ -2497,7 +3178,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="grid gap-6">
                   {rooms.map(room => (
                     <div key={room.id} className="p-4 rounded-lg border bg-card">
-                      <div className="flex justify-between items-center mb-3">
+                      <div className="flex flex-wrap justify-between items-center gap-3 mb-3">
                         <div className="flex items-center gap-3">
                           <div className="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
                             #{room.id}
@@ -2507,9 +3188,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="text-xs text-muted-foreground">Loại: {room.type} • Sức chứa: {room.capacity} người</div>
                           </div>
                         </div>
-                        <Badge variant={room.isActive !== false ? "success" : "secondary"}>
-                          {room.isActive !== false ? "ĐANG HOẠT ĐỘNG" : "TẠM NGƯNG"}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={room.isActive !== false ? "success" : "secondary"}>
+                            {room.isActive !== false ? "ĐANG HOẠT ĐỘNG" : "TẠM NGƯNG"}
+                          </Badge>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              setEditingRoomId(room.id);
+                              setRoomForm({
+                                name: room.name,
+                                type: room.type,
+                                capacity: room.capacity,
+                                isActive: room.isActive !== false,
+                              });
+                              setIsCreatingRoom(true);
+                            }}
+                          >
+                            <Edit3 className="size-3" /> Sửa
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className={`h-7 text-xs ${room.isActive !== false ? 'text-destructive hover:text-destructive' : 'text-success hover:text-success'}`}
+                            onClick={() => void handleToggleRoomActive(room)}
+                          >
+                            {room.isActive !== false ? 'Tạm ngưng' : 'Kích hoạt'}
+                          </Button>
+                        </div>
                       </div>
 
                       <div className="mt-4 pt-3 border-t">
@@ -2524,44 +3234,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                             {room.equipments.map(eq => {
                               const isAvailable = eq.status === 'AVAILABLE';
-                              const isMaint = eq.status === 'MAINTENANCE';
+                              const isMaint = eq.status === 'MAINTENANCE' || eq.status === 'UNDER_MAINTENANCE';
+                              const normalizedSelectValue = eq.status === 'UNDER_MAINTENANCE' ? 'MAINTENANCE' : eq.status;
+                              const badgeLabel = isAvailable ? 'SẴN SÀNG' : isMaint ? 'BẢO TRÌ' : 'HỎNG HÓC';
                               return (
                                 <div key={eq.id} className="p-3 rounded-md border bg-muted/30 flex flex-col justify-between text-xs">
                                   <div>
-                                    <div className="flex justify-between items-start mb-1">
+                                    <div className="flex justify-between items-start gap-2 mb-1">
                                       <strong className="text-foreground">{eq.name}</strong>
                                       <Badge variant={isAvailable ? "success" : isMaint ? "warning" : "destructive"}>
-                                        {eq.status}
+                                        {badgeLabel}
                                       </Badge>
                                     </div>
                                     <div className="text-muted-foreground text-[11px] mb-1">Mã: {eq.code}</div>
-                                    {eq.note && <div className="text-muted-foreground text-[11px] italic">Ghi chú: {eq.note}</div>}
+                                    <div className="text-muted-foreground text-[11px] italic">
+                                      Ghi chú: {eq.note || 'Chưa có ghi chú'}
+                                    </div>
                                   </div>
 
-                                  <div className="flex justify-between items-center mt-3 pt-2 border-t border-border/50">
+                                  <div className="flex justify-between items-center gap-1.5 mt-3 pt-2 border-t border-border/50">
                                     <Select
-                                      defaultValue={eq.status}
+                                      value={normalizedSelectValue}
                                       onValueChange={(val) => handleUpdateEquipmentStatus(eq.id, val as any)}
                                     >
                                       <SelectTrigger className="h-7 text-[11px] w-28">
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="AVAILABLE">AVAILABLE</SelectItem>
+                                        <SelectItem value="AVAILABLE">SẴN SÀNG</SelectItem>
                                         <SelectItem value="MAINTENANCE">BẢO TRÌ</SelectItem>
                                         <SelectItem value="BROKEN">HỎNG HÓC</SelectItem>
                                       </SelectContent>
                                     </Select>
 
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-7 px-2 text-destructive hover:text-destructive"
-                                      onClick={() => handleDeleteEquipment(eq.id)}
-                                      title="Xóa thiết bị"
-                                    >
-                                      <Trash2 className="size-3.5" />
-                                    </Button>
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2 text-primary hover:text-primary"
+                                        onClick={() => {
+                                          setEditingEquipmentId(eq.id);
+                                          setEquipmentForm({
+                                            name: eq.name,
+                                            code: eq.code,
+                                            roomId: eq.roomId || room.id,
+                                            status: normalizedSelectValue,
+                                            note: eq.note || '',
+                                          });
+                                          setIsCreatingEquipment(true);
+                                        }}
+                                        title="Sửa thông tin & ghi chú"
+                                      >
+                                        <Edit3 className="size-3.5" />
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2 text-destructive hover:text-destructive"
+                                        onClick={() => handleDeleteEquipment(eq.id)}
+                                        title="Xóa thiết bị"
+                                      >
+                                        <Trash2 className="size-3.5" />
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
                               );
@@ -2630,15 +3367,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               size="sm"
                               variant="outline"
                               className="h-7 text-xs gap-1"
-                              onClick={() => {
-                                setScheduleForm(prev => ({
-                                  ...prev,
-                                  classId: groupClass.id,
-                                  trainerId: groupClassTrainers[0]?.userId ?? 0,
-                                  roomId: rooms[0]?.id ?? 0
-                                }));
-                                setIsCreatingSchedule(true);
-                              }}
+                              onClick={() => openCreateScheduleModal(groupClass.id)}
                             >
                               <Plus className="size-3" /> Mở ca lịch
                             </Button>
@@ -2658,18 +3387,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <CardTitle>Quản Lý Lớp Học Nhóm & Lên Lịch Ca Tập</CardTitle>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => setIsCreatingClass(true)}>
-                    <Plus className="size-4" /> Tạo Lớp Học Mới
-                  </Button>
-                  <Button onClick={() => {
-                    setScheduleForm(prev => ({
-                      ...prev,
-                      classId: prev.classId && groupClasses.some(c => c.id === prev.classId) ? prev.classId : (groupClasses[0]?.id ?? 0),
-                      trainerId: groupClassTrainers[0]?.userId ?? 0,
-                      roomId: rooms[0]?.id ?? 0
-                    }));
-                    setIsCreatingSchedule(true);
-                  }}>
+                  <Button onClick={() => openCreateScheduleModal()}>
                     <Plus className="size-4" /> Mở Ca Lịch Tập
                   </Button>
                 </div>
@@ -2689,7 +3407,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="text-center py-10 text-muted-foreground border border-dashed rounded-lg">
                   <Layers className="size-10 mx-auto text-primary mb-2 opacity-60" />
                   <p className="font-semibold text-foreground">Chưa có lịch ca tập nào trong hệ thống</p>
-                  <p className="text-xs mt-1">Bấm nút "Tạo Lớp Học Mới" hoặc "Mở Ca Lịch Tập" để bắt đầu thiết lập.</p>
+                  <p className="text-xs mt-1">Bấm nút "Mở Ca Lịch Tập" ở trên để bắt đầu lên lịch.</p>
                 </div>
               ) : (
                 <Table>
@@ -2701,12 +3419,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <TableHead>Khung Giờ</TableHead>
                       <TableHead>Chỗ Đã Đặt</TableHead>
                       <TableHead>Trạng Thái</TableHead>
+                      <TableHead className="text-right">Thao Tác</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {groupClassSchedules.map(sch => {
                       const startTimeStr = new Date(sch.startTime).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
                       const endTimeStr = new Date(sch.endTime).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                      const canManageSchedule = ['OPEN', 'FULL'].includes(sch.status) && new Date(sch.endTime) > new Date();
+                      const isRowBusy = groupClassActionLoadingId === sch.id;
                       return (
                         <TableRow key={sch.id}>
                           <TableCell className="font-bold text-foreground">
@@ -2727,9 +3448,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span className="font-bold text-primary">{sch.bookedCount || 0}</span> / {sch.capacity}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={sch.status === 'OPEN' ? 'success' : 'secondary'}>
+                            <Badge variant={sch.status === 'OPEN' ? 'success' : sch.status === 'CANCELLED' ? 'destructive' : 'secondary'}>
                               {sch.status}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {canManageSchedule ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs"
+                                  disabled={isRowBusy}
+                                  onClick={() => {
+                                    const fallbackTrainer = activeGroupClassTrainers.find((t) => t.userId !== sch.trainerId)?.userId ?? 0;
+                                    setEditingScheduleForReassign(sch);
+                                    setNextScheduleTrainerId(fallbackTrainer);
+                                  }}
+                                >
+                                  Đổi HLV
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-xs text-destructive hover:text-destructive"
+                                  disabled={isRowBusy}
+                                  onClick={() => void handleCancelGroupClassSchedule(sch.id)}
+                                >
+                                  Hủy ca
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -2742,13 +3495,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Create Room Dialog */}
-      <Dialog open={isCreatingRoom} onOpenChange={setIsCreatingRoom}>
+      {/* Create / Edit Room Dialog */}
+      <Dialog open={isCreatingRoom} onOpenChange={(open) => { setIsCreatingRoom(open); if (!open) setEditingRoomId(null); }}>
         <DialogContent className="max-w-md">
           <form onSubmit={handleSaveRoom}>
             <DialogHeader>
-              <DialogTitle>Thêm Phòng Tập Mới</DialogTitle>
-              <DialogDescription>Tạo phòng tập mới vào hệ thống cơ sở vật chất AURA Fitness.</DialogDescription>
+              <DialogTitle>{editingRoomId ? 'Chỉnh Sửa Phòng Tập' : 'Thêm Phòng Tập Mới'}</DialogTitle>
+              <DialogDescription>
+                {editingRoomId ? 'Cập nhật tên, loại không gian, sức chứa hoặc trạng thái hoạt động.' : 'Tạo phòng tập mới vào hệ thống cơ sở vật chất AURA Fitness.'}
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-3">
               <Field label="Tên Phòng *">
@@ -2781,22 +3536,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value === '' ? ('' as any) : parseInt(e.target.value) || 0 })}
                 />
               </Field>
+              {editingRoomId && (
+                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={roomForm.isActive}
+                    onChange={(e) => setRoomForm({ ...roomForm, isActive: e.target.checked })}
+                  />
+                  <span>Phòng đang hoạt động (cho phép mở lịch lớp nhóm)</span>
+                </label>
+              )}
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCreatingRoom(false)}>Hủy Bỏ</Button>
-              <Button type="submit">Lưu Phòng Tập</Button>
+              <Button type="button" variant="outline" onClick={() => { setIsCreatingRoom(false); setEditingRoomId(null); }}>Hủy Bỏ</Button>
+              <Button type="submit">{editingRoomId ? 'Lưu Thay Đổi' : 'Lưu Phòng Tập'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Create Equipment Dialog */}
-      <Dialog open={isCreatingEquipment} onOpenChange={setIsCreatingEquipment}>
+      {/* Create / Edit Equipment Dialog */}
+      <Dialog open={isCreatingEquipment} onOpenChange={(open) => { setIsCreatingEquipment(open); if (!open) setEditingEquipmentId(null); }}>
         <DialogContent className="max-w-md">
           <form onSubmit={handleSaveEquipment}>
             <DialogHeader>
-              <DialogTitle>Thêm Thiết Bị Vào Phòng Tập</DialogTitle>
-              <DialogDescription>Ghi nhận máy tập mới hoặc tạ đơn vào danh mục quản lý.</DialogDescription>
+              <DialogTitle>{editingEquipmentId ? 'Cập Nhật Thiết Bị & Ghi Chú' : 'Thêm Thiết Bị Vào Phòng Tập'}</DialogTitle>
+              <DialogDescription>
+                {editingEquipmentId ? 'Chỉnh sửa tên, mã định danh, phòng đặt máy, trạng thái hoặc ghi chú bảo trì.' : 'Ghi nhận máy tập mới hoặc tạ đơn vào danh mục quản lý.'}
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-3">
               <Field label="Tên Thiết Bị *">
@@ -2817,10 +3585,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </Field>
               <Field label="Phòng Đặt Máy *">
                 <Select
-                  value={equipmentForm.roomId ? String(equipmentForm.roomId) : (rooms[0] ? String(rooms[0].id) : '1')}
+                  value={equipmentForm.roomId ? String(equipmentForm.roomId) : (rooms[0] ? String(rooms[0].id) : undefined)}
                   onValueChange={(v) => setEquipmentForm({ ...equipmentForm, roomId: parseInt(v) })}
+                  disabled={rooms.length === 0}
                 >
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Chọn phòng tập" /></SelectTrigger>
                   <SelectContent>
                     {rooms.map(r => (
                       <SelectItem key={r.id} value={String(r.id)}>{r.name} (#{r.id})</SelectItem>
@@ -2828,17 +3597,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Ghi Chú Kỹ Thuật">
-                <Input
-                  placeholder="VD: Trọng lượng tạ tối đa 120kg, bảo trì định kỳ 6 tháng"
+              {editingEquipmentId && (
+                <Field label="Trạng Thái Hiện Tại">
+                  <Select
+                    value={equipmentForm.status}
+                    onValueChange={(v) => setEquipmentForm({ ...equipmentForm, status: v })}
+                  >
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AVAILABLE">SẴN SÀNG</SelectItem>
+                      <SelectItem value="MAINTENANCE">BẢO TRÌ</SelectItem>
+                      <SelectItem value="BROKEN">HỎNG HÓC</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+              <Field label="Ghi Chú Kỹ Thuật / Tình Trạng">
+                <Textarea
+                  rows={2}
+                  placeholder="VD: Trọng lượng tạ tối đa 120kg, hoặc ghi rõ lỗi hỏng cần sửa..."
                   value={equipmentForm.note}
                   onChange={(e) => setEquipmentForm({ ...equipmentForm, note: e.target.value })}
                 />
               </Field>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCreatingEquipment(false)}>Hủy Bỏ</Button>
-              <Button type="submit">Thêm Thiết Bị</Button>
+              <Button type="button" variant="outline" onClick={() => { setIsCreatingEquipment(false); setEditingEquipmentId(null); }}>Hủy Bỏ</Button>
+              <Button type="submit" disabled={rooms.length === 0}>{editingEquipmentId ? 'Lưu Thiết Bị' : 'Thêm Thiết Bị'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -2890,7 +3675,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* Create Schedule Dialog */}
       <Dialog open={isCreatingSchedule} onOpenChange={setIsCreatingSchedule}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSaveSchedule}>
             <DialogHeader>
               <DialogTitle>Mở Lịch Ca Tập Lớp Học Nhóm</DialogTitle>
@@ -2908,7 +3693,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <SelectContent>
                     {groupClasses.map(groupClass => (
                       <SelectItem key={groupClass.id} value={String(groupClass.id)}>
-                        {groupClass.name} (#{groupClass.id})
+                        {groupClass.name} ({groupClass.durationMin} phút)
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2916,12 +3701,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </Field>
               <Field label="Huấn Luyện Viên Phụ Trách *">
                 <Select
-                  value={String(scheduleForm.trainerId)}
+                  value={scheduleForm.trainerId ? String(scheduleForm.trainerId) : undefined}
                   onValueChange={(v) => setScheduleForm({ ...scheduleForm, trainerId: parseInt(v) })}
+                  disabled={activeGroupClassTrainers.length === 0}
                 >
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={activeGroupClassTrainers.length === 0 ? 'Không có HLV đang hoạt động' : 'Chọn HLV phụ trách'} />
+                  </SelectTrigger>
                   <SelectContent>
-                    {groupClassTrainers.map(trainer => (
+                    {activeGroupClassTrainers.map(trainer => (
                       <SelectItem key={trainer.userId} value={String(trainer.userId)}>
                         {trainer.user?.fullName || `HLV #${trainer.userId}`} (User #{trainer.userId})
                       </SelectItem>
@@ -2930,36 +3718,207 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </Select>
               </Field>
               <Field label="Phòng Tập">
-                <Select
-                  value={scheduleForm.roomId ? String(scheduleForm.roomId) : (rooms[0] ? String(rooms[0].id) : '1')}
-                  onValueChange={(v) => setScheduleForm({ ...scheduleForm, roomId: parseInt(v) })}
-                >
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {rooms.map(r => (
-                      <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {(() => {
+                  const activeRooms = rooms.filter((r) => r.isActive !== false);
+                  return (
+                    <Select
+                      value={scheduleForm.roomId ? String(scheduleForm.roomId) : (activeRooms[0] ? String(activeRooms[0].id) : undefined)}
+                      onValueChange={(v) => setScheduleForm({ ...scheduleForm, roomId: parseInt(v) })}
+                      disabled={activeRooms.length === 0}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={activeRooms.length === 0 ? 'Không có phòng đang hoạt động' : 'Chọn phòng tập'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeRooms.map(r => (
+                          <SelectItem key={r.id} value={String(r.id)}>{r.name} (Tối đa {r.capacity} người)</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  );
+                })()}
               </Field>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <Field label="Giờ Bắt Đầu *">
-                  <Input
-                    type="datetime-local"
-                    required
-                    value={scheduleForm.startTime}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, startTime: e.target.value })}
-                  />
-                </Field>
-                <Field label="Giờ Kết Thúc *">
-                  <Input
-                    type="datetime-local"
-                    required
-                    value={scheduleForm.endTime}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, endTime: e.target.value })}
-                  />
-                </Field>
-              </div>
+              {(() => {
+                const selectedClass = groupClasses.find(c => c.id === Number(scheduleForm.classId));
+                const durationMin = selectedClass?.durationMin || 60;
+                const autoEndTime = scheduleForm.startTime
+                  ? computeScheduleEndLocal(scheduleForm.startTime, durationMin)
+                  : '';
+                const firstStartDt = parseGymDateTimeLocal(scheduleForm.startTime);
+                const firstWeekday = Number.isNaN(firstStartDt.getTime()) ? null : getGymIsoWeekday(firstStartDt);
+                const previewSlots = buildSchedulePreviewSlots(
+                  scheduleForm.startTime,
+                  durationMin,
+                  scheduleForm.repeatMode,
+                  scheduleForm.repeatCount,
+                  scheduleForm.repeatDays,
+                );
+                return (
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        <Field label="Giờ Bắt Đầu (Buổi đầu) *">
+                          <Input
+                            type="datetime-local"
+                            required
+                            min={toGymDateTimeLocal(new Date())}
+                            value={scheduleForm.startTime}
+                            onChange={(e) => {
+                              const nextStart = e.target.value;
+                              const nextDt = parseGymDateTimeLocal(nextStart);
+                              const nextWeekday = Number.isNaN(nextDt.getTime()) ? null : getGymIsoWeekday(nextDt);
+                              setScheduleForm(prev => ({
+                                ...prev,
+                                startTime: nextStart,
+                                repeatDays:
+                                  nextWeekday && !prev.repeatDays.includes(nextWeekday)
+                                    ? [...prev.repeatDays, nextWeekday].sort((a, b) => a - b)
+                                    : prev.repeatDays,
+                              }));
+                            }}
+                          />
+                        </Field>
+                        <Field label="Giờ Kết Thúc (Tự động)">
+                          <Input
+                            type="datetime-local"
+                            readOnly
+                            disabled
+                            value={autoEndTime}
+                          />
+                        </Field>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Tự động tính theo thời lượng lớp ({durationMin} phút) · Giờ phòng tập (UTC+7).
+                      </p>
+                    </div>
+
+                    <div className="space-y-2.5 rounded-lg border bg-muted/20 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-foreground">Lặp Lại Nhiều Buổi</span>
+                        <div className="inline-flex rounded-md border bg-background p-0.5">
+                          {(
+                            [
+                              { id: 'SINGLE', label: '1 buổi' },
+                              { id: 'DAILY', label: 'Hằng ngày' },
+                              { id: 'WEEKLY', label: 'Hằng tuần' },
+                            ] as const
+                          ).map(mode => (
+                            <button
+                              key={mode.id}
+                              type="button"
+                              onClick={() =>
+                                setScheduleForm(prev => ({
+                                  ...prev,
+                                  repeatMode: mode.id,
+                                  repeatCount:
+                                    mode.id === 'SINGLE'
+                                      ? 1
+                                      : prev.repeatCount < 2
+                                      ? 4
+                                      : prev.repeatCount,
+                                  repeatDays:
+                                    mode.id === 'WEEKLY' && firstWeekday && !prev.repeatDays.includes(firstWeekday)
+                                      ? [...prev.repeatDays, firstWeekday].sort((a, b) => a - b)
+                                      : prev.repeatDays,
+                                }))
+                              }
+                              className={`px-2.5 py-1 text-xs font-medium rounded-sm transition-colors ${
+                                scheduleForm.repeatMode === mode.id
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              {mode.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {scheduleForm.repeatMode !== 'SINGLE' && (
+                        <div className="space-y-2.5 pt-1">
+                          <div className="grid sm:grid-cols-2 gap-3 items-end">
+                            <Field label="Tổng Số Buổi Cần Mở (2–30) *">
+                              <Input
+                                type="number"
+                                min={2}
+                                max={30}
+                                required
+                                value={scheduleForm.repeatCount === 0 ? '' : scheduleForm.repeatCount}
+                                onChange={(e) =>
+                                  setScheduleForm(prev => ({
+                                    ...prev,
+                                    repeatCount: e.target.value === '' ? 0 : Math.min(30, parseInt(e.target.value, 10) || 0),
+                                  }))
+                                }
+                              />
+                            </Field>
+                            {scheduleForm.repeatMode === 'WEEKLY' && (
+                              <div className="space-y-1">
+                                <span className="text-[11px] font-medium text-muted-foreground block">
+                                  Các thứ trong tuần
+                                </span>
+                                <div className="flex flex-wrap gap-1">
+                                  {VN_WEEKDAY_LABELS.map(item => {
+                                    const isFirstDay = firstWeekday === item.day;
+                                    const active = isFirstDay || scheduleForm.repeatDays.includes(item.day);
+                                    return (
+                                      <button
+                                        key={item.day}
+                                        type="button"
+                                        disabled={isFirstDay}
+                                        title={isFirstDay ? 'Ngày bắt đầu luôn được chọn' : undefined}
+                                        onClick={() => {
+                                          if (isFirstDay) return;
+                                          setScheduleForm(prev => ({
+                                            ...prev,
+                                            repeatDays: prev.repeatDays.includes(item.day)
+                                              ? prev.repeatDays.filter(d => d !== item.day)
+                                              : [...prev.repeatDays, item.day].sort((a, b) => a - b),
+                                          }));
+                                        }}
+                                        className={`px-2 py-1 text-[11px] font-semibold rounded border transition-colors ${
+                                          active
+                                            ? 'bg-primary text-primary-foreground border-primary'
+                                            : 'bg-background text-muted-foreground border-input hover:text-foreground'
+                                        } ${isFirstDay ? 'opacity-80 cursor-not-allowed' : ''}`}
+                                      >
+                                        {item.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {previewSlots.length > 0 && (
+                            <div className="rounded border bg-background/80 px-2.5 py-2 space-y-1">
+                              <p className="text-[11px] font-semibold text-foreground">
+                                Xem trước {previewSlots.length} ca sẽ tạo:
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {previewSlots.slice(0, 6).map((slot, idx) => (
+                                  <Badge key={idx} variant="secondary" className="text-[10px] font-normal">
+                                    #{idx + 1}:{' '}
+                                    {slot.start.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', weekday: 'short', day: '2-digit', month: '2-digit' })}{' '}
+                                    ({slot.start.toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}–
+                                    {slot.end.toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })})
+                                  </Badge>
+                                ))}
+                                {previewSlots.length > 6 && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    +{previewSlots.length - 6} buổi nữa
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               <Field label="Sức Chứa Giới Hạn (Chỗ Ngồi) *">
                 <Input
                   type="number"
@@ -2974,9 +3933,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsCreatingSchedule(false)}>Hủy Bỏ</Button>
-              <Button type="submit" disabled={groupClasses.length === 0}>Lên Lịch Ngay</Button>
+              <Button type="submit" disabled={groupClasses.length === 0 || activeGroupClassTrainers.length === 0 || !scheduleForm.trainerId}>
+                {scheduleForm.repeatMode !== 'SINGLE' && scheduleForm.repeatCount > 1
+                  ? `Tạo ${scheduleForm.repeatCount} Ca Lịch`
+                  : 'Lên Lịch Ngay'}
+              </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reassign Group Class Trainer Dialog */}
+      <Dialog open={!!editingScheduleForReassign} onOpenChange={(open) => { if (!open && groupClassActionLoadingId === null) setEditingScheduleForReassign(null); }}>
+        <DialogContent className="max-w-md">
+          {editingScheduleForReassign && (() => {
+            const candidates = activeGroupClassTrainers.filter((t) => t.userId !== editingScheduleForReassign.trainerId);
+            const busy = groupClassActionLoadingId === editingScheduleForReassign.id;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Đổi HLV Phụ Trách Lớp Nhóm</DialogTitle>
+                  <DialogDescription>
+                    {editingScheduleForReassign.groupClass?.name || `Lớp #${editingScheduleForReassign.classId}`} • Hiện tại: {editingScheduleForReassign.trainer?.fullName || 'Coach'}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-2">
+                  <Field label="Chọn HLV thay thế đang hoạt động">
+                    <Select
+                      value={nextScheduleTrainerId ? String(nextScheduleTrainerId) : undefined}
+                      onValueChange={(v) => setNextScheduleTrainerId(Number(v))}
+                      disabled={candidates.length === 0 || busy}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={candidates.length === 0 ? 'Không còn HLV hoạt động khác' : 'Chọn HLV mới'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {candidates.map((t) => (
+                          <SelectItem key={t.userId} value={String(t.userId)}>
+                            {t.user?.fullName || `HLV #${t.userId}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" disabled={busy} onClick={() => setEditingScheduleForReassign(null)}>
+                    Hủy
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={busy || !nextScheduleTrainerId || candidates.length === 0}
+                    onClick={() => void handleReassignGroupClassSchedule(editingScheduleForReassign.id, nextScheduleTrainerId)}
+                  >
+                    {busy && <Loader2 className="size-4 animate-spin" />}
+                    Xác nhận đổi HLV
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -3010,25 +4026,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Nhật Ký Kiểm Toán (Audit Trail)</CardTitle>
+            <CardHeader className="gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle>Nhật Ký Kiểm Toán (Audit Trail)</CardTitle>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isLoadingAuditLogs}
+                  onClick={() => void loadAuditLogs()}
+                >
+                  {isLoadingAuditLogs ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                  Làm mới
+                </Button>
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void loadAuditLogs(auditSearchQuery);
+                }}
+                className="flex gap-2"
+              >
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-9 h-8 text-xs"
+                    placeholder="Tìm theo action (VD: MEMBER_LOCKED), tên người thao tác hoặc đối tượng..."
+                    value={auditSearchQuery}
+                    onChange={(e) => setAuditSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Button type="submit" size="sm" variant="secondary" className="h-8 text-xs">
+                  Tìm
+                </Button>
+              </form>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-2 max-h-[460px] overflow-y-auto pr-1">
-                {auditLogs.map(log => (
-                  <div key={log.id} className="p-3 rounded-lg border bg-muted/40 text-xs">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="font-semibold text-foreground">{log.actorName}</span>
-                      <Badge variant="outline" className="text-[10px]">{log.actorRole.toUpperCase()}</Badge>
-                    </div>
-                    <div className="font-medium text-primary">{log.action}: {log.target}</div>
-                    <div className="text-muted-foreground mt-0.5">{log.details}</div>
-                    <div className="text-muted-foreground text-[10px] mt-1 text-right">
-                      {new Date(log.timestamp).toLocaleString('vi-VN')}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {auditLogError ? (
+                <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-xs text-destructive">
+                  {auditLogError}
+                </div>
+              ) : isLoadingAuditLogs && auditLogs.length === 0 ? (
+                <div className="py-8 text-center text-xs text-muted-foreground">
+                  <Loader2 className="size-5 animate-spin mx-auto mb-2 text-primary" />
+                  Đang tải nhật ký kiểm toán...
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="py-8 text-center text-xs text-muted-foreground rounded-lg border border-dashed">
+                  Chưa có bản ghi nhật ký kiểm toán nào phù hợp.
+                </div>
+              ) : (
+                <div className="grid gap-2 max-h-[460px] overflow-y-auto pr-1 pb-12">
+                  {auditLogs.map(log => {
+                    const isLockAction = log.action.includes('LOCKED');
+                    const isUnlockAction = log.action.includes('UNLOCKED') || log.action.includes('ACTIVATED');
+                    const { actionLabel, target, details } = formatAuditDisplay(log);
+                    const compactTime = new Date(log.timestamp).toLocaleString('vi-VN', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                    });
+                    return (
+                      <div key={log.id} className="px-3 py-2.5 rounded-lg border bg-muted/40 text-xs space-y-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                            <Badge
+                              variant={isLockAction ? 'destructive' : isUnlockAction ? 'success' : 'secondary'}
+                              className="px-1.5 py-0 text-[10px] font-semibold"
+                            >
+                              {actionLabel}
+                            </Badge>
+                            <span className="font-semibold text-foreground truncate">{target}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 text-[11px] text-muted-foreground">
+                            <span>{log.actorName}</span>
+                            <Badge variant="outline" className="px-1 py-0 text-[9px]">{String(log.actorRole).toUpperCase()}</Badge>
+                            <span title={new Date(log.timestamp).toLocaleString('vi-VN')}>• {compactTime}</span>
+                          </div>
+                        </div>
+                        <div className="text-muted-foreground break-words whitespace-pre-line leading-relaxed pt-0.5">{details}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -3,6 +3,7 @@ import { api, ApiPackage, ApiGroupClassSchedule, ApiCoachProfile, tokenStorage }
 import type { MemberScheduleEvent } from '../../services/api/member.api';
 import { soundEffects } from '../../services/audioService';
 import { WebcamQrScanner } from '../../components/common/WebcamQrScanner';
+import { toast } from '../../components/common/ToastNotification';
 
 import {
   QrCode,
@@ -123,13 +124,6 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
     setBookingStatusError(false);
 
     const loadSchedules = async () => {
-      if (!api.auth.getToken()) {
-        if (active) {
-          setScheduleError('Vui lòng đăng nhập để xem lịch lớp học nhóm.');
-          setIsLoadingSchedules(false);
-        }
-        return;
-      }
       try {
         const schedules = await api.groupClasses.getSchedules(selectedDate);
         if (active) setLiveSchedules(schedules || []);
@@ -143,8 +137,8 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
     const loadBookings = async () => {
       if (!currentUser || !api.auth.getToken()) return;
       try {
-        const dayStart = new Date(`${selectedDate}T00:00:00`);
-        const dayEnd = new Date(`${selectedDate}T23:59:59.999`);
+        const dayStart = new Date(`${selectedDate}T00:00:00+07:00`);
+        const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
         const bookings = await api.member.getMySchedule({
           fromDate: dayStart.toISOString(),
           toDate: dayEnd.toISOString(),
@@ -280,21 +274,31 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
   });
 
   const refreshSchedule = async () => {
-    const dayStart = new Date(`${selectedDate}T00:00:00`);
-    const dayEnd = new Date(`${selectedDate}T23:59:59.999`);
+    const dayStart = new Date(`${selectedDate}T00:00:00+07:00`);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
+    const hasToken = Boolean(api.auth.getToken());
     const [schedules, bookings] = await Promise.all([
       api.groupClasses.getSchedules(selectedDate),
-      api.member.getMySchedule({ fromDate: dayStart.toISOString(), toDate: dayEnd.toISOString(), type: 'GROUP' })
+      hasToken
+        ? api.member.getMySchedule({ fromDate: dayStart.toISOString(), toDate: dayEnd.toISOString(), type: 'GROUP' })
+        : Promise.resolve([] as MemberScheduleEvent[]),
     ]);
     setLiveSchedules(schedules || []);
     setMyGroupBookings(bookings.filter(item => item.bookingType === 'GROUP_CLASS'));
     setBookingStatusError(false);
   };
 
-  const bookSession = async (session: { scheduleId: number; title: string }) => {
+  const bookSession = async (session: {
+    scheduleId: number;
+    title: string;
+    startTime: string;
+    endTime: string;
+    room?: string;
+    coach?: string;
+  }) => {
     if (!api.auth.getToken()) {
       soundEffects.playErrorBeep();
-      alert('Vui lòng đăng nhập tài khoản để đặt chỗ tham gia lớp học nhóm!');
+      toast.warning('Vui lòng đăng nhập tài khoản để đặt chỗ tham gia lớp học nhóm!', 'Yêu cầu đăng nhập');
       onOpenLogin?.();
       return;
     }
@@ -306,16 +310,18 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
         scheduleId: session.scheduleId,
         bookingType: 'GROUP_CLASS',
         title: session.title,
-        startTime: '',
-        endTime: '',
+        startTime: session.startTime,
+        endTime: session.endTime,
+        location: session.room,
+        trainerName: session.coach,
         status: 'BOOKED'
       }]);
       soundEffects.playSuccessBeep();
-      alert(`Đặt chỗ thành công lớp "${session.title}"! Vui lòng có mặt trước giờ tập 10 phút.`);
+      toast.success(`Đặt chỗ thành công lớp "${session.title}"! Vui lòng có mặt trước giờ tập 10 phút.`);
       await refreshSchedule().catch(error => console.warn('Không làm mới được lịch lớp:', error));
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(`Không thể đặt chỗ: ${err.message || 'Lỗi hệ thống'}`);
+      toast.error(err.message || 'Không thể đặt chỗ tham gia lớp học.', 'Không thể đặt chỗ');
     } finally {
       setBookingLoadingId(null);
     }
@@ -329,11 +335,11 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
         ? { ...item, status: 'CANCELLED' }
         : item));
       soundEffects.playSuccessBeep();
-      alert(result.message);
+      toast.success(result.message);
       await refreshSchedule().catch(error => console.warn('Không làm mới được lịch lớp:', error));
     } catch (err: any) {
       soundEffects.playErrorBeep();
-      alert(err.message || 'Không thể cập nhật đăng ký lớp học.');
+      toast.error(err.message || 'Không thể cập nhật đăng ký lớp học.');
     } finally {
       setBookingLoadingId(null);
     }
@@ -348,11 +354,11 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
       const result = await api.groupClasses.checkIn(booking.id, qrToken);
       setMyGroupBookings(prev => prev.map(item => item.id === booking.id ? { ...item, status: 'CHECKED_IN' } : item));
       soundEffects.playSuccessBeep();
-      alert(result.message);
+      toast.success(result.message);
       await refreshSchedule();
     } catch (error: any) {
       soundEffects.playErrorBeep();
-      alert(error?.message || 'Không thể điểm danh lớp học bằng mã QR.');
+      toast.error(error?.message || 'Không thể điểm danh lớp học bằng mã QR.');
     } finally {
       setBookingLoadingId(null);
     }
@@ -1443,8 +1449,8 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
           ) : scheduleError ? (
             <div style={{ textAlign: 'center', padding: 48, color: '#FFFFFF' }}>
               <p>{scheduleError}</p>
-              <button className="btn-secondary" onClick={() => api.auth.getToken() ? setScheduleReloadKey(key => key + 1) : onOpenLogin?.()}>
-                {api.auth.getToken() ? 'Thử lại' : 'Đăng nhập'}
+              <button className="btn-secondary" onClick={() => setScheduleReloadKey(key => key + 1)}>
+                Thử lại
               </button>
             </div>
           ) : filteredClasses.length === 0 ? (

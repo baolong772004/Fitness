@@ -82,6 +82,7 @@ export async function request<T>(
         new CustomEvent('aura:session-expired', {
           detail: {
             code: data.code || 'TOKEN_EXPIRED',
+            message: data.message,
             role: data.role,
             requiresStaffCashout: data.requiresStaffCashout,
             redirectTo: data.redirectTo || '/'

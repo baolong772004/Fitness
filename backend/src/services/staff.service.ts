@@ -6,6 +6,7 @@ import { grantPtCredit, releasePtCredit } from './ptWallet.service.js';
 import { closePtChatRoom, emitCoachScheduleChanged } from '../sockets/ptChat.socket.js';
 import { lockGymMember } from './gymMembershipLock.service.js';
 import { reconcileGymMembershipStates } from './membership.service.js';
+import { isLockedAccountStatus } from '../middlewares/auth.middleware.js';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
@@ -99,7 +100,7 @@ export class StaffService {
       throw new Error('Tài khoản không có quyền truy cập vào phân hệ Lễ tân (Staff Portal).');
     }
 
-    if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
+    if (isLockedAccountStatus(user.status)) {
       throw new Error('Tài khoản lễ tân đã bị tạm khóa hoặc ngừng hoạt động.');
     }
 
@@ -228,12 +229,22 @@ export class StaffService {
       };
     }
 
-    if (member.status === 'SUSPENDED' || member.status === 'INACTIVE') {
+    if (isLockedAccountStatus(member.status)) {
       return {
         success: false,
         status: 'BLOCKED',
         color: 'RED',
-        message: 'Tài khoản hội viên này đã bị tạm khóa do vi phạm quy chế hoặc yêu cầu từ quản lý.',
+        message: 'Tài khoản hội viên này đã bị khóa do vi phạm quy chế hoặc yêu cầu từ quản lý.',
+        data: { member }
+      };
+    }
+
+    if (member.status !== 'ACTIVE') {
+      return {
+        success: false,
+        status: 'BLOCKED',
+        color: 'RED',
+        message: 'Tài khoản hội viên này chưa được kích hoạt.',
         data: { member }
       };
     }
@@ -662,6 +673,14 @@ export class StaffService {
 
     if (!member) {
       throw new Error('Hội viên không tồn tại.');
+    }
+
+    if (isLockedAccountStatus(member.status)) {
+      throw new Error('Tài khoản hội viên đã bị khóa, không thể check-in vào phòng tập.');
+    }
+
+    if (member.status !== 'ACTIVE') {
+      throw new Error('Tài khoản hội viên chưa được kích hoạt.');
     }
 
     const now = new Date();
@@ -1466,6 +1485,7 @@ export class StaffService {
           userId: membership.userId,
           status: 'BOOKED',
           schedule: {
+            status: { in: ['OPEN', 'FULL'] },
             startTime: { gte: now, lte: freezeUntil },
           },
         },
@@ -1483,8 +1503,12 @@ export class StaffService {
           data: { status: 'CANCELLED' },
         });
 
-        await tx.groupClassSchedule.update({
-          where: { id: cb.scheduleId },
+        await tx.groupClassSchedule.updateMany({
+          where: {
+            id: cb.scheduleId,
+            bookedCount: { gt: 0 },
+            status: { in: ['OPEN', 'FULL'] },
+          },
           data: {
             bookedCount: { decrement: 1 },
             status: 'OPEN',
@@ -1818,7 +1842,7 @@ export class StaffService {
       where: { id: equipmentId },
       data: {
         status,
-        note: note ? note.trim() : equipment.note
+        note: note !== undefined ? (note.trim() || null) : equipment.note
       },
       include: { room: true }
     });

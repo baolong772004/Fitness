@@ -69,7 +69,7 @@ export function CoachHomeView() {
 
   // Data
   const [bookings, setBookings] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
+  const [assignedClasses, setAssignedClasses] = useState<any[]>([]);
   const [trainees, setTrainees] = useState<any[]>([]);
   // unreadChatCount managed by useAuth
 
@@ -111,13 +111,13 @@ export function CoachHomeView() {
     try {
       const [ptRes, classRes, traineesRes, chatRes] = await Promise.all([
         api.ptBookings().catch(() => []),
-        api.classSchedules(new Date(selectedDate)).catch(() => []),
+        api.coachClassSchedules().catch(() => []),
         api.coachTrainees().catch(() => ({ data: [] })),
         api.ptConversations().catch(() => ({ data: [] })),
       ]);
 
       setBookings(Array.isArray(ptRes) ? ptRes : []);
-      setClasses(Array.isArray(classRes) ? classRes : []);
+      setAssignedClasses(Array.isArray(classRes) ? classRes : []);
       setTrainees(Array.isArray(traineesRes.data) ? traineesRes.data : []);
 
 
@@ -139,6 +139,21 @@ export function CoachHomeView() {
     setRefreshing(true);
     void loadData();
   };
+
+  const classes = useMemo(() => {
+    return assignedClasses
+      .filter((c) => gymDay(c.startTime) === selectedDate)
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  }, [assignedClasses, selectedDate]);
+
+  const otherAssignedClasses = useMemo(() => {
+    const upcoming = assignedClasses.filter(
+      (c) => gymDay(c.startTime) !== selectedDate && new Date(c.endTime).getTime() >= Date.now()
+    );
+    return upcoming.length > 0
+      ? upcoming
+      : assignedClasses.filter((c) => gymDay(c.startTime) !== selectedDate);
+  }, [assignedClasses, selectedDate]);
 
   // Lọc ca PT của ngày được chọn (không hiển thị ca đã hủy)
   const dayBookings = useMemo(() => {
@@ -665,11 +680,39 @@ export function CoachHomeView() {
                 alignItems: 'center',
                 borderWidth: 1,
                 borderColor: aura.border,
+                gap: 8,
               }}
             >
               <Text style={{ color: aura.muted, fontSize: 12 }}>
-                Không có lịch dạy lớp nhóm trong ngày này.
+                Không có lịch dạy lớp nhóm trong ngày {dateLabel(selectedDate)}.
               </Text>
+              {otherAssignedClasses.length > 0 && (
+                <View style={{ width: '100%', gap: 6, marginTop: 4 }}>
+                  <Text style={{ color: aura.ink, fontSize: 12, fontWeight: '800' }}>
+                    Lớp được phân công ({otherAssignedClasses.length}):
+                  </Text>
+                  {otherAssignedClasses.map((cls) => (
+                    <Pressable
+                      key={cls.id}
+                      onPress={() => setSelectedDate(gymDay(cls.startTime))}
+                      style={{
+                        backgroundColor: aura.cream,
+                        borderRadius: 12,
+                        padding: 10,
+                        borderWidth: 1,
+                        borderColor: aura.border,
+                      }}
+                    >
+                      <Text style={{ color: aura.ink, fontSize: 13, fontWeight: '800' }}>
+                        {cls.groupClass?.name || 'Lớp Workout'}
+                      </Text>
+                      <Text style={{ color: aura.muted, fontSize: 11, marginTop: 2 }}>
+                        {dateLabel(cls.startTime)} · {formatTime(cls.startTime)} – {formatTime(cls.endTime)} · Phòng {cls.room?.name || 'Tập nhóm'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
             </View>
           ) : (
             classes.map((cls) => (

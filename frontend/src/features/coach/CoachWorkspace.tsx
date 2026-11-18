@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CalendarDays, ChevronDown, FileText, LoaderCircle, MessageSquare, QrCode, RefreshCw, Save, Search, SendHorizontal, UserRound } from 'lucide-react';
+import { CalendarDays, ChevronDown, FileText, LoaderCircle, MessageSquare, QrCode, RefreshCw, Save, Search, SendHorizontal, UserRound, Users } from 'lucide-react';
 import { api, type ApiBooking, type ApiCoachProfile, type ApiCoachSchedule, type ApiGroupClassSchedule, type ApiProgressLog } from '../../services/api';
 import type { CoachPlanDraft, CoachTraineeMembership, CoachWorkoutPlan } from '../../services/api/pt.api';
 import { CoachPlanEditor, CoachSavedPlan } from './CoachPlanEditor';
@@ -21,6 +21,7 @@ type Message = { id: number; senderId: number; content: string; createdAt: strin
 
 const gymDay = (value: string | Date) => new Date(new Date(value).getTime() + 7 * 3600000).toISOString().slice(0, 10);
 const today = () => gymDay(new Date());
+const gymDateDisplay = (value: string | Date) => new Date(value).toLocaleDateString('vi-VN', { timeZone: 'Asia/Bangkok' });
 const gymTime = (value: string) => new Date(value).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' });
 const errorText = (error: unknown) => error instanceof Error ? error.message : 'Không thể tải dữ liệu. Vui lòng thử lại.';
 
@@ -45,8 +46,9 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
   const [planSearch, setPlanSearch] = useState('');
   const [showUnassignedPlans, setShowUnassignedPlans] = useState(false);
   const [showArchivedPlans, setShowArchivedPlans] = useState(false);
-  const [classes, setClasses] = useState<ApiGroupClassSchedule[]>([]);
+  const [assignedClasses, setAssignedClasses] = useState<ApiGroupClassSchedule[]>([]);
   const [classQr, setClassQr] = useState<{ schedule: ApiGroupClassSchedule; image: string } | null>(null);
+  const [attendeesModalSchedule, setAttendeesModalSchedule] = useState<ApiGroupClassSchedule | null>(null);
   const [classAttendees, setClassAttendees] = useState<Array<{ id: number; status: 'BOOKED' | 'CHECKED_IN'; user: { id: number; fullName: string } }>>([]);
   const [nowMs, setNowMs] = useState(Date.now());
   const [date, setDate] = useState(today);
@@ -77,6 +79,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
       api.pt.getMyBookings(),
       api.pt.getCoachTrainees(),
       api.pt.getCoachPlans(),
+      api.groupClasses.getMyAssignedSchedules(),
     ]);
     if (results[0].status === 'fulfilled') {
       setProfile(results[0].value);
@@ -87,6 +90,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
     if (results[1].status === 'fulfilled') setBookings(results[1].value);
     if (results[2].status === 'fulfilled') setTrainees(results[2].value);
     if (results[3].status === 'fulfilled') setPlans(results[3].value);
+    if (results[4].status === 'fulfilled') setAssignedClasses(results[4].value);
     const failed = results.slice(1).find(result => result.status === 'rejected');
     if (failed?.status === 'rejected') setNotice(errorText(failed.reason));
     setLoading(false);
@@ -102,25 +106,38 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
   }, [activeTab]);
   useEffect(() => {
     if (!['schedule', 'workclass'].includes(activeTab) || !currentUser) return;
-    setClasses([]);
-    void api.groupClasses.getSchedules(date)
-      .then(rows => setClasses(rows.filter(row => Number(row.trainerId) === Number(currentUser.id))))
-      .catch(error => setNotice(errorText(error)));
+    const syncAssignedClasses = () => {
+      void api.groupClasses.getMyAssignedSchedules()
+        .then(setAssignedClasses)
+        .catch(error => setNotice(errorText(error)));
+    };
+    syncAssignedClasses();
+    const timer = window.setInterval(() => {
+      void api.groupClasses.getMyAssignedSchedules()
+        .then(setAssignedClasses)
+        .catch(() => undefined);
+    }, 20000);
+    return () => window.clearInterval(timer);
   }, [activeTab, date, currentUser?.id]);
+  const activeAttendeeScheduleId = classQr?.schedule.id ?? attendeesModalSchedule?.id ?? null;
   useEffect(() => {
-    if (!classQr) return;
-    const scheduleId = classQr.schedule.id;
+    if (!activeAttendeeScheduleId) return;
     const refresh = () => {
-      void api.groupClasses.getAttendees(scheduleId).then(setClassAttendees).catch(error => setNotice(errorText(error)));
+      void api.groupClasses.getAttendees(activeAttendeeScheduleId).then(setClassAttendees).catch(error => setNotice(errorText(error)));
     };
     refresh();
     const attendeesTimer = window.setInterval(refresh, 10000);
+    return () => { window.clearInterval(attendeesTimer); };
+  }, [activeAttendeeScheduleId]);
+  useEffect(() => {
+    if (!classQr) return;
+    const scheduleId = classQr.schedule.id;
     const qrTimer = window.setInterval(() => {
       void api.groupClasses.getCheckInQr(scheduleId)
         .then(result => setClassQr(current => current?.schedule.id === scheduleId ? { ...current, image: result.qrCodeImage } : current))
         .catch(error => { setNotice(errorText(error)); setClassQr(null); });
     }, 60000);
-    return () => { window.clearInterval(attendeesTimer); window.clearInterval(qrTimer); };
+    return () => { window.clearInterval(qrTimer); };
   }, [classQr?.schedule.id]);
   useEffect(() => {
     if (activeTab !== 'workclass') return;
@@ -155,9 +172,27 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
     setBusy(true);
     setNotice('');
     try {
-      const result = await api.groupClasses.getCheckInQr(schedule.id);
-      setClassAttendees([]);
-      setClassQr({ schedule, image: result.qrCodeImage });
+      const [qrResult, attendeesResult] = await Promise.all([
+        api.groupClasses.getCheckInQr(schedule.id),
+        api.groupClasses.getAttendees(schedule.id),
+      ]);
+      setClassAttendees(attendeesResult);
+      setAttendeesModalSchedule(null);
+      setClassQr({ schedule, image: qrResult.qrCodeImage });
+    } catch (error) {
+      setNotice(errorText(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openClassAttendees = async (schedule: ApiGroupClassSchedule) => {
+    setBusy(true);
+    setNotice('');
+    try {
+      const attendeesResult = await api.groupClasses.getAttendees(schedule.id);
+      setClassAttendees(attendeesResult);
+      setAttendeesModalSchedule(schedule);
     } catch (error) {
       setNotice(errorText(error));
     } finally {
@@ -262,6 +297,13 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
     return saved;
   };
 
+  const classes = assignedClasses.filter(item => gymDay(item.startTime) === date);
+  const upcomingOtherClasses = assignedClasses.filter(
+    item => gymDay(item.startTime) !== date && new Date(item.endTime).getTime() >= Date.now()
+  );
+  const allOtherClasses = upcomingOtherClasses.length > 0
+    ? upcomingOtherClasses
+    : assignedClasses.filter(item => gymDay(item.startTime) !== date);
   const dayBookings = bookings.filter(booking => gymDay(booking.startTime) === date).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const selectedTrainee = trainees.find(row => row.userId === selectedMemberId);
   const assignableTrainees = [...new Map(trainees.map(row => [row.user.id, row.user])).values()];
@@ -313,31 +355,97 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
               })}
             </CardContent>
           </Card>
-          <Card><CardHeader><CardTitle>Lớp học nhóm được phân công</CardTitle></CardHeader><CardContent className="space-y-2">
-            {classes.length === 0 ? <p className="text-sm text-muted-foreground">Không có lớp nhóm trong ngày này.</p> : classes.map(item => <div key={item.id} className="flex justify-between rounded-lg border p-3 text-sm"><span>{item.groupClass.name} · {item.room?.name || 'Chưa xếp phòng'}</span><span>{gymTime(item.startTime)}–{gymTime(item.endTime)} · {item.bookedCount}/{item.capacity}</span></div>)}
-          </CardContent></Card>
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle>Lớp học nhóm được phân công</CardTitle>
+                <Badge variant="secondary">{assignedClasses.length} lớp được phân công</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {classes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Không có lớp nhóm trong ngày {gymDateDisplay(date)}.</p>
+              ) : (
+                <div className="space-y-2">
+                  {classes.map(item => (
+                    <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3 text-sm">
+                      <div>
+                        <strong className="text-foreground">{item.groupClass?.name || 'Lớp nhóm'}</strong>
+                        <p className="text-xs text-muted-foreground">
+                          {gymDateDisplay(item.startTime)} · {gymTime(item.startTime)}–{gymTime(item.endTime)} · {item.room?.name || 'Chưa xếp phòng'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{item.bookedCount}/{item.capacity} HV</Badge>
+                        <Button size="sm" variant="outline" onClick={() => onTabChange('workclass')}>Mở Workclass</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {allOtherClasses.length > 0 && (
+                <div className="space-y-2 border-t pt-3">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    {upcomingOtherClasses.length > 0 ? 'Các lớp được phân công sắp tới:' : 'Các lớp được phân công ở ngày khác:'}
+                  </p>
+                  {allOtherClasses.map(item => (
+                    <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3 text-sm">
+                      <div>
+                        <strong className="text-foreground">{item.groupClass?.name || 'Lớp nhóm'}</strong>
+                        <p className="text-xs text-muted-foreground">
+                          Ngày {gymDateDisplay(item.startTime)} · {gymTime(item.startTime)}–{gymTime(item.endTime)} · {item.room?.name || 'Chưa xếp phòng'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{item.bookedCount}/{item.capacity} HV</Badge>
+                        <Button size="sm" variant="ghost" onClick={() => setDate(gymDay(item.startTime))}>Xem ngày này</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>}
 
         {activeTab === 'workclass' && <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div><CardTitle className="flex items-center gap-2"><QrCode className="size-5" /> Workclass · Lớp học nhóm</CardTitle><CardDescription>Hiển thị QR của ca học để hội viên đã đặt chỗ quét bằng ứng dụng mobile.</CardDescription></div>
+              <div><CardTitle className="flex items-center gap-2"><QrCode className="size-5" /> Workclass · Lớp học nhóm</CardTitle><CardDescription>Xem danh sách học viên đã đặt chỗ và hiển thị QR để hội viên quét điểm danh (Web hoặc Mobile).</CardDescription></div>
               <Input type="date" className="w-44" value={date} onChange={event => setDate(event.target.value)} />
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {classes.length === 0 && <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Không có lớp nhóm được phân công trong ngày này.</p>}
+            {classes.length === 0 && (
+              <div className="space-y-3 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                <p>Không có lớp nhóm được phân công trong ngày {gymDateDisplay(date)}.</p>
+                {allOtherClasses.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {allOtherClasses.map(item => (
+                      <Button key={item.id} size="sm" variant="outline" onClick={() => setDate(gymDay(item.startTime))}>
+                        {gymDateDisplay(item.startTime)} · {item.groupClass?.name || 'Lớp nhóm'} ({gymTime(item.startTime)})
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {classes.map(schedule => {
               const canShowQr = ['OPEN', 'FULL'].includes(schedule.status) && nowMs >= new Date(schedule.startTime).getTime() - 15 * 60000 && nowMs <= new Date(schedule.endTime).getTime();
+              const statusLabel = schedule.status === 'COMPLETED' ? 'Đã kết thúc' : schedule.status === 'FULL' ? 'Đã đủ chỗ' : 'Đang mở';
               return <div key={schedule.id} className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4">
                 <div>
                   <strong className="text-sm">{schedule.groupClass.name}</strong>
                   <p className="text-sm text-muted-foreground">{gymTime(schedule.startTime)}–{gymTime(schedule.endTime)} · {schedule.room?.name || 'Chưa xếp phòng'}</p>
-                  <p className="text-xs text-muted-foreground">Đã đặt {schedule.bookedCount}/{schedule.capacity} chỗ · {schedule.status === 'FULL' ? 'Đã đủ chỗ' : 'Đang mở'}</p>
+                  <p className="text-xs text-muted-foreground">Đã đặt {schedule.bookedCount}/{schedule.capacity} chỗ · {statusLabel}</p>
                 </div>
                 <div className="space-y-1 text-right">
-                  <Button size="sm" disabled={!canShowQr || busy} onClick={() => void openClassQr(schedule)}><QrCode className="size-4" /> Hiển thị QR điểm danh</Button>
-                  {!canShowQr && <p className="text-xs text-muted-foreground">Mở từ 15 phút trước giờ học đến hết ca</p>}
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => void openClassAttendees(schedule)}><Users className="size-4" /> Danh sách HV ({schedule.bookedCount})</Button>
+                    <Button size="sm" disabled={!canShowQr || busy} onClick={() => void openClassQr(schedule)}><QrCode className="size-4" /> Hiển thị QR điểm danh</Button>
+                  </div>
+                  {!canShowQr && schedule.status !== 'COMPLETED' && <p className="text-xs text-muted-foreground">QR mở từ 15 phút trước giờ học đến hết ca</p>}
                 </div>
               </div>;
             })}
@@ -418,6 +526,29 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
         </div>}
       </div>
 
+      <Dialog open={!!attendeesModalSchedule} onOpenChange={open => { if (!open) setAttendeesModalSchedule(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Học viên đăng ký · {attendeesModalSchedule?.groupClass.name}</DialogTitle></DialogHeader>
+          {attendeesModalSchedule && <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {gymDateDisplay(attendeesModalSchedule.startTime)} · {gymTime(attendeesModalSchedule.startTime)}–{gymTime(attendeesModalSchedule.endTime)} · {attendeesModalSchedule.room?.name || 'Phòng học nhóm'}
+            </p>
+            <p className="text-sm font-semibold">
+              Đã điểm danh {classAttendees.filter(row => row.status === 'CHECKED_IN').length}/{classAttendees.length} học viên
+            </p>
+            <div className="max-h-72 space-y-2 overflow-y-auto border-t pt-3">
+              {classAttendees.length === 0 && <p className="text-xs text-muted-foreground">Chưa có hội viên đặt lớp.</p>}
+              {classAttendees.map(row => (
+                <div key={row.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                  <span>{row.user.fullName}</span>
+                  <Badge variant="outline">{row.status === 'CHECKED_IN' ? 'Đã điểm danh' : 'Đã đặt chỗ'}</Badge>
+                </div>
+              ))}
+            </div>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!classQr} onOpenChange={open => { if (!open) setClassQr(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Điểm danh Workclass · {classQr?.schedule.groupClass.name}</DialogTitle></DialogHeader>
@@ -425,7 +556,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
             <div className="grid justify-items-center gap-2">
               <p className="text-sm text-muted-foreground">{gymTime(classQr.schedule.startTime)}–{gymTime(classQr.schedule.endTime)} · {classQr.schedule.room?.name || 'Phòng học nhóm'}</p>
               <img src={classQr.image} alt="Mã QR điểm danh lớp nhóm" className="size-56 rounded-lg border bg-white p-2" />
-              <p className="text-center text-xs text-muted-foreground">Mã được tự làm mới mỗi 60 giây. Hội viên mở Workclass trên mobile và quét mã này.</p>
+              <p className="text-center text-xs text-muted-foreground">Mã được tự làm mới mỗi 60 giây. Hội viên mở mục Lịch lớp trên Web hoặc ứng dụng Mobile để quét mã này.</p>
               <Button size="sm" variant="outline" disabled={busy} onClick={() => void openClassQr(classQr.schedule)}><RefreshCw className="size-4" /> Tạo mã mới</Button>
             </div>
             <div className="max-h-48 space-y-2 overflow-y-auto border-t pt-3">

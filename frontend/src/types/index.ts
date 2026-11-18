@@ -35,6 +35,7 @@ export interface Member {
     relationship: string;
   };
   status: 'active' | 'expiring_soon' | 'expired' | 'frozen';
+  accountStatus?: 'ACTIVE' | 'INACTIVE' | 'BANNED' | 'SUSPENDED' | 'BLOCKED' | 'PENDING' | string;
   activePackageId: string;
   packageName: string;
   packageType: 'standard_gym' | 'hybrid_pt' | 'specialized_course';
@@ -81,6 +82,7 @@ export interface Coach {
     daysOfWeek: number[]; // 1=Mon, 7=Sun
   };
   isAcceptingBookings: boolean;
+  userAccountStatus?: string;
   activeTraineeCount: number;
 }
 

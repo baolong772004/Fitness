@@ -8,7 +8,7 @@ import {
   Calendar,
   QrCode,
   CreditCard,
-  LifeBuoy,
+  AlertTriangle,
   UserCheck,
   Clock,
   BarChart3,
@@ -28,7 +28,6 @@ import { api } from '../../services/api';
 interface NavbarProps {
   currentRole: UserRole;
   currentUser: User | null;
-  onOpenQuickCheckIn: () => void;
   activeTab: string;
   onTabChange: (tab: string) => void;
   onOpenLogin: () => void;
@@ -48,7 +47,6 @@ interface NavTabItem {
 export const Navbar: React.FC<NavbarProps> = ({
   currentRole,
   currentUser,
-  onOpenQuickCheckIn,
   activeTab,
   onTabChange,
   onOpenLogin,
@@ -143,7 +141,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         return [
           { id: 'checkin', label: 'Soát Vé Vào Cổng', icon: QrCode },
           { id: 'pos', label: 'Quầy POS & Thu Ngân', icon: CreditCard },
-          { id: 'operations', label: 'Vận Hành & Sự Cố', icon: Wrench },
+          { id: 'operations', label: 'Vận Hành & Sự Cố', icon: AlertTriangle },
           { id: 'shift', label: 'Ca Trực & Chốt Ca', icon: Clock },
           { id: 'members', label: 'Hội Viên', icon: Users }
         ];
@@ -159,7 +157,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         return [
           { id: 'analytics', label: 'Tổng Quan & BI', icon: BarChart3 },
           { id: 'members-360', label: 'Quản Lý Hội Viên', icon: Users },
-          { id: 'tickets-management', label: 'Xử Lý Yêu Cầu', icon: LifeBuoy },
+          { id: 'tickets-management', label: 'Xử Lý Yêu Cầu', icon: AlertTriangle },
           { id: 'coaches-config', label: 'Quản Lý HLV', icon: UserCheck },
           { id: 'pt-calendar', label: 'Lịch PT chung', icon: Calendar },
           { id: 'packages-engine', label: 'Gói Tập & Dịch Vụ', icon: Package },
@@ -375,31 +373,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
 
-      {/* 2. QUICK CTA (Check-in QR for Admin only) */}
-      {currentRole === 'admin' && (
-        <div style={{ padding: isCollapsed ? '12px 10px 4px' : '14px 16px 6px' }}>
-          <button
-            className="btn-primary"
-            onClick={onOpenQuickCheckIn}
-            title="Soát vé vào cổng"
-            style={{
-              width: '100%',
-              padding: isCollapsed ? '10px 0' : '9px 12px',
-              justifyContent: 'center',
-              fontSize: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              borderRadius: 'var(--radius-sm)'
-            }}
-          >
-            <QrCode size={16} />
-            {!isCollapsed && <span style={{ whiteSpace: 'nowrap' }}>Soát Vé Vào Cổng</span>}
-          </button>
-        </div>
-      )}
-
-      {/* 3. NAVIGATION ITEMS */}
+      {/* 2. NAVIGATION ITEMS */}
       <div
         style={{
           flex: 1,

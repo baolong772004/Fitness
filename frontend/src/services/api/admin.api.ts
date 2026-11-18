@@ -52,5 +52,25 @@ export const adminApi = {
       data: import('./types').ApiAdminAnalytics['recentPayments'];
     }>(`/admin/payments?limit=${limit}`);
     return res.data;
+  },
+
+  async getAuditLogs(params: { limit?: number; search?: string; action?: string } = {}) {
+    const q = new URLSearchParams();
+    if (params.limit) q.set('limit', String(params.limit));
+    if (params.search) q.set('search', params.search);
+    if (params.action) q.set('action', params.action);
+    const res = await request<{
+      success: boolean;
+      data: Array<{
+        id: string;
+        timestamp: string;
+        actorName: string;
+        actorRole: string;
+        action: string;
+        target: string;
+        details: string;
+      }>;
+    }>(`/admin/audit-logs?${q.toString()}`);
+    return res.data;
   }
 };

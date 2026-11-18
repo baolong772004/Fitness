@@ -86,7 +86,7 @@ async function shareableCoaches(memberId: number) {
     const level = await activeCoachPtLevel(prisma, coach.id, memberId);
     return { ...coach, ptLevel: level || 'BEGINNER' };
   }));
-  return valid.filter((coach): coach is { id: number; fullName: string; ptLevel: string } => coach != null);
+  return valid.filter((coach): coach is NonNullable<typeof coach> => coach != null);
 }
 
 router.use(authenticateToken);

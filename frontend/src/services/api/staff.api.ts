@@ -166,7 +166,7 @@ export interface EquipmentItem {
   name: string;
   code: string;
   roomId: number;
-  status: 'AVAILABLE' | 'UNDER_MAINTENANCE' | 'MAINTENANCE';
+  status: 'AVAILABLE' | 'UNDER_MAINTENANCE' | 'MAINTENANCE' | 'BROKEN';
   note?: string;
   room: {
     id: number;

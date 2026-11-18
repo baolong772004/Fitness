@@ -41,6 +41,20 @@ export async function planPackageCoachTransfer(tx: Prisma.TransactionClient,
       else if (await tx.booking.findFirst({ where: { memberId: request.memberId,
         id: { not: booking.id }, ...overlap }, select: { id: true } }))
         reason = 'Hội viên đã có booking khác trùng giờ.';
+      else {
+        const classConflict = await tx.groupClassSchedule.findFirst({
+          where: {
+            trainerId: request.newCoachId,
+            status: { in: ['OPEN', 'FULL'] },
+            startTime: { lt: booking.endTime },
+            endTime: { gt: booking.startTime },
+          },
+          select: { id: true, groupClass: { select: { name: true } } },
+        });
+        if (classConflict) {
+          reason = `HLV mới đang dạy lớp nhóm "${classConflict.groupClass.name}" trong khung giờ này.`;
+        }
+      }
     }
     const keepOld = protectedOldCoachSlot(booking.startTime, now, !!reason);
     items.push({ bookingId: booking.id, startTime: booking.startTime,

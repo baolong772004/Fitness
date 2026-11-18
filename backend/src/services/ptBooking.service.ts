@@ -92,6 +92,22 @@ export async function requirePtSlot(
   if (await tx.booking.findFirst({ where: { memberId, ...overlap }, select: { id: true } })) {
     throw new PtBookingError(409, 'Bạn đã có lịch trùng giờ.');
   }
+  if (await tx.groupClassSchedule.findFirst({
+    where: { trainerId: coachId, status: { in: ['OPEN', 'FULL'] }, startTime: { lt: end }, endTime: { gt: start } },
+    select: { id: true },
+  })) {
+    throw new PtBookingError(409, 'Coach đã có lịch dạy lớp học nhóm trong ca này.');
+  }
+  if (await tx.groupClassBooking.findFirst({
+    where: {
+      userId: memberId,
+      status: { in: ['BOOKED', 'CHECKED_IN'] },
+      schedule: { status: { in: ['OPEN', 'FULL'] }, startTime: { lt: end }, endTime: { gt: start } },
+    },
+    select: { id: true },
+  })) {
+    throw new PtBookingError(409, 'Bạn đã đăng ký lớp học nhóm trùng giờ với ca này.');
+  }
   return end;
 }
 

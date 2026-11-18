@@ -2,6 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/prisma.js';
 
+const LOCKED_ACCOUNT_STATUSES = new Set(['BANNED', 'SUSPENDED', 'INACTIVE', 'BLOCKED']);
+
+export const isLockedAccountStatus = (status?: string | null): boolean =>
+  LOCKED_ACCOUNT_STATUSES.has(String(status || '').trim().toUpperCase());
+
 // Mở rộng Request để chứa thông tin user
 export interface AuthRequest extends Request {
   user?: {
@@ -39,9 +44,9 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       try {
         const user = await prisma.user.findUnique({
           where: { id: tokenPayload.userId },
-          select: { role: true },
+          select: { role: true, status: true },
         });
-        if (user && (user.role === 'STAFF' || user.role === 'RECEPTIONIST')) {
+        if (user && !isLockedAccountStatus(user.status) && (user.role === 'STAFF' || user.role === 'RECEPTIONIST')) {
           req.user = { userId: tokenPayload.userId, role: 'STAFF' };
           return next();
         }
@@ -72,10 +77,18 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   try {
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { role: true, mustChangePassword: true },
+      select: { role: true, status: true, mustChangePassword: true },
     });
     if (!user) {
       return res.status(403).json({ success: false, message: 'Tài khoản không còn tồn tại.' });
+    }
+    if (isLockedAccountStatus(user.status)) {
+      return res.status(401).json({
+        success: false,
+        code: 'ACCOUNT_SUSPENDED',
+        message: 'Tài khoản của bạn đã bị khóa hoặc tạm ngừng hoạt động.',
+        redirectTo: '/',
+      });
     }
     if (user.mustChangePassword && !req.originalUrl.split('?')[0].endsWith('/auth/change-password')) {
       return res.status(403).json({
@@ -93,6 +106,15 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   } catch (error) {
     return next(error);
   }
+};
+
+export const optionalAuthenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) {
+    return next();
+  }
+  return authenticateToken(req, res, next);
 };
 
 export const authorizeRoles = (...roles: string[]) => {

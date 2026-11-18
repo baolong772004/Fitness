@@ -54,6 +54,8 @@ export interface ApiCoachDeactivationCheck {
     upcomingPtBookingCount: number;
     pendingMakeupCount: number;
     upcomingGroupClassCount: number;
+    pendingCoachChangeCount: number;
+    pendingAttendanceReviewCount: number;
   };
   activePtPackages: Array<{
     sourceType: 'WALLET_BATCH' | 'LEGACY_MEMBERSHIP';
@@ -92,6 +94,21 @@ export interface ApiCoachDeactivationCheck {
     endTime: string;
     bookedCount: number;
     capacity: number;
+    status: string;
+  }>;
+  pendingCoachChangeRequests: Array<{
+    id: number;
+    batchId: number;
+    memberName: string;
+    level: string;
+    requestedAt: string;
+  }>;
+  pendingAttendanceReviews: Array<{
+    id: number;
+    bookingId: number;
+    memberName: string;
+    startTime: string;
+    deadlineAt: string;
     status: string;
   }>;
 }
@@ -275,14 +292,14 @@ export const adminTrainerApi = {
     }>(`/admin-trainers/${id}/deactivation-check`);
   },
 
-  async toggleTrainerStatus(id: number | string, status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED') {
+  async toggleTrainerStatus(id: number | string, status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED', force?: boolean) {
     return request<{
       success: boolean;
       message: string;
       data: ApiCoachProfile;
     }>(`/admin-trainers/${id}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status, ...(force ? { force: true } : {}) })
     });
   }
 };

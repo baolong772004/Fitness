@@ -681,3 +681,386 @@ export const getAdminPayments = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ success: false, message: 'Lỗi lấy danh sách hóa đơn admin' });
   }
 };
+
+/**
+ * Helper chuyển ActionLog sang nhãn + đối tượng + chi tiết ngắn gọn, đủ ý (không lộ field kỹ thuật/JSON thô)
+ */
+const formatAuditDate = (value?: string | null) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+};
+
+const AUDIT_STATUS_VI: Record<string, string> = {
+  ACTIVE: 'Hoạt động',
+  BANNED: 'Đã khóa',
+  SUSPENDED: 'Tạm khóa',
+  INACTIVE: 'Ngừng hoạt động',
+  BLOCKED: 'Bị chặn',
+  PENDING: 'Chờ xác thực',
+  AVAILABLE: 'Sẵn sàng',
+  UNDER_MAINTENANCE: 'Đang bảo trì',
+  MAINTENANCE: 'Đang bảo trì',
+  BROKEN: 'Hỏng hóc',
+  APPROVED: 'Đã duyệt',
+  REJECTED: 'Từ chối',
+  EXCUSED: 'Miễn trừ',
+  NO_SHOW: 'Vắng mặt',
+};
+
+const AUDIT_FIELD_VI: Record<string, string> = {
+  freezeDays: 'Số ngày bảo lưu',
+  unusedDaysRecovered: 'Hoàn lại',
+  actualFrozenDays: 'Đã bảo lưu',
+  adjustedEndDate: 'Hạn mới',
+  projectedEndDate: 'Hạn dự kiến',
+  delta: 'Điều chỉnh',
+  level: 'Cấp độ',
+  decision: 'Quyết định',
+  notes: 'Ghi chú',
+  adminNote: 'Ghi chú',
+  reason: 'Lý do',
+  scope: 'Phạm vi',
+};
+
+const HIDDEN_AUDIT_FIELDS = new Set([
+  'type',
+  'membershipId',
+  'userId',
+  'memberId',
+  'coachId',
+  'coachUserId',
+  'coachProfileId',
+  'bookingId',
+  'requestId',
+  'batchId',
+  'targetUserId',
+  'targetFullName',
+  'targetEmail',
+  'targetRole',
+  'ipAddress',
+  'frozenAt',
+  'originalEndDate',
+  'expiresAt',
+  'cancelledPtBookingsCount',
+  'cancelledPtBookingIds',
+  'cancelledClassBookingsCount',
+  'cancelledClassBookingIds',
+]);
+
+const formatAuditStatusLabel = (status?: string | null) => {
+  const key = String(status || '').trim().toUpperCase();
+  return AUDIT_STATUS_VI[key] || String(status || '');
+};
+
+function formatAuditLogEntry(
+  log: {
+    id: number;
+    userId: number;
+    action: string;
+    details: string | null;
+    createdAt: Date;
+    user?: { id: number; fullName: string | null; email: string; role: string } | null;
+  },
+  lookups?: {
+    usersById: Map<number, { fullName: string | null; email: string }>;
+    membershipsById: Map<number, { packageName: string; ownerName: string | null }>;
+  }
+) {
+  let target = 'Hệ thống';
+  let detailsText = (log.details || '—').trim();
+
+  const resolveUserName = (id?: unknown, fallbackLabel = 'Tài khoản') => {
+    const num = Number(id);
+    if (Number.isFinite(num) && lookups?.usersById.has(num)) {
+      return lookups.usersById.get(num)?.fullName || lookups.usersById.get(num)?.email || `${fallbackLabel} #${num}`;
+    }
+    return Number.isFinite(num) ? `${fallbackLabel} #${num}` : fallbackLabel;
+  };
+
+  if (log.details) {
+    try {
+      const parsed = JSON.parse(log.details);
+      if (parsed && typeof parsed === 'object') {
+        const mInfo = Number.isFinite(Number(parsed.membershipId))
+          ? lookups?.membershipsById.get(Number(parsed.membershipId))
+          : undefined;
+
+        if (parsed.targetFullName || parsed.targetEmail || parsed.targetUserId) {
+          target = parsed.targetFullName || resolveUserName(parsed.targetUserId, 'Tài khoản');
+        } else if (parsed.memberName || parsed.memberId) {
+          target = parsed.memberName || resolveUserName(parsed.memberId, 'Hội viên');
+        } else if (mInfo) {
+          target = mInfo.ownerName ? `${mInfo.ownerName} • ${mInfo.packageName}` : mInfo.packageName;
+        } else if (parsed.userId) {
+          target = resolveUserName(parsed.userId, 'Hội viên');
+        } else if (parsed.coachId || parsed.coachUserId) {
+          target = resolveUserName(parsed.coachId || parsed.coachUserId, 'HLV');
+        } else if (parsed.coachProfileId) {
+          target = `HLV #${parsed.coachProfileId}`;
+        } else if (parsed.packageName || parsed.membershipId) {
+          target = parsed.packageName || `Gói #${parsed.membershipId}`;
+        } else if (parsed.equipmentName) {
+          target = parsed.equipmentCode
+            ? `${parsed.equipmentName} (${parsed.equipmentCode})`
+            : String(parsed.equipmentName);
+        } else if (parsed.roomName) {
+          target = String(parsed.roomName);
+        } else if (parsed.bookingId) {
+          target = `Buổi PT #${parsed.bookingId}`;
+        }
+
+        if (log.action === 'EQUIPMENT_STATUS_UPDATE' || log.action === 'FACILITY_EQUIPMENT_UPDATE') {
+          const parts: string[] = [];
+          if (parsed.previousRoomName && parsed.newRoomName) {
+            parts.push(`Phòng: ${parsed.previousRoomName} → ${parsed.newRoomName}`);
+          } else if (parsed.roomName && log.action === 'FACILITY_EQUIPMENT_UPDATE') {
+            parts.push(`Phòng: ${parsed.roomName}`);
+          }
+          if (parsed.previousStatus && parsed.newStatus) {
+            parts.push(`Trạng thái: ${formatAuditStatusLabel(parsed.previousStatus)} → ${formatAuditStatusLabel(parsed.newStatus)}`);
+          }
+          if (parsed.notes) {
+            parts.push(`Ghi chú: ${String(parsed.notes)}`);
+          }
+          detailsText = parts.join('\n') || 'Cập nhật thông tin thiết bị';
+        } else if (parsed.previousStatus && parsed.newStatus) {
+          detailsText = `${formatAuditStatusLabel(parsed.previousStatus)} → ${formatAuditStatusLabel(parsed.newStatus)}${parsed.notes ? `\nGhi chú: ${parsed.notes}` : ''}`;
+        } else if (log.action === 'FACILITY_ROOM_CREATE' || log.action === 'FACILITY_ROOM_UPDATE') {
+          detailsText = `${parsed.roomType || 'Phòng'} • Sức chứa ${parsed.capacity ?? '?'} người`;
+        } else if (log.action === 'FACILITY_EQUIPMENT_CREATE') {
+          detailsText = parsed.roomName ? `Phòng: ${parsed.roomName}` : 'Thêm thiết bị mới';
+        } else if (log.action === 'FACILITY_EQUIPMENT_DELETE') {
+          detailsText = parsed.roomName ? `Xóa khỏi phòng ${parsed.roomName}` : 'Đã xóa thiết bị';
+        } else if (log.action === 'GYM_CALENDAR_UPDATE' && (parsed.before || parsed.after)) {
+          target = 'Lịch hoạt động Gym';
+          const b = parsed.before || {};
+          const a = parsed.after || {};
+          const diffs: string[] = [];
+          if (b.openTime !== a.openTime || b.closeTime !== a.closeTime) {
+            diffs.push(`Giờ mở cửa: ${b.openTime ?? '?'}–${b.closeTime ?? '?'} → ${a.openTime ?? '?'}–${a.closeTime ?? '?'}`);
+          }
+          if (b.slotMinutes !== a.slotMinutes) {
+            diffs.push(`Thời lượng ca: ${b.slotMinutes ?? '?'}p → ${a.slotMinutes ?? '?'}p`);
+          }
+          if (b.breakMinutes !== a.breakMinutes) {
+            diffs.push(`Nghỉ giữa ca: ${b.breakMinutes ?? '?'}p → ${a.breakMinutes ?? '?'}p`);
+          }
+          detailsText = diffs.length > 0
+            ? diffs.join(' • ')
+            : `Mở ${a.openTime || '06:00'}–${a.closeTime || '22:00'} • Ca ${a.slotMinutes ?? 60}p • Nghỉ ${a.breakMinutes ?? 0}p`;
+        } else if (log.action === 'COACH_WEEKLY_AVAILABILITY' && (parsed.before !== undefined || parsed.after !== undefined)) {
+          target = 'Lịch rảnh tuần HLV';
+          const beforeCount = Array.isArray(parsed.before) ? parsed.before.length : 0;
+          const afterCount = Array.isArray(parsed.after) ? parsed.after.length : 0;
+          detailsText = `Số ca rảnh/tuần: ${beforeCount} → ${afterCount} ca`;
+        } else if ((log.action === 'COACH_DATE_AVAILABILITY' || log.action === 'COACH_DATE_RESET') && (parsed.before !== undefined || parsed.after !== undefined)) {
+          const dateStr = parsed.after?.date || parsed.before?.date;
+          target = dateStr ? `Lịch HLV ngày ${formatAuditDate(dateStr)}` : 'Lịch HLV theo ngày';
+          const shifts = Array.isArray(parsed.after?.shifts) ? parsed.after.shifts : [];
+          if (shifts.length > 0) {
+            const first = shifts[0]?.startTime || '';
+            const last = shifts[shifts.length - 1]?.endTime || '';
+            detailsText = `${shifts.length} ca (${first}–${last})`;
+          } else {
+            detailsText = 'Xóa / đặt lại ca rảnh trong ngày';
+          }
+        } else if (log.action === 'MEMBERSHIP_FREEZE_BY_STAFF') {
+          const parts: string[] = [];
+          if (parsed.freezeDays !== undefined) parts.push(`Bảo lưu ${parsed.freezeDays} ngày`);
+          if (parsed.projectedEndDate) parts.push(`Hạn mới: ${formatAuditDate(parsed.projectedEndDate)}`);
+          if (parsed.reason) parts.push(`Lý do: ${parsed.reason}`);
+          detailsText = parts.join(' • ') || 'Tạm bảo lưu gói tập';
+        } else if (log.action === 'MEMBERSHIP_UNFREEZE_BY_STAFF') {
+          const parts: string[] = [];
+          if (parsed.unusedDaysRecovered !== undefined) parts.push(`Hoàn ${parsed.unusedDaysRecovered} ngày`);
+          if (parsed.adjustedEndDate) parts.push(`Hạn mới: ${formatAuditDate(parsed.adjustedEndDate)}`);
+          if (parsed.notes) parts.push(String(parsed.notes));
+          detailsText = parts.join(' • ') || 'Mở lại gói bảo lưu';
+        } else if (log.action === 'COACH_PRICING_UPDATE') {
+          if (parsed.coachName) target = String(parsed.coachName);
+          const diffs: string[] = [];
+          if (parsed.previousHourlyRate !== undefined && parsed.previousHourlyRate !== parsed.newHourlyRate) {
+            diffs.push(`Giá: ${Number(parsed.previousHourlyRate).toLocaleString('vi-VN')}đ → ${Number(parsed.newHourlyRate).toLocaleString('vi-VN')}đ`);
+          }
+          if (parsed.previousCommission !== undefined && parsed.previousCommission !== parsed.newCommission) {
+            diffs.push(`Hoa hồng: ${parsed.previousCommission}% → ${parsed.newCommission}%`);
+          }
+          if (parsed.previousRank && parsed.newRank && parsed.previousRank !== parsed.newRank) {
+            diffs.push(`Bậc: ${String(parsed.previousRank).toUpperCase()} → ${String(parsed.newRank).toUpperCase()}`);
+          }
+          detailsText = diffs.join(' • ') || 'Cập nhật cấu hình giá HLV';
+        } else if (log.action === 'COACH_SPECIALIZATION_UPDATE' && Array.isArray(parsed.levels)) {
+          detailsText = `Cấp độ PT: ${parsed.levels.join(', ')}`;
+        } else if (log.action === 'GROUP_CLASS_TRAINER_REASSIGN') {
+          if (parsed.className) target = String(parsed.className);
+          const oldName = parsed.oldTrainerId ? resolveUserName(parsed.oldTrainerId, 'HLV') : 'HLV cũ';
+          const newName = parsed.newTrainerId ? resolveUserName(parsed.newTrainerId, 'HLV') : 'HLV mới';
+          detailsText = `Chuyển HLV: ${oldName} → ${newName}`;
+        } else if (log.action === 'GROUP_CLASS_CANCELLED') {
+          if (parsed.className) target = String(parsed.className);
+          detailsText = `Đã hủy ca lớp${parsed.cancelledBookingsCount ? ` (${parsed.cancelledBookingsCount} lượt đặt)` : ''}`;
+        } else if (log.action === 'PT_WALLET_ADJUST') {
+          const deltaNum = Number(parsed.delta || 0);
+          const sign = deltaNum > 0 ? `+${deltaNum}` : String(deltaNum);
+          detailsText = `${sign} buổi (${parsed.level || 'PT'})${parsed.reason ? ` • ${parsed.reason}` : ''}`;
+        } else if (typeof parsed.message === 'string' && parsed.message) {
+          detailsText = parsed.message;
+        } else if (typeof parsed.reason === 'string' && parsed.reason) {
+          detailsText = parsed.reason;
+        } else {
+          const parts = Object.entries(parsed)
+            .filter(([k, v]) => !HIDDEN_AUDIT_FIELDS.has(k) && v !== null && v !== undefined && typeof v !== 'object')
+            .slice(0, 3)
+            .map(([k, v]) => {
+              const label = AUDIT_FIELD_VI[k] || k;
+              const strVal = typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v) ? formatAuditDate(v) : formatAuditStatusLabel(String(v));
+              return `${label}: ${strVal}`;
+            });
+          detailsText = parts.join(' • ') || 'Đã cập nhật thông tin';
+        }
+      }
+    } catch {
+      // Định dạng gọn cho log dạng plain-text
+      if (log.action === 'STAFF_CLOCK_OUT') {
+        const shiftMatch = detailsText.match(/\[(SHF-[^\]]+)\]/);
+        if (shiftMatch) target = `Ca ${shiftMatch[1]}`;
+        detailsText = detailsText
+          .replace(/^Lễ tân .*? đã đóng ca \[[^\]]+\]\s*/i, '')
+          .replace(/Hệ thống:/i, 'HT:')
+          .replace(/Thực tế:/i, 'TT:')
+          .replace(/Chênh lệch:/i, 'Lệch:');
+      } else if (log.action === 'STAFF_CLOCK_IN') {
+        const shiftMatch = detailsText.match(/\[(SHF-[^\]]+)\]/);
+        if (shiftMatch) target = `Ca ${shiftMatch[1]}`;
+        detailsText = detailsText.replace(/^Lễ tân .*? đã mở ca trực \[[^\]]+\]\s*tại\s*/i, 'Quầy: ');
+      } else if (log.action === 'EQUIPMENT_STATUS_UPDATE') {
+        const eqMatch = detailsText.match(/\[([^\]]+)\]/);
+        if (eqMatch) target = eqMatch[1];
+        detailsText = detailsText
+          .replace(/^Lễ tân ID \d+ đã chuyển trạng thái thiết bị \[[^\]]+\] sang\s*/i, '')
+          .replace(/\bAVAILABLE\b/g, 'Sẵn sàng')
+          .replace(/\bUNDER_MAINTENANCE\b|\bMAINTENANCE\b/g, 'Đang bảo trì');
+      } else if (log.action === 'WALK_IN_REGISTRATION') {
+        const guestMatch = detailsText.match(/cho khách Walk-in\s+([^.]+)\./i);
+        if (guestMatch) target = guestMatch[1].trim();
+        detailsText = detailsText.replace(/^Lễ tân ID \d+\s+/i, '');
+      }
+    }
+  }
+
+  const rawRole = String(log.user?.role || 'STAFF').toUpperCase();
+  const actorRole =
+    rawRole === 'ADMIN'
+      ? 'admin'
+      : rawRole === 'COACH'
+        ? 'coach'
+        : rawRole === 'MEMBER'
+          ? 'member'
+          : 'staff';
+
+  return {
+    id: String(log.id),
+    timestamp: log.createdAt.toISOString(),
+    actorName: log.user?.fullName || log.user?.email || `User #${log.userId}`,
+    actorRole,
+    action: log.action,
+    target,
+    details: detailsText,
+  };
+}
+
+/**
+ * API: Lấy danh sách Nhật Ký Kiểm Toán (Audit Trail) từ ActionLog
+ * @route GET /api/admin/audit-logs
+ */
+export const getAuditLogs = async (req: AuthRequest, res: Response) => {
+  try {
+    const rawLimit = Number(req.query.limit || 50);
+    const limit = Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, rawLimit)) : 50;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const action = typeof req.query.action === 'string' ? req.query.action.trim() : '';
+
+    const where: Prisma.ActionLogWhereInput = {};
+    if (action && action !== 'ALL') {
+      where.action = action;
+    }
+    if (search) {
+      where.OR = [
+        { action: { contains: search } },
+        { details: { contains: search } },
+        { user: { fullName: { contains: search } } },
+        { user: { email: { contains: search } } },
+      ];
+    }
+
+    const logs = await prisma.actionLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    const userIds = new Set<number>();
+    const membershipIds = new Set<number>();
+    for (const log of logs) {
+      if (!log.details || !log.details.trim().startsWith('{')) continue;
+      try {
+        const parsed = JSON.parse(log.details);
+        for (const key of ['userId', 'memberId', 'coachId', 'coachUserId', 'targetUserId', 'oldTrainerId', 'newTrainerId', 'trainerId']) {
+          const val = Number(parsed?.[key]);
+          if (Number.isFinite(val) && val > 0) userIds.add(val);
+        }
+        const mId = Number(parsed?.membershipId);
+        if (Number.isFinite(mId) && mId > 0) membershipIds.add(mId);
+      } catch {
+        // ignore non-JSON
+      }
+    }
+
+    const [referencedUsers, referencedMemberships] = await Promise.all([
+      userIds.size > 0
+        ? prisma.user.findMany({
+            where: { id: { in: Array.from(userIds) } },
+            select: { id: true, fullName: true, email: true },
+          })
+        : Promise.resolve([]),
+      membershipIds.size > 0
+        ? prisma.membership.findMany({
+            where: { id: { in: Array.from(membershipIds) } },
+            select: {
+              id: true,
+              user: { select: { fullName: true } },
+              package: { select: { name: true } },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const usersById = new Map(referencedUsers.map((u) => [u.id, { fullName: u.fullName, email: u.email }]));
+    const membershipsById = new Map(
+      referencedMemberships.map((m) => [
+        m.id,
+        { packageName: m.package?.name || `Gói #${m.id}`, ownerName: m.user?.fullName || null },
+      ])
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: logs.map((log) => formatAuditLogEntry(log, { usersById, membershipsById })),
+    });
+  } catch (error: any) {
+    console.error('Lỗi getAuditLogs:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi lấy nhật ký kiểm toán hệ thống' });
+  }
+};

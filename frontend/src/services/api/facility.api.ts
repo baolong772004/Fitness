@@ -41,7 +41,7 @@ export const facilityApi = {
   },
 
   async updateEquipmentStatus(id: number | string, payload: {
-    status: 'AVAILABLE' | 'MAINTENANCE' | 'BROKEN' | string;
+    status: 'AVAILABLE' | 'MAINTENANCE' | 'UNDER_MAINTENANCE' | 'BROKEN' | string;
     note?: string;
   }) {
     return request<{
@@ -49,6 +49,23 @@ export const facilityApi = {
       message: string;
       data: ApiEquipment;
     }>(`/facility/equipment/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  async updateEquipment(id: number | string, payload: {
+    name?: string;
+    code?: string;
+    roomId?: number;
+    status?: 'AVAILABLE' | 'MAINTENANCE' | 'UNDER_MAINTENANCE' | 'BROKEN' | string;
+    note?: string;
+  }) {
+    return request<{
+      success: boolean;
+      message: string;
+      data: ApiEquipment;
+    }>(`/facility/equipment/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload)
     });

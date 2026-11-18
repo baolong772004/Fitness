@@ -180,6 +180,7 @@ export interface ApiCoachProfile {
     email: string;
     phone?: string | null;
     avatar?: string | null;
+    status?: string;
   };
   schedules?: ApiCoachSchedule[];
 }

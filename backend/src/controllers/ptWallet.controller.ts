@@ -5,6 +5,7 @@ import { PT_LEVELS, walletSummary } from '../services/ptWallet.service.js';
 import { createWalletPtBookings, lockPtCalendar, lockPtCoach, lockPtMember, PtBookingError } from '../services/ptBooking.service.js';
 import { createUserNotification } from '../services/notification.service.js';
 import { emitCoachScheduleChanged } from '../sockets/ptChat.socket.js';
+import { assertCoachCanRemovePtLevels } from '../services/ptCoachEligibility.service.js';
 
 export async function getMyPtWallet(req: AuthRequest, res: Response) {
   if (!req.user?.userId) return res.status(401).json({ success: false });
@@ -276,11 +277,7 @@ export async function setCoachSpecializations(req: AuthRequest, res: Response) {
       select: { level: true } });
     const removed = previous.map(row => row.level).filter(level => !levels.includes(level));
     if (removed.length) {
-      const affected = await tx.booking.findFirst({ where: { coachId, type: 'PT',
-        status: { in: ['PENDING', 'UPCOMING', 'CONFIRMED', 'IN_PROGRESS'] }, startTime: { gt: new Date() },
-        ptCreditAllocation: { is: { batch: { level: { in: removed } } } },
-      }, select: { id: true } });
-      if (affected) throw new PtBookingError(409, `Coach còn Booking #${affected.id} ở cấp độ đang xóa.`);
+      await assertCoachCanRemovePtLevels(tx, coachId, removed);
     }
     await tx.coachSpecialization.deleteMany({ where: { coachProfileId: profile.id } });
     if (levels.length) await tx.coachSpecialization.createMany({ data: levels.map(level => ({ coachProfileId: profile.id, level })) });

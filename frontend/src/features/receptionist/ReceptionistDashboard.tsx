@@ -670,14 +670,18 @@ interface StaffConsultant {
   // GIAI ĐOẠN 4: VẬN HÀNH THIẾT BỊ & TIẾP NHẬN YÊU CẦU
   // =========================================================================
 
-  // Cập nhật trạng thái máy tập sang bảo trì
+  // Cập nhật trạng thái máy tập sang bảo trì hoặc sẵn sàng
+  const isEquipmentUnavailable = (status?: string | null) =>
+    ['UNDER_MAINTENANCE', 'MAINTENANCE', 'BROKEN'].includes(String(status || '').toUpperCase());
+
   const handleUpdateEquipmentStatus = async () => {
     if (!selectedEquipment) return;
     try {
-      const nextStatus = selectedEquipment.status === 'UNDER_MAINTENANCE' ? 'AVAILABLE' : 'UNDER_MAINTENANCE';
+      const nextStatus = isEquipmentUnavailable(selectedEquipment.status) ? 'AVAILABLE' : 'UNDER_MAINTENANCE';
+      const trimmedNote = equipmentMaintenanceNote.trim();
       const res = await api.staff.updateEquipmentStatus(selectedEquipment.id, {
         status: nextStatus,
-        note: equipmentMaintenanceNote || (nextStatus === 'UNDER_MAINTENANCE' ? 'Lễ tân báo hỏng' : 'Đã sửa chữa xong')
+        note: trimmedNote || (nextStatus === 'UNDER_MAINTENANCE' ? 'Lễ tân báo hỏng' : 'Đã sửa chữa xong')
       });
 
       soundEffects.playSuccessBeep();
@@ -773,9 +777,7 @@ interface StaffConsultant {
   const walkInChange = Math.max(0, walkInCashGiven - walkInPkgPrice);
 
   const totalEquipments = equipments.length;
-  const maintenanceCount = equipments.filter(
-    (e) => e.status === 'UNDER_MAINTENANCE' || e.status === 'MAINTENANCE'
-  ).length;
+  const maintenanceCount = equipments.filter((e) => isEquipmentUnavailable(e.status)).length;
   const availableCount = totalEquipments - maintenanceCount;
   const notesCount = operationalNotes.length;
 
@@ -786,7 +788,7 @@ interface StaffConsultant {
       eq.name.toLowerCase().includes(q) ||
       eq.code.toLowerCase().includes(q) ||
       (eq.room?.name && eq.room.name.toLowerCase().includes(q));
-    const isMaint = eq.status === 'UNDER_MAINTENANCE' || eq.status === 'MAINTENANCE';
+    const isMaint = isEquipmentUnavailable(eq.status);
     if (equipmentFilter === 'AVAILABLE') return matchesSearch && !isMaint;
     if (equipmentFilter === 'MAINTENANCE') return matchesSearch && isMaint;
     return matchesSearch;
@@ -945,8 +947,12 @@ interface StaffConsultant {
                   </form>
 
                   {/* Hiển thị kết quả tra cứu đối chiếu mặt */}
-                  {manualLookupData && (
-                    <div className="mt-4 rounded-xl border border-primary/30 bg-card p-4 shadow-sm animate-in fade-in-50 duration-200">
+                  {manualLookupData && (() => {
+                    const memberAccountStatus = String(manualLookupData.member?.status || '').toUpperCase();
+                    const isMemberLocked = ['BANNED', 'SUSPENDED', 'INACTIVE', 'BLOCKED'].includes(memberAccountStatus);
+                    const isMemberPending = memberAccountStatus === 'PENDING';
+                    return (
+                    <div className={`mt-4 rounded-xl border bg-card p-4 shadow-sm animate-in fade-in-50 duration-200 ${isMemberLocked ? 'border-destructive bg-destructive/5' : 'border-primary/30'}`}>
                       <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
                         {/* Ảnh chân dung lớn để đối chiếu mặt */}
                         <div className="relative shrink-0 text-center">
@@ -966,19 +972,25 @@ interface StaffConsultant {
                             <h4 className="text-lg font-extrabold text-foreground">{manualLookupData.member.fullName}</h4>
                             <Badge
                               variant={
-                                manualLookupData.isFrozen
+                                isMemberLocked || isMemberPending
+                                  ? 'destructive'
+                                  : manualLookupData.isFrozen
                                   ? 'outline'
                                   : manualLookupData.hasActiveGymAccess
                                   ? 'success'
                                   : 'destructive'
                               }
                               className={
-                                manualLookupData.isFrozen
+                                !isMemberLocked && !isMemberPending && manualLookupData.isFrozen
                                   ? 'bg-amber-500/15 text-amber-600 border border-amber-500/30 font-bold'
                                   : ''
                               }
                             >
-                              {manualLookupData.isFrozen
+                              {isMemberLocked
+                                ? 'TÀI KHOẢN BỊ KHÓA'
+                                : isMemberPending
+                                ? 'CHƯA XÁC THỰC EMAIL'
+                                : manualLookupData.isFrozen
                                 ? 'ĐANG BẢO LƯU'
                                 : manualLookupData.hasActiveGymAccess
                                 ? 'GÓI CÒN HẠN'
@@ -986,6 +998,20 @@ interface StaffConsultant {
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">SĐT: {manualLookupData.member.phone}</p>
+
+                          {(isMemberLocked || isMemberPending) && (
+                            <Alert variant="destructive" className="mt-2 py-2 text-xs">
+                              <ShieldAlert className="size-4" />
+                              <AlertTitle className="text-xs font-bold">
+                                {isMemberLocked ? 'Tài khoản hội viên đang bị khóa' : 'Tài khoản chưa được kích hoạt'}
+                              </AlertTitle>
+                              <AlertDescription className="text-xs">
+                                {isMemberLocked
+                                  ? 'Hội viên này đã bị Ban Quản Lý khóa tài khoản, không được phép check-in vào phòng tập.'
+                                  : 'Hội viên chưa hoàn tất xác thực email OTP.'}
+                              </AlertDescription>
+                            </Alert>
+                          )}
 
                           {manualLookupData.isFrozen && manualLookupData.frozenMembership && (
                             <div className="mt-2 text-xs bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/30">
@@ -1061,9 +1087,11 @@ interface StaffConsultant {
                             <Button
                               type="button"
                               size="sm"
-                              disabled={!manualLookupData.hasActiveGymAccess || (!!manualLookupData.recentCheckIn && !overrideAntiPassback)}
+                              disabled={isMemberLocked || isMemberPending || !manualLookupData.hasActiveGymAccess || (!!manualLookupData.recentCheckIn && !overrideAntiPassback)}
                               className={`font-bold h-8 cursor-pointer ${
-                                manualLookupData.recentCheckIn
+                                isMemberLocked || isMemberPending
+                                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                                  : manualLookupData.recentCheckIn
                                   ? overrideAntiPassback
                                     ? 'bg-amber-600 hover:bg-amber-700 text-white'
                                     : 'bg-muted text-muted-foreground cursor-not-allowed'
@@ -1072,7 +1100,11 @@ interface StaffConsultant {
                               onClick={handleConfirmManualCheckIn}
                             >
                               <Check className="size-3.5" />
-                              {manualLookupData.recentCheckIn
+                              {isMemberLocked
+                                ? 'Tài khoản bị khóa'
+                                : isMemberPending
+                                ? 'Chưa kích hoạt'
+                                : manualLookupData.recentCheckIn
                                 ? overrideAntiPassback
                                   ? 'Ghi Đè & Vào Cổng'
                                   : 'Chặn Anti-Passback (Cần tích xác nhận)'
@@ -1082,7 +1114,8 @@ interface StaffConsultant {
                         </div>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>
@@ -1948,7 +1981,8 @@ interface StaffConsultant {
                       </tr>
                     ) : (
                       filteredEquipments.map((eq) => {
-                        const isMaint = eq.status === 'UNDER_MAINTENANCE' || eq.status === 'MAINTENANCE';
+                        const isMaint = isEquipmentUnavailable(eq.status);
+                        const isBroken = eq.status === 'BROKEN';
                         return (
                           <tr key={eq.id} className="hover:bg-muted/30 transition-colors">
                             <td className="py-3 px-3 align-middle">
@@ -1972,7 +2006,7 @@ interface StaffConsultant {
                               {isMaint ? (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-destructive/15 text-destructive border border-destructive/30 shrink-0">
                                   <span className="size-1.5 rounded-full bg-destructive animate-pulse shrink-0" />
-                                  Bảo trì
+                                  {isBroken ? 'Hỏng hóc' : 'Bảo trì'}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-success/15 text-success border border-success/30 shrink-0">

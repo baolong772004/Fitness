@@ -102,6 +102,7 @@ export const ptApi = {
       slots: Array<{ startTime: string; endTime: string; startMinute: number; endMinute: number }>;
       closures: Array<{ id: number; startAt: string; endAt: string; kind: string; reason: string }>;
       bookings: Array<{ id: number; startTime: string; endTime: string; status: string }>;
+      groupClasses?: Array<{ id: number; startTime: string; endTime: string; status: string; className: string; roomName: string | null }>;
       schedules: ApiCoachSchedule[];
       dates: Array<{ date: string; shifts: Array<{ startTime: string; endTime: string }> }>;
     } }>('/pt/coach/availability');

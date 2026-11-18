@@ -31,6 +31,18 @@ export async function suitableSlot(tx: Prisma.TransactionClient, input: {
     endTime: { gt: input.start } };
   if (await tx.booking.findFirst({ where: { coachId: input.coachId, ...overlap }, select: { id: true } })) return false;
   if (await tx.booking.findFirst({ where: { memberId: input.memberId, ...overlap }, select: { id: true } })) return false;
+  if (await tx.groupClassSchedule.findFirst({
+    where: { trainerId: input.coachId, status: { in: ['OPEN', 'FULL'] }, startTime: { lt: input.end }, endTime: { gt: input.start } },
+    select: { id: true },
+  })) return false;
+  if (await tx.groupClassBooking.findFirst({
+    where: {
+      userId: input.memberId,
+      status: { in: ['BOOKED', 'CHECKED_IN'] },
+      schedule: { status: { in: ['OPEN', 'FULL'] }, startTime: { lt: input.end }, endTime: { gt: input.start } },
+    },
+    select: { id: true },
+  })) return false;
   const gym = await tx.membership.findFirst({ where: { userId: input.memberId,
     status: { in: ['ACTIVE', 'PENDING_ACTIVATION'] }, startDate: { lte: input.start },
     endDate: { gte: input.end }, package: { type: 'MEMBERSHIP' },

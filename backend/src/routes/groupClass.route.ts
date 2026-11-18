@@ -3,6 +3,7 @@ import {
   getGroupClassSchedules,
   getAdminGroupClasses,
   getAdminGroupClassSchedules,
+  getCoachMyGroupClassSchedules,
   getGroupClassCheckInQr,
   getGroupClassAttendees,
   bookGroupClass,
@@ -10,8 +11,10 @@ import {
   checkInGroupClass,
   createGroupClass,
   createGroupClassSchedule,
+  reassignGroupClassScheduleTrainer,
+  cancelGroupClassSchedule,
 } from '../controllers/groupClass.controller.js';
-import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
+import { authenticateToken, authorizeRoles, optionalAuthenticateToken } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 
@@ -50,6 +53,8 @@ router.get('/admin/classes', authenticateToken, authorizeRoles('ADMIN', 'STAFF')
  */
 router.get('/admin/schedules', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getAdminGroupClassSchedules);
 
+router.get('/coach/my-schedules', authenticateToken, authorizeRoles('COACH', 'ADMIN'), getCoachMyGroupClassSchedules);
+
 /**
  * @swagger
  * /group-classes:
@@ -87,7 +92,7 @@ router.get('/', authenticateToken, getAdminGroupClasses);
  *       200:
  *         description: Thành công
  */
-router.get('/schedules', authenticateToken, getGroupClassSchedules);
+router.get('/schedules', optionalAuthenticateToken, getGroupClassSchedules);
 
 /**
  * @swagger
@@ -269,5 +274,7 @@ router.post('/', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), createGrou
  *         description: Lên lịch thành công
  */
 router.post('/schedules', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), createGroupClassSchedule);
+router.patch('/schedules/:scheduleId/trainer', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), reassignGroupClassScheduleTrainer);
+router.patch('/schedules/:scheduleId/cancel', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), cancelGroupClassSchedule);
 
 export default router;

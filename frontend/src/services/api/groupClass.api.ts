@@ -24,6 +24,14 @@ export const groupClassApi = {
     return res.data;
   },
 
+  async getMyAssignedSchedules(date?: string) {
+    const q = date ? `?date=${encodeURIComponent(date)}` : '';
+    const res = await request<{ success: boolean; data: ApiGroupClassSchedule[] }>(
+      `/group-classes/coach/my-schedules${q}`
+    );
+    return res.data;
+  },
+
   async getAllSchedules() {
     const res = await request<{ success: boolean; data: ApiGroupClassSchedule[] }>(
       '/group-classes/schedules?all=true'
@@ -100,16 +108,42 @@ export const groupClassApi = {
     trainerId: number;
     roomId?: number;
     startTime: string;
-    endTime: string;
+    endTime?: string;
     capacity?: number;
+    repeatCount?: number;
+    repeatFrequency?: 'NONE' | 'DAILY' | 'WEEKLY';
+    repeatDays?: number[];
   }) {
     return request<{
       success: boolean;
       message: string;
       data: ApiGroupClassSchedule;
+      schedules?: ApiGroupClassSchedule[];
+      createdCount?: number;
     }>('/group-classes/schedules', {
       method: 'POST',
       body: JSON.stringify(payload)
+    });
+  },
+
+  async reassignScheduleTrainer(scheduleId: number, trainerId: number) {
+    return request<{
+      success: boolean;
+      message: string;
+      data: ApiGroupClassSchedule;
+    }>(`/group-classes/schedules/${scheduleId}/trainer`, {
+      method: 'PATCH',
+      body: JSON.stringify({ trainerId })
+    });
+  },
+
+  async cancelSchedule(scheduleId: number) {
+    return request<{
+      success: boolean;
+      message: string;
+      data: ApiGroupClassSchedule;
+    }>(`/group-classes/schedules/${scheduleId}/cancel`, {
+      method: 'PATCH'
     });
   }
 };

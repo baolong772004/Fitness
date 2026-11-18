@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getMembersList, getMemberDetailProfile, getAdminAnalytics, getAdminPayments } from '../controllers/admin.controller.js';
+import { getMembersList, getMemberDetailProfile, getAdminAnalytics, getAdminPayments, getAuditLogs } from '../controllers/admin.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -102,5 +102,16 @@ router.get('/members', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getM
  */
 // Chỉ ADMIN hoặc STAFF mới được xem hồ sơ chi tiết
 router.get('/members/:id/profile', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getMemberDetailProfile);
+
+/**
+ * @swagger
+ * /admin/audit-logs:
+ *   get:
+ *     summary: Lấy Nhật ký kiểm toán hệ thống (Chỉ ADMIN)
+ *     tags: [AdminMember]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/audit-logs', authenticateToken, authorizeRoles('ADMIN'), getAuditLogs);
 
 export default router;

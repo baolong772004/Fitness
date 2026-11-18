@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import prisma from '../config/prisma.js';
 import { AuthController } from '../controllers/auth.controller.js';
-import { authenticateToken } from '../middlewares/auth.middleware.js';
+import { authenticateToken, isLockedAccountStatus } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 
@@ -227,7 +228,7 @@ router.post('/google', AuthController.googleLogin);
  *     summary: Kiểm tra tính hợp lệ và thời hạn phiên đăng nhập hiện tại
  *     tags: [Auth]
  */
-router.get('/verify-session', (req: Request, res: Response) => {
+router.get('/verify-session', async (req: Request, res: Response) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -246,7 +247,21 @@ router.get('/verify-session', (req: Request, res: Response) => {
       role: string;
       exp?: number;
     };
-    const role = decoded.role === 'RECEPTIONIST' ? 'STAFF' : decoded.role;
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { role: true, status: true },
+    });
+    if (!user || isLockedAccountStatus(user.status)) {
+      const userRole = (user?.role || decoded.role) === 'RECEPTIONIST' ? 'STAFF' : (user?.role || decoded.role);
+      return res.status(401).json({
+        success: false,
+        message: 'Tài khoản đã bị khóa hoặc không còn hoạt động.',
+        code: 'ACCOUNT_SUSPENDED',
+        role: userRole,
+        redirectTo: '/',
+      });
+    }
+    const role = user.role === 'RECEPTIONIST' ? 'STAFF' : user.role;
     return res.status(200).json({
       success: true,
       data: {

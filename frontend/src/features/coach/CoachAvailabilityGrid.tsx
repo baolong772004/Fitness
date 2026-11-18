@@ -54,6 +54,15 @@ export function CoachAvailabilityGrid({ onSaved }: { onSaved: () => void }) {
       return weekday(localStart.slice(0, 10)) === weekday(date) && localStart.slice(11, 16) === slot.startTime;
     });
     if (booking) return { label: 'Đã đặt', reason: `Booking #${booking.id}` };
+    const groupClass = mode === 'dates'
+      ? (data.groupClasses ?? []).find(row => Date.parse(row.startTime) < end && Date.parse(row.endTime) > start)
+      : undefined;
+    if (groupClass) {
+      return {
+        label: 'Lớp nhóm',
+        reason: `Lớp nhóm: ${groupClass.className}${groupClass.roomName ? ` (${groupClass.roomName})` : ''}`,
+      };
+    }
     if (mode === 'dates' && data.closures.some(row => Date.parse(row.startAt) < end && Date.parse(row.endAt) > start)) return { label: 'Đóng cửa', reason: 'Gym đóng cửa hoặc bảo trì' };
     if (mode === 'dates' && start <= Date.now()) return { label: 'Đã qua', reason: 'Ca đã bắt đầu' };
     return null;

@@ -103,16 +103,22 @@ export class PtController {
         return res.status(404).json({ success: false, message: 'Không tìm thấy huấn luyện viên đang hoạt động' });
       }
 
-      const [calendarSlots, bookedSlots] = await Promise.all([
+      const [calendarSlots, bookedSlots, groupClassSlots] = await Promise.all([
         availableSlots(prisma, coachProfile.id, dateStr),
         prisma.booking.findMany({ where: {
           coachId: trainerId, type: 'PT', status: { in: PT_BOOKING_HOLD_STATUSES },
           startTime: { lt: localInstant(dateStr, 1440) }, endTime: { gt: localInstant(dateStr, 0) },
         }, select: { startTime: true, endTime: true } }),
+        prisma.groupClassSchedule.findMany({ where: {
+          trainerId, status: { in: ['OPEN', 'FULL'] },
+          startTime: { lt: localInstant(dateStr, 1440) }, endTime: { gt: localInstant(dateStr, 0) },
+        }, select: { startTime: true, endTime: true } }),
       ]);
       const now = new Date();
       const slotsResult = calendarSlots.map(slot => {
-        const booked = bookedSlots.some(booking => booking.startTime < slot.end && booking.endTime > slot.start);
+        const booked =
+          bookedSlots.some(booking => booking.startTime < slot.end && booking.endTime > slot.start) ||
+          groupClassSlots.some(gc => gc.startTime < slot.end && gc.endTime > slot.start);
         const status = booked ? 'BOOKED' : slot.start.getTime() < now.getTime() + 2 * 3600000 ? 'TOO_LATE' : 'AVAILABLE';
         return { startTime: slot.startTime, endTime: slot.endTime, status, isAvailable: status === 'AVAILABLE' };
       });

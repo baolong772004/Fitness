@@ -6,6 +6,7 @@ import { createUserNotification } from '../services/notification.service.js';
 import { reportCoachAbsence } from '../services/ptCoachAbsence.service.js';
 import { lockPtCalendar, lockPtCoach, lockPtMembership, PtBookingError, PT_BOOKING_HOLD_STATUSES } from '../services/ptBooking.service.js';
 import { assertBookingsCovered, availableSlots, getCalendar, localInstant, masterSlots, minute, validDate, validateShifts, vietnamDate, type Shift } from '../services/ptCalendar.service.js';
+import { ACTIVE_GROUP_CLASS_SCHEDULE_STATUSES, findGroupClassOutsideMasterHours } from '../services/groupClass.service.js';
 
 const fail = (res: Response, error: unknown) => res.status(error instanceof Error ? 409 : 500)
   .json({ success: false, message: error instanceof Error ? error.message : 'Không thể cập nhật lịch' });
@@ -20,11 +21,30 @@ export async function getCoachAvailability(req: AuthRequest, res: Response) {
     dateAvailability: { where: { date: { gte: vietnamDate(new Date()) } }, orderBy: { date: 'asc' }, take: 180 },
   } });
   if (!profile) return res.status(404).json({ success: false, message: 'Chưa có hồ sơ Coach' });
-  const [calendar, closures, bookings] = await Promise.all([getCalendar(prisma), prisma.gymClosure.findMany({
-    where: { endAt: { gt: new Date() } }, orderBy: { startAt: 'asc' }, take: 200,
-  }), prisma.booking.findMany({ where: { coachId: userId, type: 'PT', status: { in: PT_BOOKING_HOLD_STATUSES }, endTime: { gt: new Date() } },
-    select: { id: true, startTime: true, endTime: true, status: true }, orderBy: { startTime: 'asc' } })]);
-  return res.json({ success: true, data: { calendar, slots: masterSlots(calendar), closures, bookings, schedules: profile.schedules,
+  const [calendar, closures, bookings, groupClassSchedules] = await Promise.all([
+    getCalendar(prisma),
+    prisma.gymClosure.findMany({
+      where: { endAt: { gt: new Date() } }, orderBy: { startAt: 'asc' }, take: 200,
+    }),
+    prisma.booking.findMany({
+      where: { coachId: userId, type: 'PT', status: { in: PT_BOOKING_HOLD_STATUSES }, endTime: { gt: new Date() } },
+      select: { id: true, startTime: true, endTime: true, status: true }, orderBy: { startTime: 'asc' },
+    }),
+    prisma.groupClassSchedule.findMany({
+      where: { trainerId: userId, status: { in: ACTIVE_GROUP_CLASS_SCHEDULE_STATUSES }, endTime: { gt: new Date() } },
+      select: { id: true, startTime: true, endTime: true, status: true, groupClass: { select: { name: true } }, room: { select: { name: true } } },
+      orderBy: { startTime: 'asc' },
+    }),
+  ]);
+  const groupClasses = groupClassSchedules.map(gc => ({
+    id: gc.id,
+    startTime: gc.startTime,
+    endTime: gc.endTime,
+    status: gc.status,
+    className: gc.groupClass.name,
+    roomName: gc.room?.name ?? null,
+  }));
+  return res.json({ success: true, data: { calendar, slots: masterSlots(calendar), closures, bookings, groupClasses, schedules: profile.schedules,
     dates: profile.dateAvailability.map(row => ({ date: row.date, shifts: JSON.parse(row.shifts) })) } });
 }
 
@@ -174,6 +194,10 @@ export async function putMasterCalendar(req: AuthRequest, res: Response) {
       const profiles = await tx.coachProfile.findMany({ where: { user: { coachBookings: { some: {
         type: 'PT', status: { in: PT_BOOKING_HOLD_STATUSES }, startTime: { gt: new Date() },
       } } } }, select: { id: true, userId: true } });
+      const outsideGroupClass = await findGroupClassOutsideMasterHours(tx, next.openTime, next.closeTime);
+      if (outsideGroupClass) {
+        throw new Error(`Có lớp học nhóm "${outsideGroupClass.groupClass.name}" (#${outsideGroupClass.id}) nằm ngoài giờ hoạt động ${next.openTime}–${next.closeTime}. Vui lòng xử lý trước.`);
+      }
       await tx.gymCalendarConfig.upsert({ where: { id: 1 }, update: next, create: { id: 1, ...next } });
       for (const p of profiles) await assertBookingsCovered(tx, p.userId, p.id);
       await log(tx, req.user!.userId, 'GYM_CALENDAR_UPDATE', before, next);
@@ -195,6 +219,13 @@ export async function addClosure(req: AuthRequest, res: Response) {
       await lockPtCalendar(tx);
       const booking = await tx.booking.findFirst({ where: { type: 'PT', status: { in: PT_BOOKING_HOLD_STATUSES }, startTime: { lt: end }, endTime: { gt: start } }, select: { id: true } });
       if (booking) throw new Error(`Có Booking PT #${booking.id} trong thời gian này. Vui lòng xử lý trước.`);
+      const groupClassConflict = await tx.groupClassSchedule.findFirst({
+        where: { status: { in: ACTIVE_GROUP_CLASS_SCHEDULE_STATUSES }, startTime: { lt: end }, endTime: { gt: start } },
+        select: { id: true, groupClass: { select: { name: true } } },
+      });
+      if (groupClassConflict) {
+        throw new Error(`Có lớp học nhóm "${groupClassConflict.groupClass.name}" (#${groupClassConflict.id}) trong thời gian này. Vui lòng hủy hoặc xử lý trước.`);
+      }
       const closure = await tx.gymClosure.create({ data: { startAt: start, endAt: end, kind, reason: reason.trim() } });
       await log(tx, req.user!.userId, 'GYM_CLOSURE_ADD', null, closure);
       return closure;
@@ -220,13 +251,38 @@ export async function getCoachCalendarOverview(req: AuthRequest, res: Response) 
   if (!validDate(date)) return res.status(400).json({ success: false, message: 'Cần ngày YYYY-MM-DD.' });
   const profiles = await prisma.coachProfile.findMany({ include: { user: { select: { fullName: true, id: true } } } });
   const data = await Promise.all(profiles.map(async profile => {
-    const [slots, bookings] = await Promise.all([availableSlots(prisma, profile.id, date), prisma.booking.findMany({ where: {
-      coachId: profile.userId, type: 'PT', status: { in: PT_BOOKING_HOLD_STATUSES }, startTime: { gte: localInstant(date, 0), lt: localInstant(date, 1440) },
-    }, select: { id: true, startTime: true, endTime: true, member: { select: { fullName: true } } } })]);
+    const [slots, bookings, groupClasses] = await Promise.all([
+      availableSlots(prisma, profile.id, date),
+      prisma.booking.findMany({
+        where: {
+          coachId: profile.userId, type: 'PT', status: { in: PT_BOOKING_HOLD_STATUSES }, startTime: { gte: localInstant(date, 0), lt: localInstant(date, 1440) },
+        },
+        select: { id: true, startTime: true, endTime: true, member: { select: { fullName: true } } },
+      }),
+      prisma.groupClassSchedule.findMany({
+        where: {
+          trainerId: profile.userId, status: { in: ACTIVE_GROUP_CLASS_SCHEDULE_STATUSES },
+          startTime: { lt: localInstant(date, 1440) }, endTime: { gt: localInstant(date, 0) },
+        },
+        select: { id: true, startTime: true, endTime: true, bookedCount: true, capacity: true, groupClass: { select: { name: true } }, room: { select: { name: true } } },
+        orderBy: { startTime: 'asc' },
+      }),
+    ]);
+    const formattedClasses = groupClasses.map(gc => ({
+      id: gc.id,
+      className: gc.groupClass.name,
+      roomName: gc.room?.name ?? null,
+      startTime: gc.startTime,
+      endTime: gc.endTime,
+      bookedCount: gc.bookedCount,
+      capacity: gc.capacity,
+    }));
     return { coachId: profile.userId, coachName: profile.user.fullName, coachStatus: profile.status,
       bookings: bookings.map(b => ({ id: b.id, startTime: b.startTime, endTime: b.endTime, memberName: b.member.fullName })),
+      groupClasses: formattedClasses,
       slots: slots.map(slot => ({ startTime: slot.startTime, endTime: slot.endTime,
-        booking: bookings.find(b => b.startTime < slot.end && b.endTime > slot.start) ?? null })) };
+        booking: bookings.find(b => b.startTime < slot.end && b.endTime > slot.start) ?? null,
+        groupClass: formattedClasses.find(gc => gc.startTime < slot.end && gc.endTime > slot.start) ?? null })) };
   }));
   return res.json({ success: true, data });
 }
