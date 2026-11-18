@@ -39,6 +39,63 @@ export type PtCoachChangePreview = {
     status: string; outcome: 'CANCEL'; reason: string }>;
 };
 
+export interface ApiCoachDeactivationCheck {
+  coachProfileId: number;
+  coachUserId: number;
+  coachName: string;
+  coachPhone?: string | null;
+  coachEmail?: string | null;
+  currentStatus: string;
+  canDeactivate: boolean;
+  blockingMessage: string | null;
+  summary: {
+    activePtStudentCount: number;
+    activePtPackageCount: number;
+    upcomingPtBookingCount: number;
+    pendingMakeupCount: number;
+    upcomingGroupClassCount: number;
+  };
+  activePtPackages: Array<{
+    sourceType: 'WALLET_BATCH' | 'LEGACY_MEMBERSHIP';
+    sourceId: number;
+    memberId: number;
+    memberName: string;
+    memberPhone: string | null;
+    level: string;
+    packageName: string;
+    remainingSessions: number;
+    heldSessions: number;
+    endAt: string | null;
+  }>;
+  upcomingPtBookings: Array<{
+    id: number;
+    memberId: number;
+    memberName: string;
+    memberPhone: string | null;
+    startTime: string;
+    endTime: string;
+    status: string;
+  }>;
+  pendingMakeupRequests: Array<{
+    id: number;
+    originalBookingId: number;
+    memberName: string;
+    originalStartTime: string;
+    expiresAt: string;
+    status: string;
+  }>;
+  upcomingGroupClasses: Array<{
+    id: number;
+    className: string;
+    roomName: string | null;
+    startTime: string;
+    endTime: string;
+    bookedCount: number;
+    capacity: number;
+    status: string;
+  }>;
+}
+
 export const adminTrainerApi = {
   async getPtProducts() {
     const res = await request<{ success: boolean; data: Array<{ id: number; name: string; level: string; sessionCount: number; durationDays: number | null; price: number; singleSessionPrice: number | null; benefits: string | null; isActive: boolean }> }>('/pt/products/manage');
@@ -209,6 +266,13 @@ export const adminTrainerApi = {
       `/admin-trainers/${id}/pricing`,
       { method: 'PATCH', body: JSON.stringify(payload) }
     );
+  },
+
+  async getDeactivationCheck(id: number | string) {
+    return request<{
+      success: boolean;
+      data: ApiCoachDeactivationCheck;
+    }>(`/admin-trainers/${id}/deactivation-check`);
   },
 
   async toggleTrainerStatus(id: number | string, status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED') {

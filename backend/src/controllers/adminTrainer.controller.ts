@@ -4,6 +4,7 @@ import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 import { lockPtCalendar, lockPtCoach, PtBookingError } from '../services/ptBooking.service.js';
 import { PT_LEVELS } from '../services/ptWallet.service.js';
+import { getCoachDeactivationCheck } from '../services/coachDeactivation.service.js';
 
 
 /**
@@ -199,16 +200,119 @@ export const updateTrainerPricing = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * API 3: Khóa / Mở khóa tài khoản Coach
- * @route PATCH /api/admin/trainers/:id/status
+ * API 3a: Kiểm tra điều kiện Tạm Ngưng / Khóa Coach (trả về học viên gói PT còn hạn & lịch dạy PT/lớp nhóm)
+ * @route GET /api/admin-trainers/:id/deactivation-check
+ */
+export const getTrainerDeactivationCheck = async (req: AuthRequest, res: Response) => {
+  try {
+    const trainerProfileId = Number(req.params.id);
+    if (!Number.isInteger(trainerProfileId) || trainerProfileId <= 0) {
+      return res.status(400).json({ success: false, message: 'ID hồ sơ HLV không hợp lệ.' });
+    }
+
+    const profile = await prisma.coachProfile.findUnique({
+      where: { id: trainerProfileId },
+      include: {
+        user: { select: { id: true, fullName: true, email: true, phone: true, role: true } },
+      },
+    });
+    if (!profile) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy hồ sơ HLV.' });
+    }
+
+    const check = await getCoachDeactivationCheck(prisma, profile.userId);
+    return res.status(200).json({
+      success: true,
+      data: {
+        coachProfileId: profile.id,
+        coachName: profile.user.fullName,
+        coachPhone: profile.user.phone,
+        coachEmail: profile.user.email,
+        currentStatus: profile.status,
+        ...check,
+      },
+    });
+  } catch (error: any) {
+    console.error('Lỗi getTrainerDeactivationCheck:', error);
+    return res.status(500).json({ success: false, message: 'Không thể kiểm tra điều kiện tạm ngưng HLV.' });
+  }
+};
+
+/**
+ * API 3: Khóa / Mở khóa tài khoản Coach (chặn ngưng nếu còn học viên gói PT hoặc lịch dạy chưa hoàn thành)
+ * @route PATCH /api/admin-trainers/:id/status
  */
 export const toggleTrainerStatus = async (req: AuthRequest, res: Response) => {
   try {
     const trainerProfileId = Number(req.params.id);
     const { status } = req.body; // 'ACTIVE' | 'BLOCKED' | 'INACTIVE'
 
+    if (!Number.isInteger(trainerProfileId) || trainerProfileId <= 0) {
+      return res.status(400).json({ success: false, message: 'ID hồ sơ HLV không hợp lệ.' });
+    }
+
     if (!['ACTIVE', 'BLOCKED', 'INACTIVE'].includes(status)) {
-        return res.status(400).json({ success: false, message: 'Status không hợp lệ' });
+      return res.status(400).json({ success: false, message: 'Status không hợp lệ' });
+    }
+
+    const profile = await prisma.coachProfile.findUnique({
+      where: { id: trainerProfileId },
+      include: { user: { select: { id: true, fullName: true } } },
+    });
+    if (!profile) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy hồ sơ HLV.' });
+    }
+
+    if (status !== 'ACTIVE') {
+      const result = await prisma.$transaction(async (tx) => {
+        await lockPtCalendar(tx);
+        await lockPtCoach(tx, profile.userId);
+
+        const check = await getCoachDeactivationCheck(tx, profile.userId);
+        if (!check.canDeactivate) {
+          return { blocked: true as const, check };
+        }
+
+        const updatedProfile = await tx.coachProfile.update({
+          where: { id: trainerProfileId },
+          data: { status },
+        });
+
+        await tx.actionLog.create({
+          data: {
+            userId: req.user!.userId,
+            action: 'COACH_STATUS_UPDATE',
+            details: JSON.stringify({
+              coachProfileId: trainerProfileId,
+              coachUserId: profile.userId,
+              previousStatus: profile.status,
+              newStatus: status,
+            }),
+          },
+        });
+
+        return { blocked: false as const, updatedProfile };
+      });
+
+      if (result.blocked) {
+        return res.status(409).json({
+          success: false,
+          code: 'COACH_HAS_ACTIVE_OBLIGATIONS',
+          message: result.check.blockingMessage,
+          data: {
+            coachProfileId: profile.id,
+            coachName: profile.user.fullName,
+            currentStatus: profile.status,
+            ...result.check,
+          },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Đã cập nhật trạng thái HLV sang ${status}`,
+        data: result.updatedProfile,
+      });
     }
 
     const updatedProfile = await prisma.coachProfile.update({
@@ -216,12 +320,28 @@ export const toggleTrainerStatus = async (req: AuthRequest, res: Response) => {
       data: { status },
     });
 
+    await prisma.actionLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: 'COACH_STATUS_UPDATE',
+        details: JSON.stringify({
+          coachProfileId: trainerProfileId,
+          coachUserId: profile.userId,
+          previousStatus: profile.status,
+          newStatus: status,
+        }),
+      },
+    });
+
     return res.status(200).json({
       success: true,
-      message: `Đã cập nhật trạng thái Coach thành ${status}`,
+      message: `Đã kích hoạt lại HLV thành công`,
       data: updatedProfile,
     });
   } catch (error: any) {
+    if (error instanceof PtBookingError) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
     console.error('Lỗi toggleTrainerStatus:', error);
     return res.status(500).json({ success: false, message: 'Lỗi cập nhật trạng thái Coach' });
   }
