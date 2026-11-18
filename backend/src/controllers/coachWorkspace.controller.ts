@@ -7,7 +7,7 @@ import { emitUserNotification } from '../sockets/ptChat.socket.js';
 import { assignStudentPlan, normalizePlanDraft, presentStudentPlan, studentPlanInclude, hasValidTrainingRelation } from '../services/studentWorkoutPlan.service.js';
 import { workoutPlanResponseError } from './studentWorkoutPlan.controller.js';
 import { walletSummary } from '../services/ptWallet.service.js';
-import { activeCoachPtLevel } from '../services/ptTraining.service.js';
+import { activeCoachPtLevel, isPaidPtLevel, PAID_PT_LEVELS } from '../services/ptTraining.service.js';
 
 
 const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -64,7 +64,11 @@ export async function getCoachTrainees(req: AuthRequest, res: Response) {
         membership: { include: { package: { select: { ptLevel: true } } } } },
       orderBy: { startTime: 'desc' } });
     const latestByMember = new Map<number, typeof bookings[number]>();
-    for (const booking of bookings) if (!latestByMember.has(booking.memberId)) latestByMember.set(booking.memberId, booking);
+    for (const booking of bookings) {
+      const bookingLevel = booking.ptCreditAllocation?.batch.level ?? booking.membership?.package.ptLevel ?? null;
+      if (!isPaidPtLevel(bookingLevel)) continue;
+      if (!latestByMember.has(booking.memberId)) latestByMember.set(booking.memberId, booking);
+    }
     const walletTrainees = await Promise.all([...latestByMember.values()].map(async booking => {
       const wallet = await walletSummary(prisma, booking.memberId);
       return { id: -booking.id, userId: booking.memberId, user: booking.member,
@@ -75,6 +79,7 @@ export async function getCoachTrainees(req: AuthRequest, res: Response) {
     }));
     const assignedBatches = await prisma.ptCreditBatch.findMany({ where: {
       coachId, source: { in: ['PACKAGE_PURCHASE', 'SINGLE_PURCHASE'] },
+      level: { in: [...PAID_PT_LEVELS] },
       OR: [{ startAt: null }, { startAt: { lte: now } }],
       AND: [{ OR: [{ endAt: null }, { endAt: { gt: now } }] }],
     }, include: { wallet: { include: { member: { select: { id: true, fullName: true, phone: true,
@@ -95,7 +100,8 @@ export async function getCoachTrainees(req: AuthRequest, res: Response) {
     }));
     return res.json({ success: true, data: [
       ...walletTrainees, ...assignedTrainees, ...memberships.filter(item =>
-        item.status === 'ACTIVE' && item.endDate > now && !latestByMember.has(item.userId) &&
+        item.status === 'ACTIVE' && item.endDate > now && isPaidPtLevel(item.package.ptLevel) &&
+        !latestByMember.has(item.userId) &&
         !assignedTrainees.some(batch => batch.userId === item.userId)).map(item => ({
         ...item, level: item.package.ptLevel,
       })),

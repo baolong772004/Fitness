@@ -377,7 +377,8 @@ export class PtController {
       });
 
       const walletBookings = await prisma.booking.findMany({
-        where: { coachId, type: 'PT', ptCreditAllocation: { isNot: null },
+        where: { coachId, type: 'PT',
+          ptCreditAllocation: { is: { batch: { level: { in: ['BEGINNER', 'INTERMEDIATE', 'ADVANCED'] } } } },
           status: { in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] } },
         select: { memberId: true, startTime: true,
           member: { select: { id: true, fullName: true, email: true, phone: true,

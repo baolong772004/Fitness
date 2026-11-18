@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { CalendarDays, ChevronDown, FileText, LoaderCircle, MessageSquare, QrCode, RefreshCw, Save, Search, SendHorizontal, UserRound, Users } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { CalendarDays, ChevronDown, FileText, MessageSquare, QrCode, RefreshCw, Save, Search, UserRound, Users } from 'lucide-react';
 import { api, type ApiBooking, type ApiCoachProfile, type ApiCoachSchedule, type ApiGroupClassSchedule, type ApiProgressLog } from '../../services/api';
 import type { CoachPlanDraft, CoachTraineeMembership, CoachWorkoutPlan } from '../../services/api/pt.api';
 import { CoachPlanEditor, CoachSavedPlan } from './CoachPlanEditor';
@@ -17,7 +17,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type CoachProfile = ApiCoachProfile & { schedules: ApiCoachSchedule[] };
-type Message = { id: number; senderId: number; content: string; createdAt: string; sender: { fullName: string } };
 
 const gymDay = (value: string | Date) => new Date(new Date(value).getTime() + 7 * 3600000).toISOString().slice(0, 10);
 const today = () => gymDay(new Date());
@@ -151,7 +150,6 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
       .then(setProgress).catch(error => setNotice(errorText(error)));
   }, [selectedMemberId]);
 
-
   const run = async (action: () => Promise<unknown>, success: string, refresh = true) => {
     setBusy(true);
     setNotice('');
@@ -199,8 +197,6 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
       setBusy(false);
     }
   };
-
-
 
   const saveSession = async () => {
     if (!finishBooking) return;
@@ -305,14 +301,15 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
     ? upcomingOtherClasses
     : assignedClasses.filter(item => gymDay(item.startTime) !== date);
   const dayBookings = bookings.filter(booking => gymDay(booking.startTime) === date).sort((a, b) => a.startTime.localeCompare(b.startTime));
-  const selectedTrainee = trainees.find(row => row.userId === selectedMemberId);
-  const assignableTrainees = [...new Map(trainees.map(row => [row.user.id, row.user])).values()];
+  const paidTrainees = trainees.filter(row => row.level === 'BEGINNER' || row.level === 'INTERMEDIATE' || row.level === 'ADVANCED');
+  const selectedTrainee = paidTrainees.find(row => row.userId === selectedMemberId);
+  const assignableTrainees = [...new Map(paidTrainees.map(row => [row.user.id, row.user])).values()];
   const normalizeSearch = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLocaleLowerCase('vi-VN');
   const unassignedPlans = plans.filter(plan => plan.memberId == null && !plan.member);
   const assignedPlans = plans.filter(plan => plan.memberId != null || !!plan.member);
   const matchingPlans = assignedPlans.filter(plan => normalizeSearch(`${plan.title} ${plan.member?.fullName || ''} ${plan.programName || ''}`).includes(normalizeSearch(planSearch.trim())));
   const filteredAssignedPlans = matchingPlans.filter(plan => plan.status !== 'ARCHIVED');
-  const archivedPlans = matchingPlans.filter(plan => plan.status === 'ARCHIVED');
+  const archivedPlans = matchingPlans.filter(plan => plan.status !== 'ARCHIVED');
 
   return (
     <StaffPage>
@@ -463,9 +460,9 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
         )}
 
         {activeTab === 'trainees' && <div className="space-y-5"><CoachSharedExerciseAnalyses selectedMemberId={selectedMemberId} selectedMemberName={selectedTrainee?.user.fullName || null} onSelectMember={setSelectedMemberId} onSharedMemberIdsChange={setSharedVideoCounts} /><div className="grid gap-5 lg:grid-cols-[1fr_1.35fr]">
-          <Card className="gap-0 overflow-hidden py-0"><CardHeader className="border-b bg-muted/20 px-5 py-4 [.border-b]:pb-4"><div className="flex items-center justify-between gap-2"><div><CardTitle className="flex items-center gap-2 text-base"><UserRound className="size-5 text-primary" /> Học viên PT phụ trách</CardTitle><CardDescription className="mt-1 text-xs">Chọn học viên để xem video bài tập, đánh giá lộ trình và chỉ số cơ thể.</CardDescription></div><Badge variant="secondary" className="tabular-nums">{trainees.length}</Badge></div></CardHeader><CardContent className="space-y-2.5 p-4">
-            {trainees.length === 0 && <p className="rounded-xl border border-dashed py-8 text-center text-sm text-muted-foreground">Chưa có học viên nào được phân gói PT.</p>}
-            {trainees.map(row => {
+          <Card className="gap-0 overflow-hidden py-0"><CardHeader className="border-b bg-muted/20 px-5 py-4 [.border-b]:pb-4"><div className="flex items-center justify-between gap-2"><div><CardTitle className="flex items-center gap-2 text-base"><UserRound className="size-5 text-primary" /> Học viên PT phụ trách</CardTitle><CardDescription className="mt-1 text-xs">Chọn học viên để xem video bài tập, đánh giá lộ trình và chỉ số cơ thể.</CardDescription></div><Badge variant="secondary" className="tabular-nums">{paidTrainees.length}</Badge></div></CardHeader><CardContent className="space-y-2.5 p-4">
+            {paidTrainees.length === 0 && <p className="rounded-xl border border-dashed py-8 text-center text-sm text-muted-foreground">Chưa có học viên nào được phân gói PT.</p>}
+            {paidTrainees.map(row => {
               const isSelected = selectedMemberId === row.userId;
               const videoCount = sharedVideoCounts[row.userId] || 0;
               const initials = (row.user.fullName || 'HV').trim().split(/\s+/).map(w => w[0]).slice(-2).join('').toUpperCase();
@@ -497,7 +494,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
 
         {activeTab === 'ai-workout' && <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <Card className="min-w-0 gap-0 overflow-hidden py-0"><CardHeader className="border-b px-4 py-4 sm:px-5 [.border-b]:pb-4"><CardTitle className="flex items-center gap-2 text-base"><FileText className="size-4 text-primary" />Soạn giáo án</CardTitle></CardHeader><CardContent className="p-4 sm:p-5">
-            <CoachPlanEditor busy={busy} onSave={savePlan} onGenerate={generatePlan} trainees={[...new Map(trainees.map(row => [row.userId, { id: row.userId, fullName: row.user.fullName, level: row.level }])).values()]} />
+            <CoachPlanEditor busy={busy} onSave={savePlan} onGenerate={generatePlan} trainees={[...new Map(paidTrainees.map(row => [row.userId, { id: row.userId, fullName: row.user.fullName, level: row.level }])).values()]} />
           </CardContent></Card>
           <Card className="min-w-0 gap-4 py-5"><CardHeader className="gap-4 px-4 sm:px-5">
             <div className="flex items-center justify-between gap-2"><CardTitle className="text-base">Giáo án đã lưu</CardTitle><Badge variant="secondary" className="tabular-nums">{plans.length}</Badge></div>
