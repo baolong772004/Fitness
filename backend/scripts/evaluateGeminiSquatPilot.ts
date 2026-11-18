@@ -43,10 +43,13 @@ try {
     const rule = new Set<string>((result.provisionalEvaluation?.criteria || result.experimentalEvaluation?.criteria || []).flatMap((criterion: any) =>
       (criterion.predictions || []).filter((item: any) => item.status === 'NEEDS_IMPROVEMENT')
         .map((item: any) => key(Number(item.rep ?? item.repNumber), criterion.id ?? criterion.criterionId))));
-    const fusionRows = buildSquatAssessment(result)?.assessment.reps.flatMap(rep => rep.criteria.map(criterion => ({ ...criterion, repNumber: rep.repNumber }))) || [];
-    const fusion = new Set(fusionRows.filter(item => item.status === 'NEEDS_IMPROVEMENT').map(item => key(item.repNumber, item.id)));
+    const fusionRows: Array<{ id: string; status: string; repNumber: number }> =
+      buildSquatAssessment(result)?.assessment.reps.flatMap((rep: any) =>
+        rep.criteria.map((criterion: any) => ({ ...criterion, repNumber: rep.repNumber })),
+      ) || [];
+    const fusion = new Set<string>(fusionRows.filter((item) => item.status === 'NEEDS_IMPROVEMENT').map((item) => key(item.repNumber, item.id)));
     return [{ id: row.id, labeledCriteria: latest.size,
-      deferred: fusionRows.filter(item => item.status === 'UNABLE_TO_ASSESS' && latest.has(key(item.repNumber, item.id))).length,
+      deferred: fusionRows.filter((item) => item.status === 'UNABLE_TO_ASSESS' && latest.has(key(item.repNumber, item.id))).length,
       unlabeledVisionFindings: [...vision].filter(item => !latest.has(item)).length,
       vision: score(vision, latest), rule: score(rule, latest), fusion: score(fusion, latest) }];
   }).slice(0, 30);

@@ -72,6 +72,7 @@ export {
   notificationApi,
 };
 export type { ApiNotification } from './notification.api';
+export type { ApiCoachDeactivationCheck } from './adminTrainer.api';
 export * from './staff.api';
 
 

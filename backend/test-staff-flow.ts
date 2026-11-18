@@ -139,7 +139,7 @@ async function runStaffFlowTests() {
     });
     console.log(`   ✅ Quét QR lần 1: [Trạng thái: ${scan1.status}] [Màu: ${scan1.color}] - "${scan1.message}"`);
     console.log(`      - Hội viên: ${scan1.data?.member.fullName}`);
-    console.log(`      - Gói: ${scan1.data?.membership.packageName} (Còn ${scan1.data?.membership.remainingDays} ngày)`);
+    console.log(`      - Gói: ${scan1.data?.membership?.packageName} (Còn ${scan1.data?.membership?.remainingDays} ngày)`);
 
     // Quét QR lần 2 ngay sau đó: Thử cơ chế Anti-Passback 30 phút -> Phải bị chặn (Đỏ)
     const scan2 = await StaffService.scanQrCheckIn({
@@ -231,7 +231,7 @@ async function runStaffFlowTests() {
     const noteResult = await StaffService.createOperationalNote({
       staffId: testStaff.id,
       shiftId,
-      customerName: 'Hội viên phản ánh',
+      memberName: 'Hội viên phản ánh',
       category: 'HYGIENE',
       content: 'Máy lạnh khu vực tạ tay bị rỉ nước xuống sàn',
       priority: 'HIGH'

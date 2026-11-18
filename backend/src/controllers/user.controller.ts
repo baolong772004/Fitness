@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../config/prisma.js';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
+import { getCoachDeactivationCheck } from '../services/coachDeactivation.service.js';
 
 
 
@@ -185,6 +186,18 @@ export class UserController {
       const userExists = await prisma.user.findUnique({ where: { id } });
       if (!userExists) return res.status(404).json({ success: false, message: 'User not found' });
 
+      if (userExists.role === 'COACH' && role !== 'COACH') {
+        const check = await getCoachDeactivationCheck(prisma, id);
+        if (!check.canDeactivate) {
+          return res.status(409).json({
+            success: false,
+            code: 'COACH_HAS_ACTIVE_OBLIGATIONS',
+            message: check.blockingMessage,
+            data: check,
+          });
+        }
+      }
+
       const updatedUser = await prisma.$transaction(async (tx) => {
         const user = await tx.user.update({
           where: { id },
@@ -237,6 +250,18 @@ export class UserController {
       // Không cho phép Admin tự khóa chính mình
       if (req.user?.userId === id && status !== 'ACTIVE') {
          return res.status(403).json({ success: false, message: 'Bạn không thể tự khóa tài khoản của chính mình' });
+      }
+
+      if (userExists.role === 'COACH' && status !== 'ACTIVE') {
+        const check = await getCoachDeactivationCheck(prisma, id);
+        if (!check.canDeactivate) {
+          return res.status(409).json({
+            success: false,
+            code: 'COACH_HAS_ACTIVE_OBLIGATIONS',
+            message: check.blockingMessage,
+            data: check,
+          });
+        }
       }
 
       const updatedUser = await prisma.user.update({

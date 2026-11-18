@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Member, Coach, PackagePlan, AuditLog, Invoice, SupportTicket } from '../../types';
-import { api, ApiPackage, ApiUser, ApiCoachProfile, ApiSubscription, ApiRoom, ApiEquipment, ApiGroupClass, ApiGroupClassSchedule, ApiMemberProfile360, ApiAdminAnalytics } from '../../services/api';
+import { api, ApiPackage, ApiUser, ApiCoachProfile, ApiCoachDeactivationCheck, ApiSubscription, ApiRoom, ApiEquipment, ApiGroupClass, ApiGroupClassSchedule, ApiMemberProfile360, ApiAdminAnalytics } from '../../services/api';
 import { soundEffects } from '../../services/audioService';
 import {
   BarChart3,
@@ -94,6 +94,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newPtLevels, setNewPtLevels] = useState<string[]>([]);
   const [savingCoachConfig, setSavingCoachConfig] = useState(false);
   const [coachFormError, setCoachFormError] = useState('');
+
+  // Coach Deactivation Check Modal State
+  const [deactivatingCoach, setDeactivatingCoach] = useState<Coach | null>(null);
+  const [deactivationCheck, setDeactivationCheck] = useState<ApiCoachDeactivationCheck | null>(null);
+  const [deactivationLoading, setDeactivationLoading] = useState(false);
+  const [deactivationSubmitting, setDeactivationSubmitting] = useState(false);
+  const [deactivationError, setDeactivationError] = useState('');
 
   // Incident & Support Ticket Management State
   const [ticketSearchQuery, setTicketSearchQuery] = useState('');
@@ -612,17 +619,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Toggle Coach Status (ACTIVE / INACTIVE)
-  const handleToggleCoachStatus = async (coachId: string | number, currentAccepting: boolean) => {
-    const nextStatus = currentAccepting ? 'INACTIVE' : 'ACTIVE';
+  // Toggle Coach Status (ACTIVE / INACTIVE) with deactivation obligation check
+  const handleToggleCoachStatus = async (coach: Coach) => {
+    if (coach.isAcceptingBookings) {
+      setDeactivatingCoach(coach);
+      setDeactivationCheck(null);
+      setDeactivationError('');
+      setDeactivationLoading(true);
+      try {
+        const res = await api.adminTrainers.getDeactivationCheck(coach.id);
+        setDeactivationCheck(res.data);
+      } catch (err: any) {
+        soundEffects.playErrorBeep();
+        setDeactivationError(err.message || 'Không thể kiểm tra lịch dạy và học viên của HLV.');
+      } finally {
+        setDeactivationLoading(false);
+      }
+      return;
+    }
+
     try {
-      await api.adminTrainers.toggleTrainerStatus(coachId, nextStatus);
+      await api.adminTrainers.toggleTrainerStatus(coach.id, 'ACTIVE');
       soundEffects.playSuccessBeep();
       await reloadData();
-      alert(`Đã cập nhật trạng thái HLV sang ${nextStatus}!`);
+      alert(`Đã kích hoạt lại HLV ${coach.name} thành công!`);
     } catch (err: any) {
       soundEffects.playErrorBeep();
       alert(`Lỗi cập nhật trạng thái HLV: ${err.message}`);
+    }
+  };
+
+  const handleConfirmDeactivateCoach = async () => {
+    if (!deactivatingCoach || !deactivationCheck?.canDeactivate) return;
+    setDeactivationSubmitting(true);
+    setDeactivationError('');
+    try {
+      await api.adminTrainers.toggleTrainerStatus(deactivatingCoach.id, 'INACTIVE');
+      soundEffects.playSuccessBeep();
+      const coachName = deactivatingCoach.name;
+      setDeactivatingCoach(null);
+      setDeactivationCheck(null);
+      await reloadData();
+      alert(`Đã tạm ngưng HLV ${coachName} thành công!`);
+    } catch (err: any) {
+      soundEffects.playErrorBeep();
+      setDeactivationError(err.message || 'Không thể tạm ngưng HLV.');
+      try {
+        const refreshed = await api.adminTrainers.getDeactivationCheck(deactivatingCoach.id);
+        setDeactivationCheck(refreshed.data);
+      } catch {}
+    } finally {
+      setDeactivationSubmitting(false);
     }
   };
 
@@ -1751,7 +1798,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       variant={c.isAcceptingBookings ? "ghost" : "outline"}
                       size="sm"
                       className={c.isAcceptingBookings ? "text-destructive hover:text-destructive" : "text-success"}
-                      onClick={() => handleToggleCoachStatus(c.id, c.isAcceptingBookings)}
+                      onClick={() => handleToggleCoachStatus(c)}
                     >
                       {c.isAcceptingBookings ? "Tạm Ngưng" : "Kích Hoạt"}
                     </Button>
@@ -1825,6 +1872,253 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <Button type="submit" disabled={savingCoachConfig}>{savingCoachConfig ? 'Đang lưu...' : 'Lưu cấu hình HLV'}</Button>
               </DialogFooter>
             </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Coach Deactivation Check Modal: full wide view, no clipping, no cramped inner scroll */}
+      <Dialog
+        open={!!deactivatingCoach}
+        onOpenChange={(open) => {
+          if (!open && !deactivationSubmitting) {
+            setDeactivatingCoach(null);
+            setDeactivationCheck(null);
+            setDeactivationError('');
+          }
+        }}
+      >
+        <DialogContent className="flex w-[95vw] max-w-[95vw] sm:max-w-5xl max-h-[94vh] flex-col gap-0 overflow-hidden p-0">
+          {deactivatingCoach && (
+            <>
+              <DialogHeader className="border-b px-5 py-3 text-left">
+                <DialogTitle className="flex items-center gap-2 text-base font-bold">
+                  <span className="flex size-7 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                    <ShieldAlert className="size-4" />
+                  </span>
+                  <span>Tạm Ngưng HLV — {deactivatingCoach.name}</span>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="flex-1 overflow-y-auto px-5 py-3.5 space-y-3.5">
+                {deactivationLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                    <Loader2 className="size-5 animate-spin" />
+                    Đang kiểm tra học viên và lịch dạy của HLV...
+                  </div>
+                ) : deactivationCheck ? (
+                  <>
+                    {/* 3 Clean Summary KPI Cards */}
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className={`flex items-center justify-between rounded-xl border px-4 py-3.5 ${deactivationCheck.summary.activePtStudentCount > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-emerald-200 bg-emerald-50/70'}`}>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground">Học viên chưa hết hạn gói PT</p>
+                          <p className={`mt-1 text-2xl font-bold tracking-tight ${deactivationCheck.summary.activePtStudentCount > 0 ? 'text-destructive' : 'text-emerald-700'}`}>
+                            {deactivationCheck.summary.activePtStudentCount} người
+                          </p>
+                        </div>
+                        <Users className={`size-6 opacity-70 ${deactivationCheck.summary.activePtStudentCount > 0 ? 'text-destructive' : 'text-emerald-600'}`} />
+                      </div>
+
+                      <div className={`flex items-center justify-between rounded-xl border px-4 py-3.5 ${(deactivationCheck.summary.upcomingPtBookingCount + deactivationCheck.summary.pendingMakeupCount) > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-emerald-200 bg-emerald-50/70'}`}>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground">Lịch dạy PT chưa hoàn thành</p>
+                          <p className={`mt-1 text-2xl font-bold tracking-tight ${(deactivationCheck.summary.upcomingPtBookingCount + deactivationCheck.summary.pendingMakeupCount) > 0 ? 'text-destructive' : 'text-emerald-700'}`}>
+                            {deactivationCheck.summary.upcomingPtBookingCount} buổi
+                          </p>
+                        </div>
+                        <Calendar className={`size-6 opacity-70 ${(deactivationCheck.summary.upcomingPtBookingCount + deactivationCheck.summary.pendingMakeupCount) > 0 ? 'text-destructive' : 'text-emerald-600'}`} />
+                      </div>
+
+                      <div className={`flex items-center justify-between rounded-xl border px-4 py-3.5 ${deactivationCheck.summary.upcomingGroupClassCount > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-emerald-200 bg-emerald-50/70'}`}>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground">Lớp nhóm sắp diễn ra</p>
+                          <p className={`mt-1 text-2xl font-bold tracking-tight ${deactivationCheck.summary.upcomingGroupClassCount > 0 ? 'text-destructive' : 'text-emerald-700'}`}>
+                            {deactivationCheck.summary.upcomingGroupClassCount} lớp
+                          </p>
+                        </div>
+                        <Dumbbell className={`size-6 opacity-70 ${deactivationCheck.summary.upcomingGroupClassCount > 0 ? 'text-destructive' : 'text-emerald-600'}`} />
+                      </div>
+                    </div>
+
+                    {/* Status Banner */}
+                    {deactivationCheck.canDeactivate ? (
+                      <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900">
+                        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+                        <div>
+                          <p className="font-semibold">Đủ điều kiện tạm ngưng HLV</p>
+                          <p className="text-xs text-emerald-800/90 mt-0.5">
+                            HLV không còn học viên nào có gói PT đang hiệu lực và không có lịch dạy PT hay lớp nhóm nào sắp tới.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                        <div>
+                          <p className="font-semibold">Không thể tạm ngưng HLV lúc này</p>
+                          <p className="mt-0.5 text-xs leading-relaxed text-destructive/90">
+                            {deactivationCheck.blockingMessage}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Detailed Full Sections (2-column grid on desktop, no cramped scroll boxes) */}
+                    {!deactivationCheck.canDeactivate && (
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        {/* Column 1: Active PT Students + Pending Makeups */}
+                        <div className="space-y-4">
+                          {deactivationCheck.activePtPackages.length > 0 && (
+                            <div className="rounded-xl border bg-card">
+                              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
+                                <h4 className="flex items-center gap-2 text-sm font-semibold">
+                                  <Users className="size-4 text-primary" />
+                                  Học viên chưa hết hạn gói PT
+                                </h4>
+                                <Badge variant="secondary">{deactivationCheck.summary.activePtStudentCount} người</Badge>
+                              </div>
+                              <div className="divide-y">
+                                {deactivationCheck.activePtPackages.map((pkg) => (
+                                  <div key={`${pkg.sourceType}-${pkg.sourceId}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+                                    <div className="min-w-0">
+                                      <div className="font-semibold text-foreground">{pkg.memberName}</div>
+                                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                                        {pkg.memberPhone && <span>{pkg.memberPhone}</span>}
+                                        <span>•</span>
+                                        <span>{pkg.packageName}</span>
+                                        <Badge variant="outline" className="px-1.5 py-0 text-[10px]">{pkg.level}</Badge>
+                                      </div>
+                                    </div>
+                                    <div className="shrink-0 text-right">
+                                      <div className="font-semibold text-foreground">
+                                        Còn {pkg.remainingSessions} buổi
+                                        {pkg.heldSessions > 0 && <span className="font-normal text-muted-foreground"> (+{pkg.heldSessions} đã đặt)</span>}
+                                      </div>
+                                      <div className="text-[11px] text-muted-foreground">HSD: {memberDate(pkg.endAt)}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {deactivationCheck.pendingMakeupRequests.length > 0 && (
+                            <div className="rounded-xl border bg-card">
+                              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
+                                <h4 className="flex items-center gap-2 text-sm font-semibold">
+                                  <Clock className="size-4 text-amber-600" />
+                                  Yêu cầu học bù PT chờ xử lý
+                                </h4>
+                                <Badge variant="secondary">{deactivationCheck.pendingMakeupRequests.length}</Badge>
+                              </div>
+                              <div className="divide-y">
+                                {deactivationCheck.pendingMakeupRequests.map((mk) => (
+                                  <div key={mk.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+                                    <span className="font-medium">
+                                      {mk.memberName} <span className="text-muted-foreground">(Booking #{mk.originalBookingId})</span>
+                                    </span>
+                                    <span className="shrink-0 text-muted-foreground">Hạn bù: {memberDate(mk.expiresAt)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Column 2: Upcoming PT Bookings + Upcoming Group Classes */}
+                        <div className="space-y-4">
+                          {deactivationCheck.upcomingPtBookings.length > 0 && (
+                            <div className="rounded-xl border bg-card">
+                              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
+                                <h4 className="flex items-center gap-2 text-sm font-semibold">
+                                  <Calendar className="size-4 text-primary" />
+                                  Lịch dạy PT chưa hoàn thành
+                                </h4>
+                                <Badge variant="secondary">{deactivationCheck.upcomingPtBookings.length} buổi</Badge>
+                              </div>
+                              <div className="divide-y">
+                                {deactivationCheck.upcomingPtBookings.map((b) => (
+                                  <div key={b.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+                                    <div className="min-w-0">
+                                      <div className="font-semibold text-foreground">{b.memberName}</div>
+                                      <div className="mt-0.5 text-muted-foreground">
+                                        {new Date(b.startTime).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}
+                                        {' - '}
+                                        {new Date(b.endTime).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}
+                                        {' • '}
+                                        {new Date(b.startTime).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                      </div>
+                                    </div>
+                                    <Badge variant="outline" className="shrink-0 text-[10px]">{b.status}</Badge>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {deactivationCheck.upcomingGroupClasses.length > 0 && (
+                            <div className="rounded-xl border bg-card">
+                              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
+                                <h4 className="flex items-center gap-2 text-sm font-semibold">
+                                  <Dumbbell className="size-4 text-primary" />
+                                  Lịch lớp nhóm đang phụ trách
+                                </h4>
+                                <Badge variant="secondary">{deactivationCheck.upcomingGroupClasses.length} lớp</Badge>
+                              </div>
+                              <div className="divide-y">
+                                {deactivationCheck.upcomingGroupClasses.map((cls) => (
+                                  <div key={cls.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+                                    <div className="min-w-0">
+                                      <div className="font-semibold text-foreground">{cls.className}</div>
+                                      <div className="mt-0.5 text-muted-foreground">
+                                        {new Date(cls.startTime).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}
+                                        {' - '}
+                                        {new Date(cls.endTime).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}
+                                        {' • '}
+                                        {new Date(cls.startTime).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit' })}
+                                        {cls.roomName ? ` • ${cls.roomName}` : ''}
+                                      </div>
+                                    </div>
+                                    <Badge variant="outline" className="shrink-0 text-[10px]">{cls.bookedCount}/{cls.capacity}</Badge>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : null}
+
+                {deactivationError && (
+                  <p role="alert" className="text-sm text-destructive">{deactivationError}</p>
+                )}
+              </div>
+
+              <DialogFooter className="border-t bg-muted/20 px-6 py-3.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={deactivationSubmitting}
+                  onClick={() => {
+                    setDeactivatingCoach(null);
+                    setDeactivationCheck(null);
+                    setDeactivationError('');
+                  }}
+                >
+                  Đóng
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={deactivationLoading || deactivationSubmitting || !deactivationCheck?.canDeactivate}
+                  onClick={handleConfirmDeactivateCoach}
+                >
+                  {deactivationSubmitting ? 'Đang xử lý...' : 'Xác nhận Tạm Ngưng HLV'}
+                </Button>
+              </DialogFooter>
+            </>
           )}
         </DialogContent>
       </Dialog>

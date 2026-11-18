@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTrainersList, setupTrainerProfile, toggleTrainerStatus, updateTrainerPricing } from '../controllers/adminTrainer.controller.js';
+import { getTrainerDeactivationCheck, getTrainersList, setupTrainerProfile, toggleTrainerStatus, updateTrainerPricing } from '../controllers/adminTrainer.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 import { getMasterCalendar, putMasterCalendar, addClosure, removeClosure, getCoachCalendarOverview, getCalendarAudit, listCoachChangeRequests, resolveCoachScheduleChange } from '../controllers/ptAvailability.controller.js';
 
@@ -154,6 +154,7 @@ router.patch('/:id/pricing', authenticateToken, authorizeRoles('ADMIN'), updateT
  *       200:
  *         description: Đổi trạng thái thành công
  */
+router.get('/:id/deactivation-check', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getTrainerDeactivationCheck);
 router.patch('/:id/status', authenticateToken, authorizeRoles('ADMIN'), toggleTrainerStatus);
 
 export default router;
