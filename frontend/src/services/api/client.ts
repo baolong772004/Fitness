@@ -36,6 +36,20 @@ export const tokenStorage = {
   }
 };
 
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  data?: any;
+
+  constructor(message: string, status: number, code?: string, data?: any) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.data = data;
+  }
+}
+
 /**
  * Generic Fetch Request Wrapper
  */
@@ -77,7 +91,7 @@ export async function request<T>(
     }
 
     const errorMsg = data.message || data.error || `HTTP error ${response.status}`;
-    throw new Error(errorMsg);
+    throw new ApiError(errorMsg, response.status, data.code, data.data);
   }
 
   return data as T;
