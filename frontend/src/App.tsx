@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { UserRole, User } from './types';
 import { api, tokenStorage, STORAGE_KEYS } from './services/api';
 import { Navbar } from './components/layout/Navbar';
+import { NotificationBell } from './components/layout/NotificationBell';
+import { UserMenuButton } from './components/layout/UserMenuButton';
 import { ReceptionistDashboard } from './features/receptionist/ReceptionistDashboard';
 import { CoachDashboard } from './features/coach/CoachDashboard';
 import { AdminDashboard } from './features/admin/AdminDashboard';
@@ -13,7 +15,7 @@ import { FloatingAIChatbot } from './features/ai-assistant/FloatingAIChatbot';
 import { ToastContainer, toast, installGlobalAlertOverride } from './components/common/ToastNotification';
 import { StaffLogoutCashModal } from './components/staff/StaffLogoutCashModal';
 import { soundEffects } from './services/audioService';
-import { Clock, Phone, MapPin, QrCode } from 'lucide-react';
+import { Clock, Phone, MapPin, QrCode, Sun, Moon } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -251,6 +253,56 @@ export default function App() {
 
       {/* Main Content Column */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <header
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 95,
+            height: 68,
+            minHeight: 68,
+            maxHeight: 68,
+            boxSizing: 'border-box',
+            padding: '0 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 10,
+            backgroundColor: theme === 'light' ? 'rgba(255, 255, 255, 0.84)' : 'rgba(32, 14, 7, 0.86)',
+            backdropFilter: 'blur(24px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+            borderBottom: '1px solid var(--aura-border)'
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleToggleTheme}
+            aria-label={theme === 'light' ? 'Giao diện Sáng (nhấn để chuyển Tối)' : 'Giao diện Tối (nhấn để chuyển Sáng)'}
+            title={theme === 'light' ? 'Chuyển sang nền Tối' : 'Chuyển sang nền Sáng'}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 'var(--radius-full)',
+              border: '1px solid var(--aura-border)',
+              background: 'var(--bg-card)',
+              color: theme === 'light' ? 'var(--color-primary)' : '#FFA726',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {theme === 'light' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+
+          <NotificationBell currentUser={currentUser} currentRole={currentRole} />
+
+          <UserMenuButton
+            currentUser={currentUser}
+            onOpenSettings={() => setViewMode('settings')}
+            onLogout={handleLogout}
+          />
+        </header>
         <main style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }}>
         {viewMode === 'settings' ? (
           <SettingsPage

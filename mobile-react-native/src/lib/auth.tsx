@@ -33,7 +33,9 @@ type AuthContextValue = {
   setUnreadCount: (count: number) => void;
   setUnreadChatCount: (count: number) => void;
   signIn: (email: string, password: string) => Promise<User>;
-  signUp: (name: string, email: string, password: string, phone: string) => Promise<void>;
+  signUp: (name: string, email: string, password: string, phone: string) => Promise<{ email: string; expiresInSeconds: number }>;
+  verifySignUpOtp: (email: string, otp: string) => Promise<User>;
+  resendSignUpOtp: (email: string) => Promise<void>;
   signInWithGoogle: (idToken: string) => Promise<User>;
   signOut: () => Promise<void>;
   completePasswordChange: () => Promise<void>;
@@ -198,8 +200,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return session.user;
   }, [accept]);
 
-  const signUp = useCallback(async (name: string, email: string, password: string, phone: string) =>
-    accept(await api.register(name, email, password, phone)), [accept]);
+  const signUp = useCallback(
+    (name: string, email: string, password: string, phone: string) =>
+      api.register(name, email, password, phone),
+    []
+  );
+
+  const verifySignUpOtp = useCallback(async (email: string, otp: string) => {
+    const session = await api.verifyRegisterOtp(email, otp);
+    await accept(session);
+    return session.user;
+  }, [accept]);
+
+  const resendSignUpOtp = useCallback(async (email: string) => {
+    await api.resendRegisterOtp(email);
+  }, []);
 
   const signInWithGoogle = useCallback(async (idToken: string) => {
     const session = await api.googleLogin(idToken);
@@ -234,6 +249,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUnreadChatCount,
         signIn,
         signUp,
+        verifySignUpOtp,
+        resendSignUpOtp,
         signInWithGoogle,
         signOut,
         completePasswordChange,

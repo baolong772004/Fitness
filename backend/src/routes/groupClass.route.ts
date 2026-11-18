@@ -1,5 +1,16 @@
 import { Router } from 'express';
-import { getGroupClassSchedules, getGroupClassCheckInQr, getGroupClassAttendees, bookGroupClass, cancelGroupClass, checkInGroupClass, createGroupClass, createGroupClassSchedule } from '../controllers/groupClass.controller.js';
+import {
+  getGroupClassSchedules,
+  getAdminGroupClasses,
+  getAdminGroupClassSchedules,
+  getGroupClassCheckInQr,
+  getGroupClassAttendees,
+  bookGroupClass,
+  cancelGroupClass,
+  checkInGroupClass,
+  createGroupClass,
+  createGroupClassSchedule,
+} from '../controllers/groupClass.controller.js';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -10,6 +21,48 @@ const router = Router();
  *   name: GroupClass
  *   description: Quản lý đăng ký Lớp học nhóm
  */
+
+/**
+ * @swagger
+ * /group-classes/admin/classes:
+ *   get:
+ *     summary: Xem danh mục tất cả lớp học nhóm (Admin/Staff)
+ *     tags: [GroupClass]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Thành công
+ */
+router.get('/admin/classes', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getAdminGroupClasses);
+
+/**
+ * @swagger
+ * /group-classes/admin/schedules:
+ *   get:
+ *     summary: Xem toàn bộ lịch ca tập lớp học nhóm (Admin/Staff)
+ *     tags: [GroupClass]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Thành công
+ */
+router.get('/admin/schedules', authenticateToken, authorizeRoles('ADMIN', 'STAFF'), getAdminGroupClassSchedules);
+
+/**
+ * @swagger
+ * /group-classes:
+ *   get:
+ *     summary: Xem danh mục các lớp học nhóm
+ *     tags: [GroupClass]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Thành công
+ */
+router.get('/', authenticateToken, getAdminGroupClasses);
 
 /**
  * @swagger

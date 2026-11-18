@@ -31,12 +31,48 @@ export const authApi = {
     const res = await request<{
       success: boolean;
       message: string;
-      data: ApiUser;
+      data: {
+        user: ApiUser;
+        requiresEmailVerification: boolean;
+        email: string;
+        expiresInSeconds: number;
+      };
     }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
     return res.data;
+  },
+
+  async verifyRegisterOtp(payload: { email: string; otp: string }) {
+    const res = await request<{
+      success: boolean;
+      message: string;
+      data: {
+        user: ApiUser;
+        accessToken: string;
+        refreshToken?: string;
+      };
+    }>('/auth/verify-register-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    if (res.data?.accessToken) {
+      tokenStorage.setTokens(res.data.accessToken, res.data.refreshToken);
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(res.data.user));
+    }
+    return res.data;
+  },
+
+  async resendRegisterOtp(email: string) {
+    return request<{
+      success: boolean;
+      message: string;
+      data: { email: string; expiresInSeconds: number };
+    }>('/auth/resend-register-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
   },
 
   async changePassword(payload: { oldPassword: string; newPassword: string }) {
@@ -50,10 +86,21 @@ export const authApi = {
     return request<{
       success: boolean;
       message: string;
-      data?: { resetToken: string };
+      data?: { email: string; expiresInSeconds: number };
     }>('/auth/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email })
+    });
+  },
+
+  async verifyForgotPasswordOtp(payload: { email: string; otp: string }) {
+    return request<{
+      success: boolean;
+      message: string;
+      data: { resetToken: string; expiresInSeconds: number };
+    }>('/auth/verify-forgot-password-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload)
     });
   },
 

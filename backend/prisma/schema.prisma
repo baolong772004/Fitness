@@ -25,6 +25,7 @@ model User {
   weight      Float?
   role        String     @default("MEMBER")
   status      String     @default("PENDING")
+  emailVerified Boolean  @default(true)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -980,5 +981,23 @@ model OperationalNote {
 
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
+}
+
+// ==========================================
+// 11. XÁC THỰC EMAIL BẰNG MÃ OTP (EMAIL OTP)
+// ==========================================
+
+model EmailOtp {
+  id         Int       @id @default(autoincrement())
+  email      String    @db.NVarChar(255)
+  purpose    String    @db.VarChar(32)
+  codeHash   String    @db.VarChar(128)
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email, purpose, createdAt])
 }
 

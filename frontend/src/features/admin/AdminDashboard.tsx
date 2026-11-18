@@ -32,7 +32,9 @@ import {
   CornerDownRight,
   Filter,
   Activity,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,7 +48,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
-import { StatCard, StaffPage, Field } from '@/components/staff/StaffKit';
+import { StaffPage, Field } from '@/components/staff/StaffKit';
 import { PtMasterCalendar } from './PtMasterCalendar';
 import { PtCreditAdmin } from './PtCreditAdmin';
 
@@ -81,6 +83,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Member 360 Modal State (Luồng 8)
   const [inspectingMember, setInspectingMember] = useState<Member | null>(null);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [memberPage, setMemberPage] = useState(1);
+  const [memberPageSize, setMemberPageSize] = useState(5);
 
   // Coach Price Editing Modal State (Luồng 9)
   const [editingCoach, setEditingCoach] = useState<Coach | null>(null);
@@ -215,7 +219,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     // 2. Fetch live Members from backend
     try {
-      const membersRes = await api.admin.getMembersList({ limit: 50 });
+      const membersRes = await api.admin.getMembersList({ limit: 200 });
       if (membersRes.data) {
         const mappedMembers: Member[] = membersRes.data.map(u => ({
           id: String(u.id),
@@ -326,7 +330,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     // 7. Fetch Group Classes & Schedules
     try {
-      const liveSchedules = await api.groupClasses.getAllSchedules();
+      setIsLoadingGroupClasses(true);
+      const [liveClasses, liveSchedules] = await Promise.all([
+        api.groupClasses.getAdminClasses().catch((err) => {
+          console.warn('Lỗi tải danh mục lớp học admin:', err);
+          return [];
+        }),
+        api.groupClasses.getAllSchedules().catch((err) => {
+          console.warn('Lỗi tải lịch lớp học nhóm admin:', err);
+          return [];
+        }),
+      ]);
+      setGroupClasses(liveClasses || []);
       setGroupClassSchedules(liveSchedules || []);
     } catch (e: any) {
       console.warn('Lỗi tải lịch lớp học nhóm admin:', e);
@@ -344,6 +359,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (activeTab === 'packages-engine') {
       void loadPackages();
       void loadPtProducts();
+    }
+    if (activeTab === 'group-classes') {
+      void reloadData();
     }
   }, [activeTab]);
 
@@ -409,11 +427,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
   }, [analyticsData, timeFilter, members.length]);
 
-  // Filtered members for Member 360
+  // Filtered & paginated members for Member 360
   const filteredMembers = members.filter(m =>
     m.name.toLowerCase().includes(memberSearchQuery.toLowerCase()) ||
     m.phone.includes(memberSearchQuery) ||
     m.code.toLowerCase().includes(memberSearchQuery.toLowerCase())
+  );
+  const totalMemberPages = Math.max(1, Math.ceil(filteredMembers.length / memberPageSize));
+  const safeMemberPage = Math.min(memberPage, totalMemberPages);
+  const paginatedMembers = filteredMembers.slice(
+    (safeMemberPage - 1) * memberPageSize,
+    safeMemberPage * memberPageSize
   );
 
   // Handle Save Coach Pricing (Luồng 9)
@@ -712,7 +736,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveClass = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.groupClasses.createClass({
+      const res = await api.groupClasses.createClass({
         name: classForm.name,
         description: classForm.description,
         durationMin: Number(classForm.durationMin || 60),
@@ -722,6 +746,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await reloadData();
       setIsCreatingClass(false);
       setClassForm({ name: '', description: '', durationMin: 60, imageUrl: '' });
+      if (res?.data?.id) {
+        setScheduleForm(prev => ({ ...prev, classId: res.data.id }));
+      }
       alert('Đã tạo lớp học nhóm mới thành công!');
     } catch (err: any) {
       soundEffects.playErrorBeep();
@@ -831,178 +858,146 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <StaffPage>
       {/* Top Global Time Range Filter Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border/80">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-foreground">
-            <Calendar className="size-4 text-primary" />
-            <span>Kỳ Thống Kê:</span>
-          </div>
-          <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border">
-            {[
-              { id: 'today', label: 'Hôm Nay' },
-              { id: '7days', label: '7 Ngày Qua' },
-              { id: 'month', label: 'Tháng Này' },
-              { id: 'quarter', label: 'Quý Này' },
-              { id: 'year', label: 'Cả Năm' },
-            ].map(tf => {
-              const isActive = timeFilter === tf.id;
-              return (
-                <button
-                  key={tf.id}
-                  type="button"
-                  onClick={() => {
-                    setTimeFilter(tf.id as any);
-                    soundEffects.playSuccessBeep();
-                  }}
-                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${isActive
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-background/60'
-                    }`}
-                >
-                  {tf.label}
-                </button>
-              );
-            })}
-          </div>
+      <div className="flex flex-col gap-2 pb-3 border-b border-border/80">
+        <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-foreground">
+          <Calendar className="size-4 text-primary" />
+          <span>Kỳ Thống Kê</span>
         </div>
-
-        <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
-          <span className="inline-block size-2 rounded-full bg-success animate-pulse" />
-          <span>{timeFilteredData.subLabel} • Dữ liệu thời gian thực</span>
+        <div className="grid w-full grid-cols-2 gap-1 rounded-lg border border-border bg-muted/60 p-1 sm:grid-cols-5">
+          {[
+            { id: 'today', label: 'Hôm Nay' },
+            { id: '7days', label: '7 Ngày Qua' },
+            { id: 'month', label: 'Tháng Này' },
+            { id: 'quarter', label: 'Quý Này' },
+            { id: 'year', label: 'Cả Năm' },
+          ].map((tf, idx) => {
+            const isActive = timeFilter === tf.id;
+            return (
+              <button
+                key={tf.id}
+                type="button"
+                onClick={() => {
+                  setTimeFilter(tf.id as any);
+                  soundEffects.playSuccessBeep();
+                }}
+                className={`w-full px-3 py-1.5 text-center text-xs font-bold rounded-md transition-all cursor-pointer ${idx === 4 ? 'col-span-2 sm:col-span-1' : ''} ${isActive
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-background/60'
+                  }`}
+              >
+                {tf.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Top BI Metric Strip */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <button
-          type="button"
-          onClick={() => {
-            onTabChange('analytics');
-            soundEffects.playSuccessBeep();
-          }}
-          className="text-left transition-all active:scale-[0.98] hover:-translate-y-0.5 group relative block w-full focus:outline-none cursor-pointer"
-        >
-          <StatCard
-            icon={DollarSign}
-            tone="primary"
-            label="Tổng Doanh Thu"
-            value={`${timeFilteredData.revenue.toLocaleString('vi-VN')} đ`}
-            hint={
-              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
-                <TrendingUp className="size-3.5 shrink-0" /> {timeFilteredData.growth} ({timeFilteredData.label})
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+        {[
+          {
+            tab: 'analytics',
+            icon: DollarSign,
+            label: 'Doanh thu',
+            value: `${timeFilteredData.revenue.toLocaleString('vi-VN')}đ`,
+            meta: (
+              <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                <TrendingUp className="size-3 shrink-0" />
+                {timeFilteredData.growth}
               </span>
-            }
-            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-primary/60 h-full ${activeTab === 'analytics' ? 'ring-2 ring-primary/40 border-primary shadow-xs' : ''
-              }`}
-          />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            onTabChange('members-360');
-            soundEffects.playSuccessBeep();
-          }}
-          className="text-left transition-all active:scale-[0.98] hover:-translate-y-0.5 group relative block w-full focus:outline-none cursor-pointer"
-        >
-          <StatCard
-            icon={Users}
-            tone="success"
-            label="Tổng Số Hội Viên"
-            value={`${analyticsData?.totalMembers ?? members.length} hội viên`}
-            hint={
-              <span className="text-xs text-muted-foreground">
-                Đang hoạt động: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{analyticsData?.renewalRate ?? '100%'}</strong>
+            ),
+            iconTone: 'bg-primary/10 text-primary',
+            activeCls: 'ring-2 ring-primary/40 border-primary',
+            hoverCls: 'hover:border-primary/60',
+          },
+          {
+            tab: 'members-360',
+            icon: Users,
+            label: 'Hội viên',
+            value: String(analyticsData?.totalMembers ?? members.length),
+            meta: (
+              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                {analyticsData?.renewalRate ?? '100%'}
               </span>
-            }
-            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-success/60 h-full ${activeTab === 'members-360' ? 'ring-2 ring-success/40 border-success shadow-xs' : ''
-              }`}
-          />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            onTabChange('coaches-config');
-            soundEffects.playSuccessBeep();
-          }}
-          className="text-left transition-all active:scale-[0.98] hover:-translate-y-0.5 group relative block w-full focus:outline-none cursor-pointer"
-        >
-          <StatCard
-            icon={Dumbbell}
-            tone="info"
-            label="Đội Ngũ HLV"
-            value={`${analyticsData?.totalCoaches ?? coaches.length} HLV`}
-            hint={
-              <span className="text-xs text-muted-foreground">
-                Bình quân: <strong className="text-sky-600 dark:text-sky-400 font-bold">{analyticsData?.avgMembersPerCoach ?? '—'}</strong> hv / HLV
+            ),
+            iconTone: 'bg-success/15 text-success',
+            activeCls: 'ring-2 ring-success/40 border-success',
+            hoverCls: 'hover:border-success/60',
+          },
+          {
+            tab: 'coaches-config',
+            icon: Dumbbell,
+            label: 'HLV',
+            value: String(analyticsData?.totalCoaches ?? coaches.length),
+            meta: (
+              <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400">
+                TB {analyticsData?.avgMembersPerCoach ?? '—'}
               </span>
-            }
-            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-sky-500/60 h-full ${activeTab === 'coaches-config' ? 'ring-2 ring-sky-500/40 border-sky-500 shadow-xs' : ''
-              }`}
-          />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            onTabChange('packages-engine');
-            soundEffects.playSuccessBeep();
-          }}
-          className="text-left transition-all active:scale-[0.98] hover:-translate-y-0.5 group relative block w-full focus:outline-none cursor-pointer"
-        >
-          <StatCard
-            icon={Layers}
-            tone="warning"
-            label="Gói Gym & PT"
-            value={`${analyticsData?.catalogCount ?? catalogCount} gói`}
-            hint={
-              <span className="text-xs text-muted-foreground">
-                Tỷ trọng PT: <strong className="text-amber-600 dark:text-amber-400 font-bold">{analyticsData?.ptRevenueShare ?? '0%'}</strong>
+            ),
+            iconTone: 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
+            activeCls: 'ring-2 ring-sky-500/40 border-sky-500',
+            hoverCls: 'hover:border-sky-500/60',
+          },
+          {
+            tab: 'packages-engine',
+            icon: Layers,
+            label: 'Gói tập',
+            value: String(analyticsData?.catalogCount ?? catalogCount),
+            meta: (
+              <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                PT {analyticsData?.ptRevenueShare ?? '0%'}
               </span>
-            }
-            className={`transition-all duration-200 group-hover:shadow-md group-hover:border-amber-500/60 h-full ${activeTab === 'packages-engine' ? 'ring-2 ring-amber-500/40 border-amber-500 shadow-xs' : ''
-              }`}
-          />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            onTabChange('tickets-management');
-            soundEffects.playSuccessBeep();
-          }}
-          className="text-left transition-all active:scale-[0.98] hover:-translate-y-0.5 group relative block w-full focus:outline-none cursor-pointer"
-        >
-          {openTicketsCount > 0 && (
-            <div className="absolute -top-2.5 right-2 z-10">
-              <Badge variant="destructive" className="animate-pulse shadow-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border-2 border-background">
-                ⚠ CẦN XỬ LÝ GẤP
+            ),
+            iconTone: 'bg-warning/15 text-warning',
+            activeCls: 'ring-2 ring-amber-500/40 border-amber-500',
+            hoverCls: 'hover:border-amber-500/60',
+          },
+          {
+            tab: 'tickets-management',
+            icon: LifeBuoy,
+            label: 'Sự cố',
+            value: String(openTicketsCount),
+            meta: openTicketsCount > 0 ? (
+              <Badge variant="destructive" className="px-1.5 py-0 text-[10px] font-bold">
+                Khẩn
               </Badge>
-            </div>
-          )}
-          <StatCard
-            icon={LifeBuoy}
-            tone={openTicketsCount > 0 ? 'danger' : 'primary'}
-            label="Sự Cố & Báo Cáo"
-            value={`${openTicketsCount} chờ xử lý`}
-            hint={
-              <span className="text-xs text-muted-foreground">
-                {openTicketsCount > 0 ? (
-                  <strong className="text-destructive font-bold">{openTicketsCount} sự cố khẩn cấp</strong>
-                ) : (
-                  <span>{inProgressTicketsCount} đang xử lý</span>
-                )}
+            ) : (
+              <span className="text-[11px] text-muted-foreground">
+                {inProgressTicketsCount > 0 ? `${inProgressTicketsCount} xử lý` : 'Ổn định'}
               </span>
-            }
-            className={`transition-all duration-200 group-hover:shadow-md h-full ${openTicketsCount > 0
-              ? 'border-destructive/80 bg-destructive/10 ring-2 ring-destructive/40 group-hover:border-destructive'
-              : activeTab === 'tickets-management'
-                ? 'ring-2 ring-primary/40 border-primary shadow-xs'
-                : 'group-hover:border-primary/60'
-              }`}
-          />
-        </button>
+            ),
+            iconTone: openTicketsCount > 0 ? 'bg-destructive/15 text-destructive' : 'bg-primary/10 text-primary',
+            activeCls: openTicketsCount > 0 ? 'border-destructive bg-destructive/10 ring-2 ring-destructive/40' : 'ring-2 ring-primary/40 border-primary',
+            hoverCls: openTicketsCount > 0 ? 'border-destructive/80 bg-destructive/10 hover:border-destructive' : 'hover:border-primary/60',
+          },
+        ].map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.tab;
+          return (
+            <button
+              key={item.tab}
+              type="button"
+              onClick={() => {
+                onTabChange(item.tab);
+                soundEffects.playSuccessBeep();
+              }}
+              className={`group flex w-full items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-left transition-all duration-150 cursor-pointer active:scale-[0.98] hover:shadow-sm focus:outline-none ${item.hoverCls} ${isActive ? item.activeCls : ''}`}
+            >
+              <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${item.iconTone}`}>
+                <Icon className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="truncate text-[11px] font-semibold text-muted-foreground">{item.label}</span>
+                  <span className="shrink-0">{item.meta}</span>
+                </div>
+                <p className="mt-0.5 truncate text-base font-bold leading-tight tracking-tight text-foreground sm:text-lg">
+                  {item.value}
+                </p>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* TAB 1: BI Analytics & Reports */}
@@ -1016,9 +1011,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Activity className="size-5 text-primary" />
                   Xu Hướng Tăng Trưởng Doanh Thu & Lượng Khách Check-in
                 </CardTitle>
-                <CardDescription className="text-foreground/75 font-medium">
-                  Biểu đồ phân tích tương quan giữa doanh số bán thẻ và mật độ tập luyện ({timeFilteredData.label})
-                </CardDescription>
               </div>
 
               {/* Chart Legend & Summary Chips */}
@@ -1038,71 +1030,105 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <CardContent>
               {/* SVG Growth Curve Area & Line Chart */}
               <div className="w-full overflow-x-auto">
-                <div className="min-w-[580px] h-[210px] w-full pt-2">
-                  <svg viewBox="0 0 700 200" className="w-full h-full overflow-visible">
-                    <defs>
-                      <linearGradient id="auraRevenueGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.32" />
-                        <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.0" />
-                      </linearGradient>
-                      <linearGradient id="auraSkyGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#0284c7" stopOpacity="0.2" />
-                        <stop offset="100%" stopColor="#0284c7" stopOpacity="0.0" />
-                      </linearGradient>
-                    </defs>
+                <div className="min-w-[580px] h-[220px] w-full pt-2">
+                  {(() => {
+                    const data = timeFilteredData.chartData;
+                    const topY = 34;
+                    const midY = 102;
+                    const botY = 170;
+                    const plotHeight = botY - topY; // 136px
+                    const plotLeft = 72;
+                    const plotRight = 672;
+                    const innerLeft = 92;
+                    const innerRight = 656;
+                    const maxRev = Math.max(...data.map(d => d.rev), 0);
 
-                    {/* Horizontal Grid lines */}
-                    <line x1="40" y1="30" x2="680" y2="30" stroke="currentColor" strokeOpacity="0.08" strokeDasharray="3 3" />
-                    <line x1="40" y1="80" x2="680" y2="80" stroke="currentColor" strokeOpacity="0.08" strokeDasharray="3 3" />
-                    <line x1="40" y1="130" x2="680" y2="130" stroke="currentColor" strokeOpacity="0.08" strokeDasharray="3 3" />
-                    <line x1="40" y1="170" x2="680" y2="170" stroke="currentColor" strokeOpacity="0.15" />
+                    const formatRevShort = (rev: number) => {
+                      if (rev >= 1) return `${Number(rev.toFixed(2))}M`;
+                      if (rev > 0) return `${Math.round(rev * 1000)}k`;
+                      return '0đ';
+                    };
 
-                    {/* Y-axis labels */}
-                    <text x="32" y="34" textAnchor="end" className="text-[10px] fill-foreground/60 font-semibold">Cao</text>
-                    <text x="32" y="104" textAnchor="end" className="text-[10px] fill-foreground/60 font-semibold">TB</text>
-                    <text x="32" y="174" textAnchor="end" className="text-[10px] fill-foreground/60 font-semibold">0</text>
+                    const stepX = data.length > 1 ? (innerRight - innerLeft) / (data.length - 1) : 0;
+                    const points = data.map((d, i) => {
+                      const x = data.length === 1 ? (innerLeft + innerRight) / 2 : innerLeft + i * stepX;
+                      const y = maxRev > 0 ? botY - (d.rev / maxRev) * plotHeight : botY;
+                      return { x, y, isPeak: maxRev > 0 && d.rev === maxRev, ...d };
+                    });
 
-                    {/* Area Polygon & Curve for Revenue */}
-                    {(() => {
-                      const data = timeFilteredData.chartData;
-                      const stepX = (640 / Math.max(1, data.length - 1));
-                      const maxRev = Math.max(...data.map(d => d.rev), 1);
-                      const points = data.map((d, i) => {
-                        const x = 50 + i * stepX;
-                        const y = 170 - (d.rev / maxRev) * 135;
-                        return { x, y, ...d };
-                      });
+                    const pathD = points.reduce((acc, p, i) => {
+                      if (i === 0) return `M ${p.x} ${p.y}`;
+                      const prev = points[i - 1];
+                      const cx = prev.x + (p.x - prev.x) / 2;
+                      return `${acc} C ${cx} ${prev.y}, ${cx} ${p.y}, ${p.x} ${p.y}`;
+                    }, '');
 
-                      const pathD = points.reduce((acc, p, i) => {
-                        if (i === 0) return `M ${p.x} ${p.y}`;
-                        const prev = points[i - 1];
-                        const cx1 = prev.x + (p.x - prev.x) / 2;
-                        const cx2 = cx1;
-                        return `${acc} C ${cx1} ${prev.y}, ${cx2} ${p.y}, ${p.x} ${p.y}`;
-                      }, '');
+                    const areaD = points.length
+                      ? `${pathD} L ${points[points.length - 1].x} ${botY} L ${points[0].x} ${botY} Z`
+                      : '';
 
-                      const areaD = `${pathD} L ${points[points.length - 1].x} 170 L ${points[0].x} 170 Z`;
+                    return (
+                      <svg viewBox="0 0 700 205" className="w-full h-full overflow-visible">
+                        <defs>
+                          <linearGradient id="auraRevenueGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.32" />
+                            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
 
-                      return (
-                        <>
-                          <path d={areaD} fill="url(#auraRevenueGrad)" />
-                          <path d={pathD} fill="none" stroke="var(--color-primary)" strokeWidth="3" strokeLinecap="round" />
-                          {points.map((p, i) => (
-                            <g key={i}>
-                              <circle cx={p.x} cy={p.y} r="5" fill="var(--bg-card)" stroke="var(--color-primary)" strokeWidth="2.5" />
-                              <text x={p.x} y={p.y - 10} textAnchor="middle" className="text-[10px] font-bold fill-primary">
-                                {p.rev >= 1 ? `${p.rev}M` : p.rev > 0 ? `${Math.round(p.rev * 1000)}k` : '0đ'}
-                              </text>
-                              {/* Bottom X-axis label */}
-                              <text x={p.x} y="190" textAnchor="middle" className="text-[11px] font-semibold fill-foreground/80">
-                                {p.label}
-                              </text>
-                            </g>
-                          ))}
-                        </>
-                      );
-                    })()}
-                  </svg>
+                        {/* Horizontal Grid lines (34, 68, 102, 136, 170) */}
+                        <line x1={plotLeft} y1={topY} x2={plotRight} y2={topY} stroke="var(--color-primary)" strokeOpacity={maxRev > 0 ? 0.35 : 0.1} strokeDasharray="4 3" />
+                        <line x1={plotLeft} y1={68} x2={plotRight} y2={68} stroke="currentColor" strokeOpacity="0.07" strokeDasharray="3 3" />
+                        <line x1={plotLeft} y1={midY} x2={plotRight} y2={midY} stroke="currentColor" strokeOpacity="0.1" strokeDasharray="3 3" />
+                        <line x1={plotLeft} y1={136} x2={plotRight} y2={136} stroke="currentColor" strokeOpacity="0.07" strokeDasharray="3 3" />
+                        <line x1={plotLeft} y1={botY} x2={plotRight} y2={botY} stroke="currentColor" strokeOpacity="0.18" />
+
+                        {/* Y-axis labels anchored to highest revenue = Cao */}
+                        <text x={plotLeft - 8} y={topY + 4} textAnchor="end" className="text-[10px] fill-primary font-bold">
+                          {maxRev > 0 ? `Cao · ${formatRevShort(maxRev)}` : 'Cao'}
+                        </text>
+                        <text x={plotLeft - 8} y={midY + 4} textAnchor="end" className="text-[10px] fill-foreground/60 font-semibold">
+                          {maxRev > 0 ? `TB · ${formatRevShort(maxRev / 2)}` : 'TB'}
+                        </text>
+                        <text x={plotLeft - 8} y={botY + 4} textAnchor="end" className="text-[10px] fill-foreground/60 font-semibold">
+                          0đ
+                        </text>
+
+                        {points.length > 0 && (
+                          <>
+                            <path d={areaD} fill="url(#auraRevenueGrad)" />
+                            <path d={pathD} fill="none" stroke="var(--color-primary)" strokeWidth="3" strokeLinecap="round" />
+                            {points.map((p, i) => (
+                              <g key={i}>
+                                {p.isPeak && (
+                                  <circle cx={p.x} cy={p.y} r="8" fill="var(--color-primary)" fillOpacity="0.18" />
+                                )}
+                                <circle
+                                  cx={p.x}
+                                  cy={p.y}
+                                  r={p.isPeak ? 5.5 : 4.5}
+                                  fill={p.isPeak ? 'var(--color-primary)' : 'var(--bg-card)'}
+                                  stroke="var(--color-primary)"
+                                  strokeWidth="2.5"
+                                />
+                                <text
+                                  x={p.x}
+                                  y={p.y - 11}
+                                  textAnchor="middle"
+                                  className={`text-[10px] font-bold ${p.isPeak ? 'fill-primary' : 'fill-foreground/80'}`}
+                                >
+                                  {formatRevShort(p.rev)}
+                                </text>
+                                <text x={p.x} y="192" textAnchor="middle" className="text-[11px] font-semibold fill-foreground/80">
+                                  {p.label}
+                                </text>
+                              </g>
+                            ))}
+                          </>
+                        )}
+                      </svg>
+                    );
+                  })()}
                 </div>
               </div>
             </CardContent>
@@ -1113,7 +1139,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <Card>
               <CardHeader>
                 <CardTitle>Cơ Cấu Doanh Thu Theo Loại Dịch Vụ</CardTitle>
-                <CardDescription className="text-foreground/75 font-medium">Phân tích tỷ trọng đóng góp vào ngân sách trung tâm</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-6">
                 <div className="grid gap-4">
@@ -1176,24 +1201,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <CardTitle>Giao Dịch Gần Đây</CardTitle>
                 <CardDescription className="text-foreground/75 font-medium">Nhật ký hóa đơn vừa thanh toán</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3 max-h-[500px] overflow-y-auto pr-1">
-                {invoices.length === 0 ? (
-                  <div className="text-center py-8 text-sm text-muted-foreground">Chưa có giao dịch thanh toán nào được ghi nhận.</div>
-                ) : (
-                  invoices.map(inv => (
-                    <div key={inv.id} className="p-3.5 rounded-lg border bg-card/90 hover:border-primary/50 transition-all text-xs shadow-xs">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="font-bold text-sm text-foreground">{inv.memberName}</span>
-                        <span className="font-extrabold text-sm text-primary">+{inv.totalVND.toLocaleString('vi-VN')} đ</span>
+              <CardContent>
+                <div className="grid gap-3 max-h-[500px] overflow-y-auto">
+                  {invoices.length === 0 ? (
+                    <div className="text-center py-8 text-sm text-muted-foreground">Chưa có giao dịch thanh toán nào được ghi nhận.</div>
+                  ) : (
+                    invoices.map(inv => (
+                      <div key={inv.id} className="p-3.5 rounded-lg border bg-card/90 hover:border-primary/50 transition-all text-xs shadow-xs">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-bold text-sm text-foreground">{inv.memberName}</span>
+                          <span className="font-extrabold text-sm text-primary">+{inv.totalVND.toLocaleString('vi-VN')} đ</span>
+                        </div>
+                        <div className="text-foreground/80 font-medium line-clamp-1">{inv.items[0]?.name || 'Dịch vụ'}</div>
+                        <div className="flex justify-between items-center text-foreground/75 mt-2.5 text-[11px] font-medium">
+                          <Badge variant="outline" className="text-[10px] uppercase font-bold border-border/80">{inv.paymentMethod}</Badge>
+                          <span>{new Date(inv.createdAt).toLocaleString('vi-VN')}</span>
+                        </div>
                       </div>
-                      <div className="text-foreground/80 font-medium line-clamp-1">{inv.items[0]?.name || 'Dịch vụ'}</div>
-                      <div className="flex justify-between items-center text-foreground/75 mt-2.5 text-[11px] font-medium">
-                        <Badge variant="outline" className="text-[10px] uppercase font-bold border-border/80">{inv.paymentMethod}</Badge>
-                        <span>{new Date(inv.createdAt).toLocaleString('vi-VN')}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -1203,9 +1230,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* TAB 2: Member Management 360 */}
       {activeTab === 'members-360' && (
         <Card>
-          <CardHeader>
+          <CardHeader className="items-center">
             <CardTitle>Quản Lý Hồ Sơ Hội Viên</CardTitle>
-            <CardDescription>Tra cứu đầy đủ thông tin cá nhân, gói tập, lịch sử check-in, hóa đơn và tiến độ</CardDescription>
             <CardAction>
               <div className="relative w-72">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -1213,7 +1239,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="pl-9"
                   placeholder="Tìm theo tên, SĐT, mã HV..."
                   value={memberSearchQuery}
-                  onChange={(e) => setMemberSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setMemberSearchQuery(e.target.value);
+                    setMemberPage(1);
+                  }}
                 />
               </div>
             </CardAction>
@@ -1232,7 +1261,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredMembers.map(m => (
+                {paginatedMembers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                      Không tìm thấy hội viên phù hợp.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedMembers.map(m => (
                   <TableRow key={m.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -1273,9 +1309,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2.5">
+                <Select
+                  value={String(memberPageSize)}
+                  onValueChange={(value) => {
+                    setMemberPageSize(Number(value));
+                    setMemberPage(1);
+                  }}
+                >
+                  <SelectTrigger size="sm" className="w-[104px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5 / bảng</SelectItem>
+                    <SelectItem value="10">10 / bảng</SelectItem>
+                    <SelectItem value="20">20 / bảng</SelectItem>
+                    <SelectItem value="50">50 / bảng</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={safeMemberPage <= 1}
+                  onClick={() => setMemberPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="size-4" />
+                  Trước
+                </Button>
+                <span className="px-2 font-semibold text-foreground">
+                  {safeMemberPage} / {totalMemberPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={safeMemberPage >= totalMemberPages}
+                  onClick={() => setMemberPage((p) => Math.min(totalMemberPages, p + 1))}
+                >
+                  Sau
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -1421,13 +1506,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* TAB 3: Incident & Support Ticket Command Center */}
       {activeTab === 'tickets-management' && (
         <Card>
-          <CardHeader>
+          <CardHeader className="items-center">
             <CardTitle className="flex items-center gap-2">
               <LifeBuoy className="size-5 text-primary" /> Trung Tâm Xử Lý Báo Cáo & Yêu Cầu Hỗ Trợ
             </CardTitle>
-            <CardDescription>
-              Tiếp nhận sự cố, bảo lưu và khiếu nại từ Lễ tân • Phê duyệt & Giao việc xử lý
-            </CardDescription>
             <CardAction className="flex flex-wrap items-center gap-3">
               <div className="relative w-64">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -1490,7 +1572,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="py-12 text-center text-muted-foreground">
                 <CheckCircle2 className="size-10 text-success mx-auto mb-2" />
                 <h4 className="font-semibold text-foreground">Không có báo cáo nào trong danh mục này!</h4>
-                <p className="text-xs mt-1">Hệ thống vận hành ổn định, không có sự cố nào tồn đọng.</p>
               </div>
             ) : (
               <div className="grid gap-3">
@@ -1606,7 +1687,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <Card>
           <CardHeader>
             <CardTitle>Quản Trị Huấn Luyện Viên & Bảng Giá Dạy Lẻ</CardTitle>
-            <CardDescription>Quản lý cấp độ PT được phép hướng dẫn, cấp bậc, đơn giá và hoa hồng của từng HLV.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1690,13 +1770,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <form onSubmit={handleSaveCoachPricing}>
               <DialogHeader>
                 <DialogTitle>Cấu hình HLV {editingCoach.name}</DialogTitle>
-                <DialogDescription>{editingCoach.code} • Cấp độ PT, cấp bậc và đơn giá được lưu cùng lúc.</DialogDescription>
               </DialogHeader>
 
               <div className="grid gap-4 py-3">
                 <fieldset className="space-y-2">
                   <legend className="text-sm font-medium">Cấp độ PT được phép hướng dẫn</legend>
-                  <p className="text-xs text-muted-foreground">Chỉ chọn cấp độ HLV đủ điều kiện. Lịch đã đặt sẽ được kiểm tra trước khi gỡ cấp độ.</p>
                   <div className="grid grid-cols-2 gap-2">
                     {ptLevels.map(level => <label key={level} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm ${newPtLevels.includes(level) ? 'border-primary bg-primary/5 font-medium text-primary' : 'border-border hover:bg-muted/40'}`}>
                       <input type="checkbox" className="size-4 accent-primary" checked={newPtLevels.includes(level)}
@@ -1754,9 +1832,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* TAB 5: Packages & Services */}
       {activeTab === 'packages-engine' && (
         <Card>
-          <CardHeader>
+          <CardHeader className="items-center">
             <CardTitle>Quản lý gói tập Gym và buổi tập PT</CardTitle>
-            <CardDescription>Gói Gym cho hội viên vào phòng tập theo thời hạn. Buổi PT được mua riêng theo số buổi.</CardDescription>
             <CardAction className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => setIsPtCreditOpen(true)}>
                 Quản lý buổi PT
@@ -1767,16 +1844,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </CardAction>
           </CardHeader>
           <CardContent>
-            <div className="mb-5 grid gap-3 sm:grid-cols-2" aria-label="Giải thích các loại gói tập">
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                <p className="font-semibold text-sm">Gói Gym</p>
-                <p className="mt-1 text-sm text-muted-foreground">Hội viên mua để vào phòng tập trong số ngày đã chọn. Có thể tặng kèm buổi PT trải nghiệm.</p>
-              </div>
-              <div className="rounded-lg border p-4">
-                <p className="font-semibold text-sm">Buổi tập PT với huấn luyện viên</p>
-                <p className="mt-1 text-sm text-muted-foreground">Hội viên mua theo cấp độ và số buổi. Dùng nút “Quản lý buổi PT” để tạo sản phẩm hoặc xem số buổi còn lại.</p>
-              </div>
-            </div>
             {packageLoadError && (
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
                 <span>Không tải được gói tập: {packageLoadError}</span>
@@ -1790,10 +1857,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             )}
             <div className="mb-5 flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold">Trạng thái kinh doanh</p>
-                <p className="text-xs text-muted-foreground">Ngừng bán chỉ ẩn gói khỏi danh sách mua; dữ liệu và lịch sử vẫn được giữ.</p>
-              </div>
+              <p className="text-sm font-semibold">Trạng thái kinh doanh</p>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" disabled={isLoadingPackages || isLoadingPtProducts} onClick={() => { void loadPackages(); void loadPtProducts(); }}>
                   {isLoadingPackages || isLoadingPtProducts ? 'Đang tải...' : 'Tải lại'}
@@ -2117,7 +2181,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex justify-between items-center flex-wrap gap-4">
                 <div>
                   <CardTitle>Quản Lý Cơ Sở Vật Chất & Thiết Bị Phòng Tập</CardTitle>
-                  <CardDescription>Theo dõi danh sách phòng tập chức năng, tình trạng máy tập và quản lý bảo trì</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={() => setIsCreatingRoom(true)}>
@@ -2226,14 +2289,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="grid gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Danh Mục Lớp Học ({groupClasses.length})</CardTitle>
-              <CardDescription>Các lớp đã tạo, kể cả lớp chưa được xếp lịch.</CardDescription>
+              <div className="flex justify-between items-center flex-wrap gap-4">
+                <div>
+                  <CardTitle>Danh Mục Lớp Học ({groupClasses.length})</CardTitle>
+                </div>
+                <Button onClick={() => setIsCreatingClass(true)}>
+                  <Plus className="size-4" /> Tạo Lớp Học Mới
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {groupClasses.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
                   <p className="font-semibold text-foreground">Chưa có lớp học nào</p>
-                  <p className="text-xs mt-1">Lớp vừa tạo sẽ xuất hiện tại đây.</p>
+                  <p className="text-xs mt-1">Bấm nút "Tạo Lớp Học Mới" ở trên để tạo lớp học đầu tiên.</p>
                 </div>
               ) : (
                 <Table>
@@ -2242,16 +2311,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <TableHead>Tên Lớp Học</TableHead>
                       <TableHead>Thời Lượng</TableHead>
                       <TableHead>Mô Tả</TableHead>
+                      <TableHead className="text-center">Số Ca Đã Xếp Lịch</TableHead>
+                      <TableHead className="text-right">Thao Tác</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {groupClasses.map(groupClass => (
-                      <TableRow key={groupClass.id}>
-                        <TableCell className="font-bold text-foreground">{groupClass.name}</TableCell>
-                        <TableCell>{groupClass.durationMin} phút</TableCell>
-                        <TableCell>{groupClass.description || '—'}</TableCell>
-                      </TableRow>
-                    ))}
+                    {groupClasses.map(groupClass => {
+                      const scheduleCount = groupClassSchedules.filter(s => s.classId === groupClass.id).length;
+                      return (
+                        <TableRow key={groupClass.id}>
+                          <TableCell className="font-bold text-foreground">
+                            {groupClass.name}
+                            <span className="text-xs text-muted-foreground ml-1.5 font-normal">#{groupClass.id}</span>
+                          </TableCell>
+                          <TableCell>{groupClass.durationMin} phút</TableCell>
+                          <TableCell className="max-w-md truncate text-muted-foreground text-xs">{groupClass.description || '—'}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className="text-xs font-semibold">
+                              {scheduleCount} ca tập
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs gap-1"
+                              onClick={() => {
+                                setScheduleForm(prev => ({
+                                  ...prev,
+                                  classId: groupClass.id,
+                                  trainerId: groupClassTrainers[0]?.userId ?? 0,
+                                  roomId: rooms[0]?.id ?? 0
+                                }));
+                                setIsCreatingSchedule(true);
+                              }}
+                            >
+                              <Plus className="size-3" /> Mở ca lịch
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -2262,14 +2362,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex justify-between items-center flex-wrap gap-4">
                 <div>
                   <CardTitle>Quản Lý Lớp Học Nhóm & Lên Lịch Ca Tập</CardTitle>
-                  <CardDescription>Tạo danh mục lớp học nhóm và lên thời khóa biểu theo phòng tập & HLV</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={() => setIsCreatingClass(true)}>
                     <Plus className="size-4" /> Tạo Lớp Học Mới
                   </Button>
                   <Button onClick={() => {
-                    setScheduleForm(prev => ({ ...prev, trainerId: groupClassTrainers[0]?.userId ?? 0, roomId: rooms[0]?.id ?? 0 }));
+                    setScheduleForm(prev => ({
+                      ...prev,
+                      classId: prev.classId && groupClasses.some(c => c.id === prev.classId) ? prev.classId : (groupClasses[0]?.id ?? 0),
+                      trainerId: groupClassTrainers[0]?.userId ?? 0,
+                      roomId: rooms[0]?.id ?? 0
+                    }));
                     setIsCreatingSchedule(true);
                   }}>
                     <Plus className="size-4" /> Mở Ca Lịch Tập
@@ -2452,7 +2556,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <form onSubmit={handleSaveClass}>
             <DialogHeader>
               <DialogTitle>Tạo Danh Mục Lớp Học Mới</DialogTitle>
-              <DialogDescription>Định nghĩa tên lớp, thời lượng và mô tả nội dung buổi tập.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-3">
               <Field label="Tên Lớp Học *">
@@ -2497,16 +2600,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <form onSubmit={handleSaveSchedule}>
             <DialogHeader>
               <DialogTitle>Mở Lịch Ca Tập Lớp Học Nhóm</DialogTitle>
-              <DialogDescription>Lên lịch cho lớp học và phân công Huấn luyện viên phụ trách.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-3">
               <Field label="Lớp Học *">
                 <Select
-                  value={String(scheduleForm.classId)}
+                  value={scheduleForm.classId ? String(scheduleForm.classId) : undefined}
                   onValueChange={(v) => setScheduleForm({ ...scheduleForm, classId: parseInt(v) })}
                   disabled={groupClasses.length === 0}
                 >
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Chọn lớp học" /></SelectTrigger>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={groupClasses.length === 0 ? "Chưa có lớp học nào" : "Chọn lớp học"} />
+                  </SelectTrigger>
                   <SelectContent>
                     {groupClasses.map(groupClass => (
                       <SelectItem key={groupClass.id} value={String(groupClass.id)}>
@@ -2588,7 +2692,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <Card>
             <CardHeader>
               <CardTitle>Ma Trận Phân Quyền (RBAC)</CardTitle>
-              <CardDescription>Cơ chế bảo mật và phân quyền theo cấp bậc nhân sự</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 text-xs">
               <div className="p-3.5 rounded-lg border bg-muted/40">
@@ -2615,7 +2718,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <Card>
             <CardHeader>
               <CardTitle>Nhật Ký Kiểm Toán (Audit Trail)</CardTitle>
-              <CardDescription>Ghi nhận mọi hành động nhạy cảm của nhân viên</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-2 max-h-[460px] overflow-y-auto pr-1">

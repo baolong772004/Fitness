@@ -185,9 +185,6 @@ export function PtMasterCalendar() {
             <CalendarRange className="size-5 text-primary" />
             Lịch Hoạt Động & Ca Tập PT Chung
           </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Cấu hình khung giờ mở cửa trung tâm, quản lý ngày nghỉ bảo trì và điều phối ca trực của đội ngũ Huấn luyện viên
-          </p>
         </div>
       </div>
 
@@ -216,19 +213,19 @@ export function PtMasterCalendar() {
 
       {/* Tabs Layout */}
       <Tabs value={activeTab} onValueChange={v => setActiveTab(v as any)} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-muted/60 p-1">
-          <TabsTrigger value="schedule" className="flex items-center gap-1.5 py-2 text-xs">
+        <TabsList className="grid h-auto! w-full grid-cols-2 items-stretch gap-1 rounded-xl bg-muted/60 p-1.5 sm:grid-cols-4">
+          <TabsTrigger value="schedule" className="flex h-auto items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs">
             <Clock className="size-3.5" />
             <span>Khung Giờ & Ngày Nghỉ</span>
           </TabsTrigger>
-          <TabsTrigger value="coaches" className="flex items-center gap-1.5 py-2 text-xs">
+          <TabsTrigger value="coaches" className="flex h-auto items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs">
             <Users className="size-3.5" />
             <span>Lịch Trực HLV</span>
             <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
               {coaches.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="requests" className="flex items-center gap-1.5 py-2 text-xs">
+          <TabsTrigger value="requests" className="flex h-auto items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs">
             <ShieldAlert className="size-3.5" />
             <span>Yêu Cầu Đổi Ca</span>
             {pendingRequestsCount > 0 && (
@@ -237,7 +234,7 @@ export function PtMasterCalendar() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="audit" className="flex items-center gap-1.5 py-2 text-xs">
+          <TabsTrigger value="audit" className="flex h-auto items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs">
             <History className="size-3.5" />
             <span>Nhật Ký Lịch</span>
           </TabsTrigger>
@@ -251,15 +248,10 @@ export function PtMasterCalendar() {
               <Card className="shadow-sm">
                 <CardHeader className="pb-3 border-b bg-muted/20">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <Clock className="size-4 text-primary" />
-                        Khung Giờ Mở Cửa & Tạo Ca Tự Động
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Mỗi ca tập cố định 60 phút. Hệ thống tự động phân tách các slot ca theo giờ mở - đóng cửa.
-                      </CardDescription>
-                    </div>
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Clock className="size-4 text-primary" />
+                      Khung Giờ Mở Cửa & Tạo Ca Tự Động
+                    </CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-4">
@@ -326,9 +318,6 @@ export function PtMasterCalendar() {
                           {masterSlots.length} ca / ngày
                         </Badge>
                       </h4>
-                      <span className="text-[11px] text-muted-foreground">
-                        Coach sẽ đăng ký khung giờ rảnh theo các ca này
-                      </span>
                     </div>
 
                     {/* Phân nhóm ca sáng / chiều / tối */}
@@ -406,9 +395,6 @@ export function PtMasterCalendar() {
                     <Wrench className="size-4 text-primary" />
                     Lịch Nghỉ Lễ & Bảo Trì Trung Tâm
                   </CardTitle>
-                  <CardDescription className="text-xs">
-                    Khoảng thời gian đóng cửa tạm thời. Hệ thống tự động ngăn chặn việc đặt lịch PT trùng giờ.
-                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
                   {/* Chọn loại đóng cửa */}
