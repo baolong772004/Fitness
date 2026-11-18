@@ -222,8 +222,7 @@ const CATEGORIES = [
 
 export default function Home() {
   const { user, refreshSession, refreshUnreadCount } = useAuth();
-  const insets = useSafeAreaInsets();
-  const [promoWidth, setPromoWidth] = useState(0);
+  const [promoWidth, setPromoWidth] = useState(SCREEN_WIDTH - 32);
   const [promoPage, setPromoPage] = useState(0);
   const [activeBannerIdx, setActiveBannerIdx] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -307,10 +306,6 @@ export default function Home() {
 
   const roleStr = String(user?.role || '').toUpperCase().trim();
   const isCoach = roleStr === 'COACH' || roleStr === 'TRAINER' || roleStr === 'PT' || roleStr === 'HLV';
-
-  if (__DEV__) {
-    console.log('[Home Tab] User:', user?.email, 'Role:', user?.role, 'isCoach:', isCoach);
-  }
 
   if (isCoach) {
     return <CoachHomeView />;
@@ -518,7 +513,12 @@ export default function Home() {
       {/* 5. Tự Động Chuyển Slide Khuyến Mãi & Sự Kiện Gym (Auto Carousel) */}
       <FadeInUp delay={280}>
         <View
-          onLayout={event => setPromoWidth(event.nativeEvent.layout.width)}
+          onLayout={event => {
+            const nextWidth = Math.round(event.nativeEvent.layout.width);
+            if (nextWidth > 0) {
+              setPromoWidth(prev => (Math.round(prev) === nextWidth ? prev : nextWidth));
+            }
+          }}
           style={styles.promoCarouselContainer}
         >
           {promoWidth > 0 && (
