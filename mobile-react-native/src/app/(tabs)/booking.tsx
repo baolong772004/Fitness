@@ -9,11 +9,10 @@ import { useAuth } from '../../lib/auth';
 import { aura, dateLabel, timeLabel } from '../../lib/theme';
 import { Page, showError } from '../../components/ui';
 
-function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+function SectionHeading({ title }: { title: string }) {
   return (
     <View style={styles.sectionHeading}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
     </View>
   );
 }
@@ -124,7 +123,6 @@ export default function BookingHub() {
           <Ionicons name="sparkles" size={11} color="#FFD6B4" />
           <Text style={styles.heroBadgeText}>AURA FITNESS · LỊCH TẬP</Text>
         </View>
-
         <Text style={styles.heroTitle}>
           {coach ? 'Lịch huấn luyện của bạn' : 'Tập luyện theo cách của bạn'}
         </Text>
@@ -185,7 +183,6 @@ export default function BookingHub() {
       {/* 2. Lịch tập sắp tới (Upcoming Session Card) */}
       <SectionHeading
         title="Lịch tập sắp tới"
-        subtitle={coach ? 'Ca huấn luyện tiếp theo của bạn' : 'Buổi tập gần nhất đã đặt trên hệ thống'}
       />
 
       {!user ? (
@@ -198,7 +195,6 @@ export default function BookingHub() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.emptyTitle}>Đăng nhập để xem lịch tập</Text>
-            <Text style={styles.emptySub}>Lịch hẹn với HLV và lớp học sẽ xuất hiện tại đây.</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={aura.caramel} />
         </Pressable>
@@ -262,9 +258,6 @@ export default function BookingHub() {
             <Text style={styles.emptyTitle}>
               {coach ? 'Chưa có ca dạy sắp tới' : 'Chưa có buổi tập nào sắp tới'}
             </Text>
-            <Text style={styles.emptySub}>
-              {coach ? 'Các ca tập hội viên đặt sẽ hiển thị tại đây.' : 'Chọn HLV hoặc lớp học để lên lịch tập ngay.'}
-            </Text>
           </View>
           <View style={styles.bookNowBtn}>
             <Text style={styles.bookNowText}>{coach ? 'Lịch rảnh' : 'Đặt ngay'}</Text>
@@ -275,7 +268,6 @@ export default function BookingHub() {
       {/* 3. Dịch vụ đặt lịch tập luyện (Hợp nhất Lớp học và PT vào 1 khu vực chuẩn) */}
       <SectionHeading
         title="Hình thức tập luyện"
-        subtitle="Chọn hình thức bạn muốn tham gia để bắt đầu đặt lịch"
       />
 
       <View style={styles.servicesContainer}>
@@ -292,12 +284,6 @@ export default function BookingHub() {
             <View style={styles.serviceTitleRow}>
               <Text style={styles.serviceTitle}>Tập Cùng Huấn Luyện Viên PT</Text>
               <Ionicons name="chevron-forward" size={18} color={aura.caramel} />
-            </View>
-            <Text style={styles.serviceDesc}>
-              Đặt lịch 1:1, theo dõi giáo án cá nhân hóa và quản lý số buổi trong ví PT của bạn.
-            </Text>
-            <View style={styles.serviceTag}>
-              <Text style={styles.serviceTagText}>PT 1:1 · Lịch riêng</Text>
             </View>
           </View>
         </Pressable>
@@ -316,12 +302,6 @@ export default function BookingHub() {
               <Text style={styles.serviceTitle}>Ca Tập Gym & Nhóm Thể Lực</Text>
               <Ionicons name="chevron-forward" size={18} color={aura.caramel} />
             </View>
-            <Text style={styles.serviceDesc}>
-              Tập tạ nhóm, HIIT đốt mỡ, Functional Gym... Khám phá lịch biểu trong tuần và giữ chỗ trước khi đến phòng tập.
-            </Text>
-            <View style={[styles.serviceTag, { backgroundColor: '#E3F2FD' }]}>
-              <Text style={[styles.serviceTagText, { color: '#1565C0' }]}>Ca tập gym · Điểm danh QR</Text>
-            </View>
           </View>
         </Pressable>
       </View>
@@ -331,7 +311,6 @@ export default function BookingHub() {
         <>
           <SectionHeading
             title="Thẻ hội viên & Gói tập"
-            subtitle="Quản lý thời hạn thẻ và khám phá các đặc quyền tại Aura"
           />
 
           {/* Thẻ Hội Viên Hiện Tại */}
@@ -418,7 +397,6 @@ export default function BookingHub() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.quickActionTitle}>Mua gói tập</Text>
-                <Text style={styles.quickActionSub}>Gói Gym & Buổi PT mới</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={aura.caramel} />
             </Pressable>
@@ -433,7 +411,6 @@ export default function BookingHub() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.quickActionTitle}>Gói của tôi</Text>
-                <Text style={styles.quickActionSub}>Hạn dùng & Lịch sử gia hạn</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={aura.caramel} />
             </Pressable>
@@ -460,19 +437,13 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.2,
   },
-  sectionSubtitle: {
-    color: aura.muted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-
   // Hero Banner
   heroBanner: {
     borderRadius: 22,
     padding: 18,
     minHeight: 154,
     justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 10,
@@ -481,6 +452,7 @@ const styles = StyleSheet.create({
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
   },
   heroBadgeText: {
@@ -495,6 +467,7 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     fontWeight: '900',
     marginTop: 8,
+    textAlign: 'center',
   },
   heroSubtitle: {
     color: '#FFFFFFE0',
@@ -502,9 +475,10 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 4,
     maxWidth: '92%',
+    textAlign: 'center',
   },
   heroButton: {
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
@@ -627,12 +601,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
   },
-  emptySub: {
-    color: aura.muted,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 2,
-  },
   bookNowBtn: {
     backgroundColor: aura.latte,
     paddingHorizontal: 11,
@@ -654,7 +622,7 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     padding: 15,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 13,
     borderWidth: 1,
     borderColor: aura.border,
@@ -680,30 +648,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   serviceTitle: {
+    flex: 1,
     color: aura.ink,
     fontSize: 15,
     fontWeight: '900',
+    textAlign: 'center',
   },
-  serviceDesc: {
-    color: aura.muted,
-    fontSize: 11.5,
-    lineHeight: 16.5,
-    marginTop: 4,
-  },
-  serviceTag: {
-    alignSelf: 'flex-start',
-    backgroundColor: aura.cream,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginTop: 7,
-  },
-  serviceTagText: {
-    color: aura.caramel,
-    fontSize: 10,
-    fontWeight: '800',
-  },
-
   // Membership Card
   membershipCard: {
     backgroundColor: aura.white,
@@ -780,10 +730,5 @@ const styles = StyleSheet.create({
     color: aura.ink,
     fontSize: 13,
     fontWeight: '900',
-  },
-  quickActionSub: {
-    color: aura.muted,
-    fontSize: 10,
-    marginTop: 1,
   },
 });

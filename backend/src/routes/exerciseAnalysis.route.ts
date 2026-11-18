@@ -4,9 +4,10 @@ import multer from 'multer';
 import prisma from '../config/prisma.js';
 import { authenticateToken, authorizeRoles, type AuthRequest } from '../middlewares/auth.middleware.js';
 import { createExerciseAnalysis, deleteExerciseAnalysis, isSupportedVideo, publicAnalysis, reanalyzeOwnExerciseVideo } from '../services/exerciseAnalysis.service.js';
-import { analysisQuota, analysisSummary, parseAnalysisOptions } from '../services/exerciseAnalysis.utils.js';
-import { sendAnalysisVideo } from '../services/exerciseAnalysis.media.js';
+import { analysisQuota, analysisSummary, EXERCISE_CHECKER_TIER_POLICIES, exerciseCheckerTierPolicy, parseAnalysisOptions } from '../services/exerciseAnalysis.utils.js';
+import { ensureAnalysisVideoRestored, sendAnalysisVideo } from '../services/exerciseAnalysis.media.js';
 import { hasValidTrainingRelation } from '../services/studentWorkoutPlan.service.js';
+import { activeCoachPtLevel } from '../services/ptTraining.service.js';
 import { exerciseCatalog, exerciseVariants, isExerciseType, publicExercises } from '../services/exerciseAnalysis.catalog.js';
 import { summarizeSquatSession } from '../services/exerciseAnalysis.session.js';
 import { runGeminiSquatAnalysis, runGeminiSquatPilot } from '../services/geminiSquatPilot.service.js';
@@ -18,6 +19,59 @@ const reanalysisRecent = new Map<number, number>();
 const includeReview = { shares: { include: { coach: { select: { id: true, fullName: true } } } }, feedback: { include: { coach: { select: { id: true, fullName: true } } }, orderBy: { createdAt: 'desc' as const } } };
 const validId = (value: unknown) => { const id = Number(value); return Number.isSafeInteger(id) && id > 0 ? id : null; };
 
+async function resolveMemberExerciseCheckerTier(memberId: number, currentTime = new Date()) {
+  const [batches, memberships, bookings] = await Promise.all([
+    prisma.ptCreditBatch.findMany({
+      where: {
+        wallet: { memberId },
+        OR: [{ startAt: null }, { startAt: { lte: currentTime } }],
+        AND: [{ OR: [{ endAt: null }, { endAt: { gt: currentTime } }] }],
+      },
+      select: { level: true, source: true, initialCount: true, usedCount: true, membership: { select: { status: true, startDate: true, endDate: true } } },
+    }),
+    prisma.membership.findMany({
+      where: {
+        userId: memberId,
+        package: { type: 'PT' },
+        status: 'ACTIVE',
+        startDate: { lte: currentTime },
+        endDate: { gt: currentTime },
+        OR: [{ remainingSessions: null }, { remainingSessions: { gt: 0 } }],
+      },
+      select: { package: { select: { ptLevel: true } } },
+    }),
+    prisma.booking.findMany({
+      where: {
+        memberId,
+        type: 'PT',
+        status: { in: ['CONFIRMED', 'IN_PROGRESS', 'MAKEUP_BOOKED'] },
+        endTime: { gt: currentTime },
+      },
+      include: {
+        ptCreditAllocation: { include: { batch: { select: { level: true } } } },
+        membership: { include: { package: { select: { ptLevel: true } } } },
+      },
+    }),
+  ]);
+  const activeBatches = batches.filter(batch =>
+    batch.initialCount > batch.usedCount &&
+    (!batch.membership || (batch.membership.status === 'ACTIVE' && batch.membership.startDate <= currentTime && batch.membership.endDate > currentTime))
+  );
+  const levels = new Set<string>();
+  for (const b of activeBatches) if (b.level) levels.add(String(b.level).toUpperCase());
+  for (const m of memberships) if (m.package?.ptLevel) levels.add(String(m.package.ptLevel).toUpperCase());
+  for (const bk of bookings) {
+    const lv = bk.ptCreditAllocation?.batch?.level ?? bk.membership?.package?.ptLevel;
+    if (lv) levels.add(String(lv).toUpperCase());
+  }
+  const highestLevel = levels.has('ADVANCED')
+    ? 'ADVANCED'
+    : levels.has('INTERMEDIATE')
+      ? 'INTERMEDIATE'
+      : 'BEGINNER';
+  return exerciseCheckerTierPolicy(highestLevel);
+}
+
 async function shareableCoaches(memberId: number) {
   const [memberships, batches, plans, bookings] = await Promise.all([
     prisma.membership.findMany({ where: { userId: memberId, coachId: { not: null }, package: { type: 'PT' } }, select: { coachId: true } }),
@@ -27,8 +81,12 @@ async function shareableCoaches(memberId: number) {
   ]);
   const ids = [...new Set([...memberships, ...batches, ...plans, ...bookings].map(row => row.coachId).filter((id): id is number => id != null))];
   const coaches = await prisma.user.findMany({ where: { id: { in: ids }, role: { in: ['COACH', 'TRAINER'] }, coachProfile: { is: { status: 'ACTIVE' } } }, select: { id: true, fullName: true } });
-  const valid = await Promise.all(coaches.map(async coach => await hasValidTrainingRelation(prisma, coach.id, memberId) ? coach : null));
-  return valid.filter((coach): coach is { id: number; fullName: string } => coach != null);
+  const valid = await Promise.all(coaches.map(async coach => {
+    if (!await hasValidTrainingRelation(prisma, coach.id, memberId)) return null;
+    const level = await activeCoachPtLevel(prisma, coach.id, memberId);
+    return { ...coach, ptLevel: level || 'BEGINNER' };
+  }));
+  return valid.filter((coach): coach is { id: number; fullName: string; ptLevel: string } => coach != null);
 }
 
 router.use(authenticateToken);
@@ -185,7 +243,33 @@ router.get('/sessions/:sessionGroupId', async (req: AuthRequest, res, next) => {
   } catch (error) { next(error); }
 });
 router.get('/share-options', async (req: AuthRequest, res, next) => {
-  try { res.json({ success: true, data: await shareableCoaches(req.user!.userId) }); } catch (error) { next(error); }
+  try {
+    const memberId = req.user!.userId;
+    const now = new Date();
+    const [coaches, tierPolicy, usedThisWeek] = await Promise.all([
+      shareableCoaches(memberId),
+      resolveMemberExerciseCheckerTier(memberId, now),
+      prisma.exerciseAnalysis.count({
+        where: {
+          memberId,
+          evaluationMode: 'OFFICIAL',
+          createdAt: { gte: new Date(now.getTime() - 7 * 24 * 60 * 60_000) },
+        },
+      }),
+    ]);
+    const eligibleCoaches = tierPolicy.canShareForPtFeedback
+      ? coaches.filter(c => ['INTERMEDIATE', 'ADVANCED'].includes(c.ptLevel) || tierPolicy.canShareForPtFeedback)
+      : [];
+    res.json({
+      success: true,
+      data: eligibleCoaches,
+      allCoaches: coaches,
+      tierPolicy,
+      usedThisWeek,
+      remainingThisWeek: tierPolicy.weeklyLimit === null ? null : Math.max(0, tierPolicy.weeklyLimit - usedThisWeek),
+      allTierPolicies: EXERCISE_CHECKER_TIER_POLICIES,
+    });
+  } catch (error) { next(error); }
 });
 
 router.post('/:id/reanalyze', async (req: AuthRequest, res, next) => {
@@ -217,8 +301,11 @@ router.post('/', (req, res, next) => upload.single('video')(req, res, error => {
     catch { return res.status(400).json({ success: false, message: 'Góc quay hoặc mục tiêu phân tích không hợp lệ.' }); }
     const id = req.user!.userId;
     const now = Date.now();
+    const currentTime = new Date(now);
+    const tierPolicy = await resolveMemberExerciseCheckerTier(id, currentTime);
+    const hourlyCap = tierPolicy.level === 'ADVANCED' ? 30 : 5;
     const attempts = (recent.get(id) || []).filter(at => now - at < 60 * 60_000);
-    if (attempts.length >= 5) return res.status(429).json({ success: false, message: 'Bạn đã gửi quá 5 video trong một giờ. Vui lòng thử lại sau.' });
+    if (attempts.length >= hourlyCap) return res.status(429).json({ success: false, message: `Bạn đã gửi quá ${hourlyCap} video trong một giờ. Vui lòng thử lại sau.` });
     attempts.push(now); recent.set(id, attempts);
     let studentPlanId: number | undefined;
     let coachPlanContext: { exerciseName: string; sessionTitle: string; sets: number; reps: number; weightKg: number | null; notes: string } | undefined;
@@ -243,17 +330,24 @@ router.post('/', (req, res, next) => upload.single('video')(req, res, error => {
         limitation: matches.length > 1 ? 'Giáo án có nhiều bài phù hợp; chưa chọn một hiệp cụ thể để áp mục tiêu.' : 'Giáo án chưa có ngưỡng kỹ thuật dạng cấu trúc; không suy diễn ngưỡng từ ghi chú.' });
       studentPlanId = plan.id;
     }
-    const currentTime = new Date();
-    const batches = await prisma.ptCreditBatch.findMany({ where: { wallet: { memberId: id }, OR: [{ startAt: null }, { startAt: { lte: currentTime } }], AND: [{ OR: [{ endAt: null }, { endAt: { gt: currentTime } }] }] }, select: { level: true, source: true, initialCount: true, usedCount: true, membership: { select: { status: true, startDate: true, endDate: true } } } });
-    const active = batches.filter(batch => batch.initialCount > batch.usedCount && (!batch.membership || (batch.membership.status === 'ACTIVE' && batch.membership.startDate <= currentTime && batch.membership.endDate > currentTime)));
-    const paid = active.some(batch => ['PACKAGE_PURCHASE', 'SINGLE_PURCHASE'].includes(batch.source)) || !!await prisma.membership.findFirst({ where: { userId: id, package: { type: 'PT' }, status: 'ACTIVE', startDate: { lte: currentTime }, endDate: { gt: currentTime }, OR: [{ remainingSessions: null }, { remainingSessions: { gt: 0 } }] }, select: { id: true } });
-    const trial = !paid && active.some(batch => batch.level === 'TRIAL');
-    const quotaKey = paid ? 'AI_FORM_PT_24H_LIMIT' : trial ? 'AI_FORM_TRIAL_24H_LIMIT' : 'AI_FORM_MEMBER_24H_LIMIT';
-    const { limit } = analysisQuota({ paid, trial, configured: process.env[quotaKey] });
-    const used = await prisma.exerciseAnalysis.count({ where: { memberId: id, createdAt: { gte: new Date(now - 24 * 60 * 60_000) } } });
-    if (used >= limit) return res.status(429).json({ success: false, message: `Bạn đã dùng hết ${limit} lượt phân tích trong 24 giờ.` });
+    if (tierPolicy.weeklyLimit !== null) {
+      const usedThisWeek = await prisma.exerciseAnalysis.count({
+        where: {
+          memberId: id,
+          evaluationMode: 'OFFICIAL',
+          createdAt: { gte: new Date(now - 7 * 24 * 60 * 60_000) },
+        },
+      });
+      if (usedThisWeek >= tierPolicy.weeklyLimit) {
+        return res.status(429).json({
+          success: false,
+          code: 'WEEKLY_EXERCISE_CHECKER_LIMIT_REACHED',
+          message: `${tierPolicy.name} giới hạn ${tierPolicy.weeklyLimit} video / tuần (đã dùng ${usedThisWeek}/${tierPolicy.weeklyLimit} lượt). Nâng cấp lên Gói Trung cấp (5 video/tuần + PT nhận xét trực tiếp) hoặc Gói Nâng cao (Không giới hạn + ưu tiên PT phản hồi trong 24h).`,
+        });
+      }
+    }
     const row = await createExerciseAnalysis(id, req.file.buffer, studentPlanId, analysisOptions, exerciseType, coachPlanContext, exerciseVariant, 'OFFICIAL', req.body);
-    return res.status(202).json({ success: true, data: publicAnalysis(row) });
+    return res.status(202).json({ success: true, data: publicAnalysis(row), tierPolicy });
   } catch (error) { if (error instanceof Error && error.message === 'INVALID_VIDEO_PROVENANCE') return res.status(400).json({ success: false, code: error.message }); next(error); }
 });
 
@@ -277,8 +371,9 @@ router.get('/:id/video', async (req: AuthRequest, res, next) => {
   try {
     const id = validId(req.params.id);
     if (!id) return res.status(400).json({ success: false, message: 'ID không hợp lệ.' });
-    const row = await prisma.exerciseAnalysis.findFirst({ where: { id, memberId: req.user!.userId, evaluationMode: 'OFFICIAL' } });
+    const row = await prisma.exerciseAnalysis.findFirst({ where: { id, memberId: req.user!.userId, evaluationMode: 'OFFICIAL' }, include: { shares: true } });
     if (!row) return res.status(404).json({ success: false, message: 'Không tìm thấy video.' });
+    await ensureAnalysisVideoRestored(prisma, row);
     await sendAnalysisVideo(row, res, next);
   } catch (error) { next(error); }
 });
@@ -290,11 +385,24 @@ router.post('/:id/share', async (req: AuthRequest, res, next) => {
     const analysis = await prisma.exerciseAnalysis.findFirst({ where: { id, memberId: req.user!.userId, evaluationMode: 'OFFICIAL' } });
     if (!analysis) return res.status(404).json({ success: false, message: 'Không tìm thấy kết quả.' });
     if (!['COMPLETED', 'INSUFFICIENT_DATA', 'NEEDS_REVIEW'].includes(analysis.status)) return res.status(409).json({ success: false, message: 'Chỉ chia sẻ khi AI đã xử lý xong.' });
-    const coaches = await shareableCoaches(req.user!.userId);
-    if (!coaches.some(coach => coach.id === coachId)) return res.status(403).json({ success: false, message: 'Coach không còn quan hệ PT hợp lệ.' });
-    const includeVideo = req.body.includeVideo === true;
+    const [coaches, tierPolicy] = await Promise.all([
+      shareableCoaches(req.user!.userId),
+      resolveMemberExerciseCheckerTier(req.user!.userId),
+    ]);
+    const matchedCoach = coaches.find(coach => coach.id === coachId);
+    if (!matchedCoach) return res.status(403).json({ success: false, message: 'Coach không còn quan hệ PT hợp lệ.' });
+    if (!tierPolicy.canShareForPtFeedback && !['INTERMEDIATE', 'ADVANCED'].includes(matchedCoach.ptLevel)) {
+      return res.status(403).json({
+        success: false,
+        code: 'BASIC_TIER_AUTO_ANGLES_ONLY',
+        message: 'Gói Cơ bản (Basic) giới hạn 2 video / tuần và chỉ xem chỉ số góc khớp tự động. Hãy nâng cấp lên Gói Trung cấp hoặc Gói Nâng cao để được PT nhận xét trực tiếp trên video.',
+      });
+    }
+    await ensureAnalysisVideoRestored(prisma, analysis);
+    // Sharing the analysis with a Coach also shares its original video when available.
+    const includeVideo = true;
     const share = await prisma.exerciseAnalysisSharing.upsert({ where: { analysisId_coachId: { analysisId: id, coachId } }, create: { analysisId: id, coachId, includeVideo }, update: { revokedAt: null, sharedAt: new Date(), includeVideo } });
-    res.json({ success: true, data: share });
+    res.json({ success: true, data: share, tierPolicy });
   } catch (error) { next(error); }
 });
 router.delete('/:id/share', async (req: AuthRequest, res, next) => {

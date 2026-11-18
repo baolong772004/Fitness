@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { analysisQuota, analysisSummary, buildHoldoutExportBundle, coachAnalysisSummary, compareAiAndCoachLabels, evaluateCandidateRep, isSupportedVideo, publicAnalysis, resolveCoachLabelHistory, videoAvailable, parseAnalysisOptions } from '../src/services/exerciseAnalysis.utils.js';
+import { analysisQuota, analysisSummary, buildHoldoutExportBundle, coachAnalysisSummary, compareAiAndCoachLabels, evaluateCandidateRep, exerciseCheckerTierPolicy, isSupportedVideo, publicAnalysis, resolveCoachLabelHistory, videoAvailable, parseAnalysisOptions } from '../src/services/exerciseAnalysis.utils.js';
 import { isExerciseType, publicExercises } from '../src/services/exerciseAnalysis.catalog.ts';
 
 test('video signature validation rejects arbitrary bytes', () => {
@@ -166,3 +166,27 @@ test('resolveCoachLabelHistory tracks revisions per rep and criterion without do
   assert.equal(resolved.activeLabels[0].editHistory[0].outcome, 'MEETS');
   assert.equal(resolved.activeLabels[0].editHistory[1].outcome, 'IMPROVE');
 });
+
+test('exerciseCheckerTierPolicy enforces Basic, Intermediate, and Advanced video checker benefits', () => {
+  const basic = exerciseCheckerTierPolicy('BEGINNER');
+  assert.equal(basic.level, 'BEGINNER');
+  assert.equal(basic.weeklyLimit, 2);
+  assert.equal(basic.canShareForPtFeedback, false);
+  assert.equal(basic.priority24h, false);
+  assert.equal(basic.description, 'Giới hạn 2 video / tuần (chỉ xem chỉ số góc khớp tự động).');
+
+  const intermediate = exerciseCheckerTierPolicy('INTERMEDIATE');
+  assert.equal(intermediate.level, 'INTERMEDIATE');
+  assert.equal(intermediate.weeklyLimit, 5);
+  assert.equal(intermediate.canShareForPtFeedback, true);
+  assert.equal(intermediate.priority24h, false);
+  assert.equal(intermediate.description, '5 video / tuần + được PT nhận xét trực tiếp trên video.');
+
+  const advanced = exerciseCheckerTierPolicy('ADVANCED');
+  assert.equal(advanced.level, 'ADVANCED');
+  assert.equal(advanced.weeklyLimit, null);
+  assert.equal(advanced.canShareForPtFeedback, true);
+  assert.equal(advanced.priority24h, true);
+  assert.equal(advanced.description, 'Không giới hạn + ưu tiên PT phản hồi trong vòng 24h.');
+});
+

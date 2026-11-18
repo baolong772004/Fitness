@@ -55,6 +55,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
   const [notice, setNotice] = useState('');
   const [profileError, setProfileError] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
+  const [sharedVideoCounts, setSharedVideoCounts] = useState<Record<number, number>>({});
   const [progress, setProgress] = useState<{ inbodyLogs: ApiProgressLog[]; workoutLogs: any[]; assessments: PtTrainingAssessment[]; trainingPolicy: Record<PtTrainingAssessment['level'], { reviewEverySessions: number }> } | null>(null);
   const [weight, setWeight] = useState('');
   const [bodyFat, setBodyFat] = useState('');
@@ -226,8 +227,10 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
     mutatePlan(() => api.pt.restoreStudentPlan(plan.id, revisionId, plan.version!, reason), 'Đã khôi phục giáo án thành phiên bản mới.');
 
   const generatePlan = (memberId: number | null, request: string) => api.pt.generateCoachPlan(memberId, request);
-  const savedPlanActions = { onAssign: assignPlan, onUpdate: updatePlan, onRestore: restorePlan,
-    onHistory: (plan: CoachWorkoutPlan) => api.pt.getStudentPlanRevisions(plan.id), onGenerate: generatePlan };
+  const savedPlanActions = {
+    onAssign: assignPlan, onUpdate: updatePlan, onRestore: restorePlan,
+    onHistory: (plan: CoachWorkoutPlan) => api.pt.getStudentPlanRevisions(plan.id), onGenerate: generatePlan
+  };
 
   const saveInBody = async () => {
     if (!selectedMemberId || !Number.isFinite(Number(weight)) || Number(weight) <= 0) {
@@ -276,9 +279,9 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary" aria-hidden="true">{(profile?.user?.fullName || currentUser?.fullName || 'PT').trim().split(/\s+/).map(word => word[0]).slice(-2).join('')}</span>
             <div className="min-w-0"><h1 className="truncate text-base font-semibold text-foreground">{profile?.user?.fullName || currentUser?.fullName || 'Quản lý Coach'}</h1>
-            <p className="text-sm text-muted-foreground">
-              {profile ? <span className="inline-flex items-center gap-1.5 text-xs"><span className={`size-1.5 rounded-full ${profile.status === 'ACTIVE' ? 'bg-success' : 'bg-muted-foreground'}`} />{profile.status === 'ACTIVE' ? 'Đang nhận lịch' : 'Hồ sơ chưa hoạt động'}</span> : profileError || 'Đang tải hồ sơ Coach...'}
-            </p>
+              <p className="text-sm text-muted-foreground">
+                {profile ? <span className="inline-flex items-center gap-1.5 text-xs"><span className={`size-1.5 rounded-full ${profile.status === 'ACTIVE' ? 'bg-success' : 'bg-muted-foreground'}`} />{profile.status === 'ACTIVE' ? 'Đang nhận lịch' : 'Hồ sơ chưa hoạt động'}</span> : profileError || 'Đang tải hồ sơ Coach...'}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -351,21 +354,35 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
           />
         )}
 
-        {activeTab === 'trainees' && <div className="space-y-5"><CoachSharedExerciseAnalyses /><div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
-          <Card><CardHeader><CardTitle className="flex items-center gap-2"><UserRound className="size-5" /> Học viên PT phụ trách</CardTitle></CardHeader><CardContent className="space-y-2">
-            {trainees.length === 0 && <p className="text-sm text-muted-foreground">Chưa có học viên nào được phân gói PT.</p>}
-            {trainees.map(row => <button key={row.id} type="button" onClick={() => setSelectedMemberId(row.userId)} className={`w-full rounded-lg border p-3 text-left text-sm hover:border-primary ${selectedMemberId === row.userId ? 'border-primary bg-primary/5' : ''}`}>
-              <strong>{row.user.fullName}</strong><p className="text-muted-foreground">{row.package.name} · {row.level === 'BEGINNER' ? 'Cơ bản' : row.level === 'INTERMEDIATE' ? 'Trung cấp' : row.level === 'ADVANCED' ? 'Nâng cao' : row.level || 'Chưa rõ cấp'} · Còn {row.remainingSessions ?? '—'} buổi · {row.status}</p>
-              <p className="text-xs text-muted-foreground">{row.user.phone || row.user.email}</p>
-            </button>)}
+        {activeTab === 'trainees' && <div className="space-y-5"><CoachSharedExerciseAnalyses selectedMemberId={selectedMemberId} selectedMemberName={selectedTrainee?.user.fullName || null} onSelectMember={setSelectedMemberId} onSharedMemberIdsChange={setSharedVideoCounts} /><div className="grid gap-5 lg:grid-cols-[1fr_1.35fr]">
+          <Card className="gap-0 overflow-hidden py-0"><CardHeader className="border-b bg-muted/20 px-5 py-4 [.border-b]:pb-4"><div className="flex items-center justify-between gap-2"><div><CardTitle className="flex items-center gap-2 text-base"><UserRound className="size-5 text-primary" /> Học viên PT phụ trách</CardTitle><CardDescription className="mt-1 text-xs">Chọn học viên để xem video bài tập, đánh giá lộ trình và chỉ số cơ thể.</CardDescription></div><Badge variant="secondary" className="tabular-nums">{trainees.length}</Badge></div></CardHeader><CardContent className="space-y-2.5 p-4">
+            {trainees.length === 0 && <p className="rounded-xl border border-dashed py-8 text-center text-sm text-muted-foreground">Chưa có học viên nào được phân gói PT.</p>}
+            {trainees.map(row => {
+              const isSelected = selectedMemberId === row.userId;
+              const videoCount = sharedVideoCounts[row.userId] || 0;
+              const initials = (row.user.fullName || 'HV').trim().split(/\s+/).map(w => w[0]).slice(-2).join('').toUpperCase();
+              const levelText = row.level === 'BEGINNER' ? 'Cơ bản' : row.level === 'INTERMEDIATE' ? 'Trung cấp' : row.level === 'ADVANCED' ? 'Nâng cao' : row.level || 'Chưa rõ cấp';
+              return <button key={row.id} type="button" onClick={() => setSelectedMemberId(row.userId)} className={`flex w-full items-start gap-3 rounded-xl border p-3.5 text-left text-sm transition hover:border-primary/50 ${isSelected ? 'border-primary bg-primary/5 shadow-xs' : 'bg-card'}`}>
+                <span className={`flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'}`}>{initials}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <strong className="truncate text-foreground">{row.user.fullName}</strong>
+                    {videoCount > 0 && <Badge variant="secondary" className="text-[11px] font-semibold">{videoCount} video AI</Badge>}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{row.package.name} · {levelText} · <span className="font-medium text-foreground">Còn {row.remainingSessions ?? '—'} buổi</span></p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{row.user.phone || row.user.email}</p>
+                </div>
+              </button>;
+            })}
           </CardContent></Card>
-          <Card><CardHeader><CardTitle>{selectedTrainee ? `Tiến độ: ${selectedTrainee.user.fullName}` : 'Chọn học viên để xem tiến độ'}</CardTitle></CardHeader><CardContent className="space-y-4">
-            {selectedTrainee && <>{bookings.find(booking => booking.memberId === selectedTrainee.userId && ['PACKAGE_PURCHASE', 'SINGLE_PURCHASE'].includes(booking.ptCreditAllocation?.batch.source ?? '')) && <Button variant="outline" onClick={() => { setActiveChatMemberId(selectedTrainee.userId); onTabChange('messages'); }}><MessageSquare className="size-4" /> Chat hỗ trợ học viên Paid</Button>}<CoachPtAssessments trainee={selectedTrainee} assessments={progress?.assessments ?? []} workoutLogs={progress?.workoutLogs ?? []} reviewEverySessions={selectedTrainee.level === 'BEGINNER' || selectedTrainee.level === 'INTERMEDIATE' || selectedTrainee.level === 'ADVANCED' ? progress?.trainingPolicy?.[selectedTrainee.level]?.reviewEverySessions : undefined} busy={busy || !progress} onSave={saveAssessment} /><div className="space-y-2"><h3 className="text-sm font-semibold">Chỉ số InBody gần đây</h3>
+          <Card className="gap-0 overflow-hidden py-0"><CardHeader className="border-b bg-muted/20 px-5 py-4 [.border-b]:pb-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><CardTitle className="text-base">{selectedTrainee ? `Tiến độ học viên: ${selectedTrainee.user.fullName}` : 'Chọn học viên để xem tiến độ'}</CardTitle><CardDescription className="mt-1 text-xs">{selectedTrainee ? `${selectedTrainee.package.name} · Gói ${selectedTrainee.level === 'BEGINNER' ? 'Cơ bản' : selectedTrainee.level === 'INTERMEDIATE' ? 'Trung cấp' : selectedTrainee.level === 'ADVANCED' ? 'Nâng cao' : selectedTrainee.level || 'PT'} · Còn ${selectedTrainee.remainingSessions ?? '—'} buổi tập` : 'Theo dõi đánh giá lộ trình PT, chỉ số InBody và lịch sử buổi tập.'}</CardDescription></div>{selectedTrainee && bookings.find(booking => booking.memberId === selectedTrainee.userId && ['PACKAGE_PURCHASE', 'SINGLE_PURCHASE'].includes(booking.ptCreditAllocation?.batch.source ?? '')) && <Button size="sm" variant="outline" onClick={() => { setActiveChatMemberId(selectedTrainee.userId); onTabChange('messages'); }}><MessageSquare className="size-4" /> Nhắn tin học viên</Button>}</div></CardHeader><CardContent className="space-y-4 p-5">
+            {!selectedTrainee && <p className="rounded-xl border border-dashed py-10 text-center text-sm text-muted-foreground">Chọn một học viên ở danh sách bên trái để xem chỉ số InBody, đánh giá định kỳ và lịch sử buổi tập.</p>}
+            {selectedTrainee && <><CoachPtAssessments trainee={selectedTrainee} assessments={progress?.assessments ?? []} workoutLogs={progress?.workoutLogs ?? []} reviewEverySessions={selectedTrainee.level === 'BEGINNER' || selectedTrainee.level === 'INTERMEDIATE' || selectedTrainee.level === 'ADVANCED' ? progress?.trainingPolicy?.[selectedTrainee.level]?.reviewEverySessions : undefined} busy={busy || !progress} onSave={saveAssessment} /><div className="space-y-2"><h3 className="text-sm font-semibold">Chỉ số InBody gần đây</h3>
               {!progress && <p className="text-sm text-muted-foreground">Đang tải tiến độ...</p>}
-              {progress?.inbodyLogs.length === 0 && <p className="text-sm text-muted-foreground">Chưa có chỉ số InBody.</p>}
-              {progress?.inbodyLogs.map(log => <div key={log.id} className="rounded-lg border p-2 text-sm">{gymDay(log.loggedAt)} · {log.weight} kg · Mỡ {log.bodyFat ?? '—'}% · Cơ {log.muscleMass ?? '—'} kg</div>)}
-            </div><div className="space-y-2 border-t pt-4"><h3 className="text-sm font-semibold">Ghi chỉ số mới</h3><div className="grid grid-cols-3 gap-2"><Input type="number" placeholder="Cân nặng kg" value={weight} onChange={e => setWeight(e.target.value)} /><Input type="number" placeholder="Mỡ %" value={bodyFat} onChange={e => setBodyFat(e.target.value)} /><Input type="number" placeholder="Cơ kg" value={muscleMass} onChange={e => setMuscleMass(e.target.value)} /></div><Button size="sm" disabled={busy} onClick={() => void saveInBody()}><Save className="size-4" /> Lưu InBody</Button></div>
-              <div className="space-y-2 border-t pt-4"><h3 className="text-sm font-semibold">Buổi PT hoàn thành</h3>{progress?.workoutLogs.length === 0 && <p className="text-sm text-muted-foreground">Chưa có nhật ký buổi tập.</p>}{progress?.workoutLogs.map(row => <div key={row.id} className="rounded-lg border p-2 text-sm">{gymDay(row.startTime)} · {row.sessionResult?.notes || 'Chưa ghi nhật ký'}</div>)}</div>
+              {progress?.inbodyLogs.length === 0 && <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">Chưa có chỉ số InBody.</p>}
+              <div className="grid gap-2 sm:grid-cols-2">{progress?.inbodyLogs.map(log => <div key={log.id} className="rounded-xl border bg-muted/15 p-3 text-xs"><div className="font-semibold text-foreground">{gymDay(log.loggedAt)}</div><div className="mt-1 text-muted-foreground">Cân nặng: <strong className="text-foreground">{log.weight} kg</strong> · Mỡ: <strong className="text-foreground">{log.bodyFat ?? '—'}%</strong> · Cơ: <strong className="text-foreground">{log.muscleMass ?? '—'} kg</strong></div></div>)}</div>
+            </div><div className="space-y-2.5 border-t pt-4"><h3 className="text-sm font-semibold">Ghi chỉ số InBody mới</h3><div className="grid grid-cols-3 gap-2"><Input type="number" placeholder="Cân nặng (kg)" value={weight} onChange={e => setWeight(e.target.value)} /><Input type="number" placeholder="Mỡ (%)" value={bodyFat} onChange={e => setBodyFat(e.target.value)} /><Input type="number" placeholder="Cơ (kg)" value={muscleMass} onChange={e => setMuscleMass(e.target.value)} /></div><Button size="sm" disabled={busy} onClick={() => void saveInBody()}><Save className="size-4" /> Lưu InBody</Button></div>
+              <div className="space-y-2 border-t pt-4"><h3 className="text-sm font-semibold">Nhật ký buổi PT hoàn thành</h3>{progress?.workoutLogs.length === 0 && <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">Chưa có nhật ký buổi tập.</p>}{progress?.workoutLogs.map(row => <div key={row.id} className="rounded-xl border bg-muted/15 px-3.5 py-2.5 text-sm"><span className="font-medium text-foreground">{gymDay(row.startTime)}</span> · <span className="text-muted-foreground">{row.sessionResult?.notes || 'Chưa ghi nhật ký'}</span></div>)}</div>
             </>}
           </CardContent></Card>
         </div></div>}
@@ -380,19 +397,19 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
               <FileText className="size-4 text-primary" /><span className="min-w-0 flex-1 truncate">Giáo án chưa gán</span><Badge variant="secondary" className="tabular-nums">{unassignedPlans.length}</Badge><ChevronDown className={`size-4 text-muted-foreground transition-transform ${showUnassignedPlans ? 'rotate-180' : ''}`} />
             </Button>
           </CardHeader><CardContent className="max-h-[42rem] space-y-4 overflow-y-auto px-4 sm:px-5">
-            <div id="coach-unassigned-plans" hidden={!showUnassignedPlans} className="space-y-2 border-b pb-4">
-              {unassignedPlans.length === 0 && <p className="py-3 text-center text-sm text-muted-foreground">Không có giáo án chưa gán.</p>}
-              {unassignedPlans.map(plan => <CoachSavedPlan key={`template-${plan.id}`} plan={plan} trainees={assignableTrainees} busy={busy} {...savedPlanActions} />)}
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-medium">Đang áp dụng</h3><span className="text-xs text-muted-foreground tabular-nums">{assignedPlans.filter(plan => plan.status !== 'ARCHIVED').length}</span></div>
-              <div className="relative"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="h-9 pl-9" placeholder="Tìm giáo án đã gán, học viên..." aria-label="Tìm giáo án đã gán" value={planSearch} onChange={event => setPlanSearch(event.target.value)} /></div>
-              {filteredAssignedPlans.length === 0 && <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">{!planSearch.trim() ? 'Chưa có giáo án đang áp dụng.' : 'Không tìm thấy giáo án phù hợp.'}</p>}
-              {filteredAssignedPlans.map(plan => <CoachSavedPlan key={`assigned-${plan.id}`} plan={plan} trainees={assignableTrainees} busy={busy} {...savedPlanActions} />)}
-              <Button type="button" variant="ghost" className="w-full justify-between text-muted-foreground" aria-expanded={showArchivedPlans} aria-controls="coach-archived-plans" onClick={() => setShowArchivedPlans(value => !value)}>Giáo án cũ ({archivedPlans.length})<ChevronDown className={`size-4 transition-transform ${showArchivedPlans ? 'rotate-180' : ''}`} /></Button>
-              <div id="coach-archived-plans" hidden={!showArchivedPlans} className="space-y-2">{archivedPlans.map(plan => <CoachSavedPlan key={`archived-${plan.id}`} plan={plan} trainees={assignableTrainees} busy={busy} {...savedPlanActions} />)}{archivedPlans.length === 0 && <p className="py-2 text-center text-xs text-muted-foreground">Chưa có giáo án cũ phù hợp.</p>}</div>
-            </div>
-          </CardContent></Card>
+              <div id="coach-unassigned-plans" hidden={!showUnassignedPlans} className="space-y-2 border-b pb-4">
+                {unassignedPlans.length === 0 && <p className="py-3 text-center text-sm text-muted-foreground">Không có giáo án chưa gán.</p>}
+                {unassignedPlans.map(plan => <CoachSavedPlan key={`template-${plan.id}`} plan={plan} trainees={assignableTrainees} busy={busy} {...savedPlanActions} />)}
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-medium">Đang áp dụng</h3><span className="text-xs text-muted-foreground tabular-nums">{assignedPlans.filter(plan => plan.status !== 'ARCHIVED').length}</span></div>
+                <div className="relative"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="h-9 pl-9" placeholder="Tìm giáo án đã gán, học viên..." aria-label="Tìm giáo án đã gán" value={planSearch} onChange={event => setPlanSearch(event.target.value)} /></div>
+                {filteredAssignedPlans.length === 0 && <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">{!planSearch.trim() ? 'Chưa có giáo án đang áp dụng.' : 'Không tìm thấy giáo án phù hợp.'}</p>}
+                {filteredAssignedPlans.map(plan => <CoachSavedPlan key={`assigned-${plan.id}`} plan={plan} trainees={assignableTrainees} busy={busy} {...savedPlanActions} />)}
+                <Button type="button" variant="ghost" className="w-full justify-between text-muted-foreground" aria-expanded={showArchivedPlans} aria-controls="coach-archived-plans" onClick={() => setShowArchivedPlans(value => !value)}>Giáo án cũ ({archivedPlans.length})<ChevronDown className={`size-4 transition-transform ${showArchivedPlans ? 'rotate-180' : ''}`} /></Button>
+                <div id="coach-archived-plans" hidden={!showArchivedPlans} className="space-y-2">{archivedPlans.map(plan => <CoachSavedPlan key={`archived-${plan.id}`} plan={plan} trainees={assignableTrainees} busy={busy} {...savedPlanActions} />)}{archivedPlans.length === 0 && <p className="py-2 text-center text-xs text-muted-foreground">Chưa có giáo án cũ phù hợp.</p>}</div>
+              </div>
+            </CardContent></Card>
         </div>}
 
         {activeTab === 'availability' && <div className="space-y-5">
@@ -420,7 +437,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ activeTab, onTab
         </DialogContent>
       </Dialog>
       <Dialog open={!!qr} onOpenChange={open => { if (!open) setQr(null); }}><DialogContent><DialogHeader><DialogTitle>Mã QR buổi PT</DialogTitle></DialogHeader><div className="grid justify-items-center gap-3 py-4">{qr && <><p className="text-sm">{qr.booking.member?.fullName} · {gymTime(qr.booking.startTime)}</p><img src={qr.image} alt="Mã QR điểm danh PT" className="size-56" /><p className="text-xs text-muted-foreground">Mã có hiệu lực 90 giây. Hội viên quét bằng ứng dụng mobile.</p></>}</div></DialogContent></Dialog>
-      
+
       <Dialog open={!!finishBooking} onOpenChange={open => { if (!open) setFinishBooking(null); }}><DialogContent><DialogHeader><DialogTitle>{finishBooking?.status === 'COMPLETED' ? 'Ghi nhật ký buổi PT' : 'Kết thúc buổi PT'}</DialogTitle></DialogHeader><div className="space-y-3"><Textarea rows={4} placeholder="Nhận xét buổi tập" value={sessionNotes} onChange={e => setSessionNotes(e.target.value)} /><div className="grid grid-cols-3 gap-2"><Input placeholder="Bài tập" value={exerciseName} onChange={e => setExerciseName(e.target.value)} /><Input type="number" placeholder="Số hiệp" value={sets} onChange={e => setSets(e.target.value)} /><Input type="number" placeholder="Số lần" value={reps} onChange={e => setReps(e.target.value)} /></div><p className="text-xs text-muted-foreground">Kết thúc buổi sẽ trừ 1 lượt PT. Nhật ký có thể ghi sau nếu chưa có nội dung.</p></div><DialogFooter><Button disabled={busy} onClick={() => void saveSession()}>{finishBooking?.status === 'COMPLETED' ? 'Lưu nhật ký' : 'Kết thúc và lưu'}</Button></DialogFooter></DialogContent></Dialog>
       <Dialog open={!!absenceBooking} onOpenChange={open => { if (!open) setAbsenceBooking(null); }}><DialogContent><DialogHeader><DialogTitle>Coach báo vắng buổi PT</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">Hội viên được đặt học bù trong 7 ngày và không bị trừ buổi.</p><Textarea rows={3} placeholder="Lý do báo vắng" value={absenceReason} onChange={e => setAbsenceReason(e.target.value)} /><DialogFooter><Button disabled={busy} onClick={() => { if (!absenceBooking) return; void run(() => api.pt.markAbsent(absenceBooking.id, absenceReason), 'Đã báo vắng và cấp quyền học bù.').then(saved => { if (saved) setAbsenceBooking(null); }); }}>Xác nhận báo vắng</Button></DialogFooter></DialogContent></Dialog>
     </StaffPage>

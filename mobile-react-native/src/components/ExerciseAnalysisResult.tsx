@@ -100,8 +100,6 @@ export function ExerciseAnalysisResult({ analysis, showExperimental = false }: {
   return <View>
     <Text style={styles.heading}>{result.exercise.replaceAll('_', ' ')}</Text>
     {analysis.videoAvailable && <AnalysisVideo analysis={analysis} showExperimental={showExperimental} seek={seek} />}
-    {!analysis.videoAvailable && <Text style={styles.muted}>Video không còn được lưu (tối đa 7 ngày); kết quả nhận xét vẫn xem được.</Text>}
-    {!!screening.length && <Text style={styles.note}>AI Coach · Đánh giá theo từng tiêu chí quan sát được; chưa xác nhận toàn bộ kỹ thuật của bài tập.</Text>}
     {screening.length ? screening.map(item => <View key={item.repNumber} style={styles.card}>
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: expandedRep === item.repNumber }} onPress={() => setExpandedRep(value => value === item.repNumber ? null : item.repNumber)}>
         <Text style={styles.title}>Squat · Lần {item.repNumber}/{reps.length}</Text>
@@ -150,7 +148,6 @@ export function ExerciseAnalysisResult({ analysis, showExperimental = false }: {
             : 'Quay trọn thân từ vai đến bàn chân, đủ sáng, máy cố định; thực hiện từ đứng, xuống rồi đứng lên.'
         : 'Gửi video cho Coach nhận xét; AI hiện chỉ hỗ trợ đo chuyển động cho bài này.'}</Text>
     </View>}
-    {!!screening.length && <Text style={styles.note}>Đây là dự đoán từ video trong phạm vi đo được. Bạn có thể gửi Coach xem lại nếu cần.</Text>}
     {showExperimental && !!result.assessmentDiagnostics?.length && <View style={styles.criterion}>
       <Pressable onPress={() => setSourceDetails(value => !value)}><Text style={styles.link}>{sourceDetails ? 'Ẩn' : 'Xem'} chi tiết nguồn phân tích · Coach/Admin</Text></Pressable>
       {sourceDetails && result.assessmentDiagnostics.map(row => <Text key={`${row.repNumber}-${row.criterionId}`} style={styles.note}>

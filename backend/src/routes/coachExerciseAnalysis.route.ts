@@ -3,9 +3,10 @@ import { createHash, createHmac } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import prisma from '../config/prisma.js';
 import { authenticateToken, authorizeRoles, type AuthRequest } from '../middlewares/auth.middleware.js';
-import { CANDIDATE_SQUAT_POLICIES, buildHoldoutExportBundle, coachAnalysisSummary, compareAiAndCoachLabels, resolveCoachLabelHistory, videoAvailable } from '../services/exerciseAnalysis.utils.js';
-import { sendAnalysisVideo } from '../services/exerciseAnalysis.media.js';
+import { CANDIDATE_SQUAT_POLICIES, buildHoldoutExportBundle, coachAnalysisSummary, compareAiAndCoachLabels, exerciseCheckerTierPolicy, resolveCoachLabelHistory, videoAvailable } from '../services/exerciseAnalysis.utils.js';
+import { ensureAnalysisVideoRestored, sendAnalysisVideo } from '../services/exerciseAnalysis.media.js';
 import { hasValidTrainingRelation } from '../services/studentWorkoutPlan.service.js';
+import { activeCoachPtLevel } from '../services/ptTraining.service.js';
 
 const router = Router();
 
@@ -41,16 +42,39 @@ router.get('/', async (req: AuthRequest, res, next) => {
       },
       orderBy: { sharedAt: 'desc' }, skip: (page - 1) * 20, take: 20,
     });
-    const allowed = await Promise.all(shares.map(async share => {
+    const allowed = (await Promise.all(shares.map(async share => {
       if (!await hasValidTrainingRelation(prisma, coachId, share.analysis.memberId)) return null;
+      await ensureAnalysisVideoRestored(prisma, share.analysis);
+      (share.analysis as any).sharedAt = share.sharedAt;
+      if (!share.includeVideo) {
+        share.includeVideo = true;
+        await prisma.exerciseAnalysisSharing.update({ where: { id: share.id }, data: { includeVideo: true } }).catch(() => undefined);
+      }
+      const memberPtLevel = (await activeCoachPtLevel(prisma, coachId, share.analysis.memberId)) || 'INTERMEDIATE';
+      const tierPolicy = exerciseCheckerTierPolicy(memberPtLevel);
+      const priority24h = tierPolicy.priority24h;
+      const responseDeadlineAt = priority24h
+        ? new Date(new Date(share.sharedAt).getTime() + 24 * 60 * 60_000).toISOString()
+        : null;
       const analysis = coachAnalysisSummary(share.analysis);
-      analysis.videoAvailable = share.includeVideo && analysis.videoAvailable;
+      analysis.videoStoredAvailable = analysis.videoAvailable;
+      analysis.videoAvailable = analysis.videoAvailable;
+      analysis.memberPtLevel = memberPtLevel;
+      analysis.tierPolicy = tierPolicy;
+      analysis.priority24h = priority24h;
+      analysis.responseDeadlineAt = responseDeadlineAt;
       const parsedLabels = (share.analysis.techniqueLabels || []).map(row => ({ ...row, evidence: JSON.parse(row.evidenceJson || '{}') }));
       const resolvedHistory = resolveCoachLabelHistory(parsedLabels, analysis.result?.cameraView?.detected || 'UNKNOWN');
       const aiCoachComparison = compareAiAndCoachLabels(analysis.result, parsedLabels);
-      return { id: share.id, sharedAt: share.sharedAt, includeVideo: share.includeVideo, analysis, techniqueLabels: resolvedHistory.activeLabels, labelRevisionsCount: resolvedHistory.totalRevisions, aiCoachComparison };
-    }));
-    res.json({ success: true, data: allowed.filter(Boolean), candidatePolicies: CANDIDATE_SQUAT_POLICIES, page });
+      return { id: share.id, sharedAt: share.sharedAt, includeVideo: true, memberPtLevel, priority24h, responseDeadlineAt, analysis, techniqueLabels: resolvedHistory.activeLabels, labelRevisionsCount: resolvedHistory.totalRevisions, aiCoachComparison };
+    }))).filter((item): item is NonNullable<typeof item> => Boolean(item));
+    allowed.sort((a, b) => {
+      const aNeedsPriority = a.priority24h && (a.analysis.feedback?.length || 0) === 0 ? 1 : 0;
+      const bNeedsPriority = b.priority24h && (b.analysis.feedback?.length || 0) === 0 ? 1 : 0;
+      if (bNeedsPriority !== aNeedsPriority) return bNeedsPriority - aNeedsPriority;
+      return new Date(b.sharedAt).getTime() - new Date(a.sharedAt).getTime();
+    });
+    res.json({ success: true, data: allowed, candidatePolicies: CANDIDATE_SQUAT_POLICIES, page });
   } catch (error) { next(error); }
 });
 
@@ -81,8 +105,10 @@ router.get('/:analysisId/video', async (req: AuthRequest, res, next) => {
     const analysisId = Number(req.params.analysisId);
     if (!Number.isSafeInteger(analysisId) || analysisId <= 0) return res.status(400).json({ success: false, message: 'ID không hợp lệ.' });
     const coachId = req.user!.userId;
-    const share = await prisma.exerciseAnalysisSharing.findFirst({ where: { analysisId, coachId, revokedAt: null, includeVideo: true }, include: { analysis: true } });
+    const share = await prisma.exerciseAnalysisSharing.findFirst({ where: { analysisId, coachId, revokedAt: null }, include: { analysis: true } });
     if (!share || !await hasValidTrainingRelation(prisma, coachId, share.analysis.memberId)) return res.status(403).json({ success: false, message: 'Bạn không có quyền xem video này.' });
+    await ensureAnalysisVideoRestored(prisma, share.analysis);
+    (share.analysis as any).sharedAt = share.sharedAt;
     await sendAnalysisVideo(share.analysis, res, next);
   } catch (error) { next(error); }
 });
@@ -91,8 +117,11 @@ router.get('/:analysisId/technique-labels', async (req: AuthRequest, res, next) 
   try {
     const analysisId = Number(req.params.analysisId);
     const coachId = req.user!.userId;
-    const share = await prisma.exerciseAnalysisSharing.findFirst({ where: { analysisId, coachId, revokedAt: null, includeVideo: true }, include: { analysis: true } });
-    if (!share || !videoAvailable(share.analysis) || !await hasValidTrainingRelation(prisma, coachId, share.analysis.memberId)) return res.status(403).json({ success: false, message: 'Cần video được học viên chia sẻ và quan hệ PT còn hiệu lực.' });
+    const share = await prisma.exerciseAnalysisSharing.findFirst({ where: { analysisId, coachId, revokedAt: null }, include: { analysis: true } });
+    if (!share || !await hasValidTrainingRelation(prisma, coachId, share.analysis.memberId)) return res.status(403).json({ success: false, message: 'Cần video được học viên chia sẻ và quan hệ PT còn hiệu lực.' });
+    await ensureAnalysisVideoRestored(prisma, share.analysis);
+    (share.analysis as any).sharedAt = share.sharedAt;
+    if (!videoAvailable(share.analysis)) return res.status(403).json({ success: false, message: 'Cần video được học viên chia sẻ và quan hệ PT còn hiệu lực.' });
     const data = await prisma.exerciseTechniqueCoachLabel.findMany({ where: { analysisId, coachId }, orderBy: [{ startSeconds: 'asc' }, { criterionId: 'asc' }, { createdAt: 'asc' }] });
     const parsed = data.map(row => ({ ...row, evidence: JSON.parse(row.evidenceJson) }));
     const result = share.analysis.resultJson ? JSON.parse(share.analysis.resultJson) : null;
@@ -106,7 +135,7 @@ router.get('/:analysisId/export-holdout-bundle', async (req: AuthRequest, res, n
     const analysisId = Number(req.params.analysisId);
     const coachId = req.user!.userId;
     const share = await prisma.exerciseAnalysisSharing.findFirst({
-      where: { analysisId, coachId, revokedAt: null, includeVideo: true },
+      where: { analysisId, coachId, revokedAt: null },
       include: { analysis: true, coach: { select: { id: true, fullName: true, email: true } } },
     });
     if (!share || !await hasValidTrainingRelation(prisma, coachId, share.analysis.memberId)) {
@@ -136,8 +165,11 @@ router.post('/:analysisId/technique-labels', async (req: AuthRequest, res, next)
   try {
     const analysisId = Number(req.params.analysisId);
     const coachId = req.user!.userId;
-    const share = await prisma.exerciseAnalysisSharing.findFirst({ where: { analysisId, coachId, revokedAt: null, includeVideo: true }, include: { analysis: true } });
-    if (!share || !videoAvailable(share.analysis) || !await hasValidTrainingRelation(prisma, coachId, share.analysis.memberId)) return res.status(403).json({ success: false, message: 'Cần video được học viên chia sẻ và quan hệ PT còn hiệu lực.' });
+    const share = await prisma.exerciseAnalysisSharing.findFirst({ where: { analysisId, coachId, revokedAt: null }, include: { analysis: true } });
+    if (!share || !await hasValidTrainingRelation(prisma, coachId, share.analysis.memberId)) return res.status(403).json({ success: false, message: 'Cần video được học viên chia sẻ và quan hệ PT còn hiệu lực.' });
+    await ensureAnalysisVideoRestored(prisma, share.analysis);
+    (share.analysis as any).sharedAt = share.sharedAt;
+    if (!videoAvailable(share.analysis)) return res.status(403).json({ success: false, message: 'Cần video được học viên chia sẻ và quan hệ PT còn hiệu lực.' });
     const result = share.analysis.resultJson ? JSON.parse(share.analysis.resultJson) : {};
     const snapshot = result.techniqueEvaluation?.standardSnapshot;
     const criteria = new Set((snapshot?.criteria || []).map((item: any) => item.criterionId));

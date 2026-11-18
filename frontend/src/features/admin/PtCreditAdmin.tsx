@@ -61,6 +61,12 @@ const levelBadgeVariants: Record<string, string> = {
 
 const paidLevels = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED'];
 
+const exerciseCheckerBenefitsByLevel: Record<string, string> = {
+  BEGINNER: 'Giới hạn 2 video / tuần (chỉ xem chỉ số góc khớp tự động).',
+  INTERMEDIATE: '5 video / tuần + được PT nhận xét trực tiếp trên video.',
+  ADVANCED: 'Không giới hạn + ưu tiên PT phản hồi trong vòng 24h.',
+};
+
 const transactionNames: Record<string, string> = {
   GRANT: 'Cấp buổi',
   HOLD: 'Giữ buổi khi đặt lịch',
@@ -797,6 +803,37 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
             </CardContent>
           </Card>
 
+          {/* Quyền lợi Exercise Checker theo cấp độ gói */}
+          <Card className="border bg-card shadow-xs">
+            <CardHeader className="pb-3 pt-4 px-4 sm:px-6">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-primary" />
+                <CardTitle className="text-sm font-bold">
+                  Tiêu chí quyền lợi · Lượt dùng Exercise Checker (Phân tích video)
+                </CardTitle>
+              </div>
+              <CardDescription className="text-xs">
+                Quyền lợi phân tích video tự động áp dụng theo cấp độ gói PT của hội viên
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 sm:px-6">
+              <div className="grid gap-3 md:grid-cols-3">
+                {paidLevels.map(lvl => (
+                  <div key={lvl} className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className={`text-[11px] font-semibold ${levelBadgeVariants[lvl] || ''}`}>
+                        Gói {levelNames[lvl]} ({lvl === 'BEGINNER' ? 'Basic' : lvl === 'INTERMEDIATE' ? 'Intermediate' : 'Advanced'})
+                      </Badge>
+                    </div>
+                    <p className="text-xs font-medium text-foreground leading-relaxed">
+                      {exerciseCheckerBenefitsByLevel[lvl]}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Section B: Action Toolbar & Danh sách Gói PT Trọn Gói */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -1088,8 +1125,8 @@ export function PtCreditAdmin({ onProductsChanged }: { onProductsChanged?: () =>
                         <TableCell className="text-right font-medium text-muted-foreground py-3">
                           {formatVND(avgPrice)}
                         </TableCell>
-                        <TableCell className="max-w-[200px] truncate text-muted-foreground text-[11px] py-3">
-                          {product.benefits || '—'}
+                        <TableCell className="max-w-[240px] truncate text-muted-foreground text-[11px] py-3" title={product.benefits || exerciseCheckerBenefitsByLevel[product.level] || ''}>
+                          {product.benefits || exerciseCheckerBenefitsByLevel[product.level] || '—'}
                         </TableCell>
                         <TableCell className="text-center py-3">
                           {product.isActive ? (

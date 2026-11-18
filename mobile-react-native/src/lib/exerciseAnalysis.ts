@@ -71,13 +71,29 @@ export type Analysis = {
   feedback?: { id: number; comment: string; createdAt: string; coach: { id: number; fullName: string } }[];
 };
 
+export type ExerciseCheckerTierPolicy = {
+  level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  name: string;
+  weeklyLimit: number | null;
+  canShareForPtFeedback: boolean;
+  priority24h: boolean;
+  autoJointAnglesOnly: boolean;
+  description: string;
+};
+
 export const exerciseAnalysis = {
   supported: async () => (await request<{ data: { code: ExerciseCode; name: string; cameraAngle: string; measurementStatus: string; techniqueStatus: string; supportStatus?: string; variants?: string[] }[] }>('GET', '/exercise-analysis/supported-exercises')).data,
   history: async () => (await request<{ data: Analysis[] }>('GET', '/exercise-analysis/my-history')).data,
   detail: async (id: number) => (await request<{ data: Analysis }>('GET', `/exercise-analysis/${id}`)).data,
   reanalyze: async (id: number) => (await request<{ data: Analysis }>('POST', `/exercise-analysis/${id}/reanalyze`)).data,
   remove: async (id: number) => request('DELETE', `/exercise-analysis/${id}`),
-  shareOptions: async () => (await request<{ data: { id: number; fullName: string }[] }>('GET', '/exercise-analysis/share-options')).data,
+  shareOptions: async () => (await request<{ data: { id: number; fullName: string; ptLevel?: string }[] }>('GET', '/exercise-analysis/share-options')).data,
+  shareOptionsWithQuota: async () => request<{
+    data: { id: number; fullName: string; ptLevel?: string }[];
+    tierPolicy?: ExerciseCheckerTierPolicy;
+    usedThisWeek?: number;
+    remainingThisWeek?: number | null;
+  }>('GET', '/exercise-analysis/share-options'),
   share: async (id: number, coachId: number, includeVideo = false) => request('POST', `/exercise-analysis/${id}/share`, { coachId, includeVideo }),
   revoke: async (id: number, coachId: number) => request('DELETE', `/exercise-analysis/${id}/share?coachId=${coachId}`),
   async upload(video: { uri: string; fileName?: string | null; mimeType?: string | null }, studentPlanId?: number, options?: AnalysisOptions, exerciseType: ExerciseCode = 'SQUAT', exerciseVariant = 'UNSPECIFIED', provenance?: VideoProvenanceInput) {
