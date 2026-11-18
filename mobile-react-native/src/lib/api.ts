@@ -55,6 +55,20 @@ export const sessionStore = {
   token: () => accessToken,
 };
 
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  data?: any;
+
+  constructor(message: string, status: number, code?: string, data?: any) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.data = data;
+  }
+}
+
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 export async function request<T = any>(method: Method, path: string, body?: unknown, allowUnsuccessful = false): Promise<T> {
   let response: Response;
@@ -67,7 +81,8 @@ export async function request<T = any>(method: Method, path: string, body?: unkn
   } catch {
     throw new Error(`Không kết nối được máy chủ ${API_URL}. Điện thoại thật cần EXPO_PUBLIC_API_BASE_URL là IP LAN của máy tính.`);
   }
-  if (response.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/register') && !path.startsWith('/auth/google')) {
+  const isPublicAuthPath = path.startsWith('/auth/login') || path.startsWith('/auth/register') || path.startsWith('/auth/google') || path.startsWith('/auth/verify-register-otp') || path.startsWith('/auth/resend-register-otp') || path.startsWith('/auth/forgot-password') || path.startsWith('/auth/verify-forgot-password-otp') || path.startsWith('/auth/reset-password');
+  if (response.status === 401 && !isPublicAuthPath) {
     unauthorizedListeners.forEach((fn) => {
       try { fn(); } catch {}
     });
@@ -76,7 +91,9 @@ export async function request<T = any>(method: Method, path: string, body?: unkn
   const raw = await response.text();
   let json: any;
   try { json = raw ? JSON.parse(raw) : {}; } catch { json = {}; }
-  if (!response.ok || (!allowUnsuccessful && json.success === false)) throw new Error(json.message || `Máy chủ báo lỗi ${response.status}`);
+  if (!response.ok || (!allowUnsuccessful && json.success === false)) {
+    throw new ApiError(json.message || `Máy chủ báo lỗi ${response.status}`, response.status, json.code, json.data);
+  }
   return json as T;
 }
 const get = <T = any>(path: string) => request<T>('GET', path);
@@ -104,16 +121,28 @@ export const api = {
     if (!data.accessToken || !data.user) throw new Error('Máy chủ chưa trả về phiên đăng nhập.');
     return { token: data.accessToken, user: data.user as User };
   },
-  async register(fullName: string, email: string, password: string, phone: string): Promise<Session> {
-    await post('/auth/register', { fullName: fullName.trim(), email: email.trim().toLowerCase(), password, phone: phone.trim() });
-    return api.login(email, password);
+  async register(fullName: string, email: string, password: string, phone: string): Promise<{ email: string; expiresInSeconds: number }> {
+    const result = await post('/auth/register', { fullName: fullName.trim(), email: email.trim().toLowerCase(), password, phone: phone.trim() });
+    const data = asRecord(result.data);
+    return {
+      email: String(data.email || email.trim().toLowerCase()),
+      expiresInSeconds: Number(data.expiresInSeconds || 600),
+    };
   },
+  async verifyRegisterOtp(email: string, otp: string): Promise<Session> {
+    const result = await post('/auth/verify-register-otp', { email: email.trim().toLowerCase(), otp: otp.trim() });
+    const data = asRecord(result.data);
+    if (!data.accessToken || !data.user) throw new Error('Máy chủ chưa trả về phiên đăng nhập.');
+    return { token: data.accessToken, user: data.user as User };
+  },
+  resendRegisterOtp: (email: string) => post('/auth/resend-register-otp', { email: email.trim().toLowerCase() }),
   async googleLogin(idToken: string): Promise<Session> {
     const result = await post('/auth/google', { idToken });
     const data = asRecord(result.data);
     return { token: data.accessToken, user: data.user as User };
   },
   forgotPassword: (email: string) => post('/auth/forgot-password', { email: email.trim().toLowerCase() }),
+  verifyForgotPasswordOtp: (email: string, otp: string) => post('/auth/verify-forgot-password-otp', { email: email.trim().toLowerCase(), otp: otp.trim() }),
   resetPassword: (resetToken: string, newPassword: string) => post('/auth/reset-password', { resetToken: resetToken.trim(), newPassword }),
   changePassword: (oldPassword: string, newPassword: string) => post('/auth/change-password', { oldPassword, newPassword }),
   packages: async (type?: string) => list<any>((await get(`/packages${type ? `?type=${encodeURIComponent(type)}` : ''}`)).data),

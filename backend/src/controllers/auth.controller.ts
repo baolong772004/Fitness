@@ -1,35 +1,101 @@
 import { Request, Response } from 'express';
-import { AuthService } from '../services/auth.service.js';
+import { AuthError, AuthService } from '../services/auth.service.js';
 import { z } from 'zod';
 import { AuthRequest } from '../middlewares/auth.middleware.js';
 
-// Validation Schemas
 const registerSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().email(),
   password: z.string().min(6),
-  fullName: z.string().min(2),
-  phone: z.string().optional()
+  fullName: z.string().trim().min(2),
+  phone: z.string().optional(),
 });
+
+const emailSchema = z.object({
+  email: z.string().trim().email(),
+});
+
+const verifyOtpSchema = z.object({
+  email: z.string().trim().email(),
+  otp: z.string().trim().regex(/^\d{6}$/, 'Mã OTP phải gồm 6 chữ số.'),
+});
+
+const resetPasswordSchema = z.object({
+  resetToken: z.string().trim().min(1),
+  newPassword: z.string().min(6),
+});
+
+function handleAuthError(res: Response, error: any) {
+  if (error instanceof z.ZodError) {
+    return res.status(400).json({
+      success: false,
+      code: 'VALIDATION_ERROR',
+      message: error.issues[0]?.message || 'Validation failed',
+      errors: error.issues,
+    });
+  }
+  if (error instanceof AuthError) {
+    return res.status(error.statusCode).json({
+      success: false,
+      code: error.code,
+      message: error.message,
+      ...(error.data ? { data: error.data } : {}),
+    });
+  }
+  return res.status(500).json({
+    success: false,
+    message: 'Internal server error',
+    error: error?.message,
+  });
+}
 
 export class AuthController {
   static async register(req: Request, res: Response) {
     try {
-      const validatedData = registerSchema.parse(req.body);
-      const user = await AuthService.register(validatedData);
-      
-      res.status(201).json({
+      const validatedData = registerSchema.parse(req.body) as {
+        email: string;
+        password: string;
+        fullName: string;
+        phone?: string;
+      };
+      const result = await AuthService.register(validatedData);
+
+      return res.status(201).json({
         success: true,
-        message: 'User registered successfully',
-        data: user
+        message: 'Đăng ký thành công. Vui lòng kiểm tra email để nhập mã OTP xác thực.',
+        data: result,
       });
     } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ success: false, message: 'Validation failed', errors: error.issues });
-      }
-      if (error.message === 'Email already exists') {
-        return res.status(400).json({ success: false, message: error.message });
-      }
-      res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
+      return handleAuthError(res, error);
+    }
+  }
+
+  static async verifyRegisterOtp(req: Request, res: Response) {
+    try {
+      const { email, otp } = verifyOtpSchema.parse(req.body);
+      const result = await AuthService.verifyRegisterOtp(email, otp);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Xác thực email thành công.',
+        data: result,
+      });
+    } catch (error: any) {
+      return handleAuthError(res, error);
+    }
+  }
+
+  static async resendRegisterOtp(req: Request, res: Response) {
+    try {
+      const { email } = emailSchema.parse(req.body);
+      const result = await AuthService.resendRegisterOtp(email);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Mã OTP mới đã được gửi về email của bạn.',
+        data: result,
+      });
+    } catch (error: any) {
+      return handleAuthError(res, error);
     }
   }
 
@@ -41,17 +107,14 @@ export class AuthController {
       }
 
       const result = await AuthService.login({ email, password });
-      
-      res.status(200).json({
+
+      return res.status(200).json({
         success: true,
         message: 'Login successful',
-        data: result
+        data: result,
       });
     } catch (error: any) {
-      if (error.message === 'Invalid email or password' || error.message === 'Account is suspended') {
-        return res.status(401).json({ success: false, message: error.message });
-      }
-      res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
+      return handleAuthError(res, error);
     }
   }
 
@@ -68,48 +131,51 @@ export class AuthController {
       }
 
       await AuthService.changePassword(userId, oldPassword, newPassword);
-      
-      res.status(200).json({ success: true, message: 'Password changed successfully' });
+
+      return res.status(200).json({ success: true, message: 'Password changed successfully' });
     } catch (error: any) {
-      if (error.message === 'Incorrect old password' || error.message === 'New password must differ from old password' || error.message === 'New password must contain letters and numbers') {
-        return res.status(400).json({ success: false, message: error.message });
-      }
-      res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
+      return handleAuthError(res, error);
     }
   }
 
   static async forgotPassword(req: Request, res: Response) {
     try {
-      const { email } = req.body;
-      if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+      const { email } = emailSchema.parse(req.body);
+      const result = await AuthService.forgotPassword(email);
 
-      const resetToken = await AuthService.forgotPassword(email);
-      
-      res.status(200).json({ 
-        success: true, 
-        message: 'Reset token generated (simulating email sent)', 
-        data: { resetToken } // Trong thực tế không trả token về client mà gửi qua email
+      return res.status(200).json({
+        success: true,
+        message: 'Mã OTP đặt lại mật khẩu đã được gửi về email của bạn.',
+        data: result,
       });
     } catch (error: any) {
-      if (error.message === 'User with this email does not exist') {
-        return res.status(404).json({ success: false, message: error.message });
-      }
-      res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
+      return handleAuthError(res, error);
+    }
+  }
+
+  static async verifyForgotPasswordOtp(req: Request, res: Response) {
+    try {
+      const { email, otp } = verifyOtpSchema.parse(req.body);
+      const result = await AuthService.verifyForgotPasswordOtp(email, otp);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Xác thực OTP thành công. Vui lòng nhập mật khẩu mới.',
+        data: result,
+      });
+    } catch (error: any) {
+      return handleAuthError(res, error);
     }
   }
 
   static async resetPassword(req: Request, res: Response) {
     try {
-      const { resetToken, newPassword } = req.body;
-      if (!resetToken || !newPassword || newPassword.length < 6) {
-        return res.status(400).json({ success: false, message: 'Invalid input data' });
-      }
-
+      const { resetToken, newPassword } = resetPasswordSchema.parse(req.body);
       await AuthService.resetPassword(resetToken, newPassword);
-      
-      res.status(200).json({ success: true, message: 'Password reset successfully' });
+
+      return res.status(200).json({ success: true, message: 'Password reset successfully' });
     } catch (error: any) {
-      return res.status(400).json({ success: false, message: error.message });
+      return handleAuthError(res, error);
     }
   }
 
@@ -121,17 +187,14 @@ export class AuthController {
       }
 
       const result = await AuthService.googleLogin(idToken);
-      
-      res.status(200).json({
+
+      return res.status(200).json({
         success: true,
         message: 'Google login successful',
-        data: result
+        data: result,
       });
     } catch (error: any) {
-      if (error.message === 'Invalid Google Token' || error.message.includes('suspended')) {
-        return res.status(401).json({ success: false, message: error.message });
-      }
-      res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
+      return handleAuthError(res, error);
     }
   }
 }
