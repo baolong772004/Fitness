@@ -153,17 +153,19 @@ export default function AuthScreen() {
         );
       } else {
         const loggedInUser = await signIn(email, password);
-        if (!loggedInUser.mustChangePassword) {
-          navigateAfterAuth();
+        if (loggedInUser.mustChangePassword) {
+          router.replace('/change-password');
+          return;
         }
+        navigateAfterAuth();
       }
     } catch (error) {
       if (error instanceof ApiError && error.code === 'EMAIL_NOT_VERIFIED') {
         const unverifiedEmail = String(error.data?.email || email.trim().toLowerCase());
-        setCreating(true);
         setVerifyingEmail(unverifiedEmail);
+        setCooldown(Number(error.data?.retryAfterSeconds ?? 60));
         setOtp('');
-        Alert.alert('Chưa xác thực email', error.message);
+        Alert.alert('Xác thực tài khoản lần đầu', error.message);
         return;
       }
       if (error instanceof ApiError && error.code === 'OTP_COOLDOWN' && error.data?.retryAfterSeconds) {
@@ -184,9 +186,11 @@ export default function AuthScreen() {
     setBusy(true);
     try {
       const loggedInUser = await verifySignUpOtp(verifyingEmail, trimmedOtp);
-      if (!loggedInUser.mustChangePassword) {
-        navigateAfterAuth();
+      if (loggedInUser.mustChangePassword) {
+        router.replace('/change-password');
+        return;
       }
+      navigateAfterAuth();
     } catch (error) {
       showError(error);
     } finally {
@@ -254,7 +258,7 @@ export default function AuthScreen() {
     }
   };
 
-  const isVerifying = creating && Boolean(verifyingEmail);
+  const isVerifying = Boolean(verifyingEmail);
 
   return (
     <View style={{ flex: 1 }}>
@@ -401,7 +405,7 @@ export default function AuthScreen() {
                 style={{ alignSelf: 'center', marginTop: 15 }}
               >
                 <Text style={{ color: aura.caramel, fontWeight: '800', fontSize: 12 }}>
-                  Quay lại chỉnh sửa thông tin
+                  {creating ? 'Quay lại chỉnh sửa thông tin' : 'Quay lại đăng nhập'}
                 </Text>
               </Pressable>
             </>

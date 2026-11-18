@@ -204,23 +204,9 @@ router.post(
 
 /**
  * @swagger
- * /staff/members:
- *   post:
- *     summary: Staff tạo tài khoản hội viên mới, mật khẩu tạm 123456 và buộc đổi khi đăng nhập
- *     tags: [Staff]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       201:
- *         description: Tạo tài khoản mới thành công
- */
-router.post('/members', authenticateToken, authorizeRoles('STAFF', 'ADMIN'), requireStaffShift, StaffController.createMemberAccount);
-
-/**
- * @swagger
  * /staff/pos/walk-in:
  *   post:
- *     summary: Giai đoạn 3.1 - Đăng ký khách Walk-in mới chưa tải App (Tạo nhanh, chọn gói, gán tư vấn, thu tiền, gửi SMS)
+ *     summary: Giai đoạn 3.1 - Đăng ký khách Walk-in mới chưa tải App (Tạo nhanh, chọn gói, gán tư vấn, thu tiền, gửi Email)
  *     tags: [Staff]
  *     security:
  *       - bearerAuth: []
@@ -233,6 +219,7 @@ router.post('/members', authenticateToken, authorizeRoles('STAFF', 'ADMIN'), req
  *             required:
  *               - fullName
  *               - phone
+ *               - email
  *               - packageId
  *               - paymentMethod
  *             properties:
@@ -254,18 +241,15 @@ router.post('/members', authenticateToken, authorizeRoles('STAFF', 'ADMIN'), req
  *                 example: 2
  *               paymentMethod:
  *                 type: string
- *                 enum: [CASH, POS]
+ *                 enum: [CASH, PAYOS]
  *                 example: "CASH"
  *               amountPaid:
  *                 type: number
  *                 description: Số tiền khách đưa (nếu là CASH để tính tiền thừa)
  *                 example: 1000000
- *               traceRefNo:
- *                 type: string
- *                 description: Mã chuẩn chi máy quẹt thẻ POS ngoài (bắt buộc nếu chọn POS)
  *     responses:
  *       201:
- *         description: Kích hoạt gói thành công và sinh tin nhắn SMS kèm link tải app
+ *         description: Kích hoạt gói thành công hoặc tạo mã QR PayOS thành công
  */
 router.post(
   '/pos/walk-in',
@@ -273,6 +257,22 @@ router.post(
   authorizeRoles('STAFF', 'ADMIN'),
   requireStaffShift,
   StaffController.walkInRegistration
+);
+
+router.get(
+  '/pos/walk-in/:orderCode/status',
+  authenticateToken,
+  authorizeRoles('STAFF', 'ADMIN'),
+  requireStaffShift,
+  StaffController.getWalkInPayosStatus
+);
+
+router.post(
+  '/pos/walk-in/:orderCode/cancel',
+  authenticateToken,
+  authorizeRoles('STAFF', 'ADMIN'),
+  requireStaffShift,
+  StaffController.cancelWalkInPayos
 );
 
 /**

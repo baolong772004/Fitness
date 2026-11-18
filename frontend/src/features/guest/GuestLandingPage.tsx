@@ -4,6 +4,7 @@ import type { MemberScheduleEvent } from '../../services/api/member.api';
 import { soundEffects } from '../../services/audioService';
 import { WebcamQrScanner } from '../../components/common/WebcamQrScanner';
 import { toast } from '../../components/common/ToastNotification';
+import { subscribePayosOrder } from '../../services/socket';
 
 import {
   QrCode,
@@ -95,9 +96,29 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
     }
   };
 
+  const [pendingPayosOrderCode, setPendingPayosOrderCode] = useState<string | null>(null);
+
   useEffect(() => {
     fetchLiveData();
   }, []);
+
+  useEffect(() => {
+    if (!pendingPayosOrderCode) return;
+    return subscribePayosOrder(pendingPayosOrderCode, (payload) => {
+      const nextStatus = String(payload.status || '').toUpperCase();
+      if (payload.paid || nextStatus === 'PAID') {
+        soundEffects.playSuccessBeep();
+        toast.success(payload.message || 'Thanh toán PayOS thành công! Gói tập đã được kích hoạt.');
+        setPendingPayosOrderCode(null);
+      } else if (nextStatus === 'CANCELLED' || nextStatus === 'EXPIRED' || nextStatus === 'FAILED') {
+        toast.warning(payload.message || 'Đơn thanh toán PayOS đã bị hủy hoặc hết hạn.');
+        setPendingPayosOrderCode(null);
+      } else if (nextStatus === 'PAID_REVIEW') {
+        toast.warning(payload.message || 'Giao dịch cần bộ phận hỗ trợ kiểm tra lại.');
+        setPendingPayosOrderCode(null);
+      }
+    });
+  }, [pendingPayosOrderCode]);
 
   const localDateKey = (date: Date) =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -190,6 +211,9 @@ export const GuestLandingPage: React.FC<GuestLandingPageProps> = ({
     soundEffects.playSuccessBeep();
     try {
       const res = await api.payments.createCheckoutSession(pkg.id);
+      if (res.orderCode) {
+        setPendingPayosOrderCode(String(res.orderCode));
+      }
       if (res.checkoutUrl) {
         window.open(res.checkoutUrl, '_blank');
       } else {

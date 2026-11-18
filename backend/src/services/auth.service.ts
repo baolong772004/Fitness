@@ -309,11 +309,37 @@ export class AuthService {
     }
 
     if (!user.emailVerified || user.status === 'PENDING') {
+      const activeOtp = await prisma.emailOtp.findFirst({
+        where: {
+          email: user.email,
+          purpose: 'REGISTER_VERIFY',
+          usedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        select: { id: true },
+      });
+
+      let retryAfterSeconds: number | undefined;
+      if (!activeOtp) {
+        try {
+          await issueOtp(user.email, 'REGISTER_VERIFY', user.fullName);
+          retryAfterSeconds = OTP_RESEND_COOLDOWN_SECONDS;
+        } catch (otpError: any) {
+          if (otpError instanceof AuthError && otpError.code === 'OTP_COOLDOWN') {
+            retryAfterSeconds = Number(otpError.data?.retryAfterSeconds || OTP_RESEND_COOLDOWN_SECONDS);
+          } else {
+            throw otpError;
+          }
+        }
+      }
+
       throw new AuthError(
         403,
         'EMAIL_NOT_VERIFIED',
-        'Email chưa được xác thực. Vui lòng nhập mã OTP đã gửi về email.',
-        { email: user.email }
+        !activeOtp
+          ? 'Email chưa được xác thực. Mã OTP gồm 6 chữ số vừa được gửi về email của bạn.'
+          : 'Email chưa được xác thực. Vui lòng nhập mã OTP đã gửi về email.',
+        { email: user.email, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) }
       );
     }
 

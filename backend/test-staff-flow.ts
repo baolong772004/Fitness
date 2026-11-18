@@ -166,6 +166,7 @@ async function runStaffFlowTests() {
     const walkInResult = await StaffService.processWalkInCustomer({
       fullName: 'Khách Walk-in Test',
       phone: walkInPhone,
+      email: 'walkin_0988776655@example.invalid',
       packageId: testPackage.id,
       paymentMethod: 'CASH',
       amountPaid: 700000, // Giá gói 600.000 đ, khách đưa 700.000 đ
@@ -178,7 +179,7 @@ async function runStaffFlowTests() {
     console.log(`      - Gói kích hoạt: ${walkInResult.data.membership.packageName}`);
     console.log(`      - Số tiền: ${walkInResult.data.payment.amount.toLocaleString('vi-VN')} đ`);
     console.log(`      - Tiền khách đưa: ${walkInResult.data.payment.cashReceived?.toLocaleString('vi-VN')} đ | Tiền thừa trả khách: ${walkInResult.data.payment.cashChange?.toLocaleString('vi-VN')} đ`);
-    console.log(`      - Link SMS kích hoạt: ${walkInResult.data.smsInvitation.smsLink}`);
+    console.log(`      - Thông báo Email (${walkInResult.data.emailNotification.to}): ${walkInResult.data.emailNotification.sent ? `Đã gửi (${walkInResult.data.emailNotification.delivery})` : `Bỏ qua (${walkInResult.data.emailNotification.reason})`}`);
 
     // 3.2 Hỗ trợ bảo lưu gói tại quầy
     const freezeResult = await StaffService.freezeMembershipAtDesk({

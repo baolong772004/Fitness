@@ -70,6 +70,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Register form & OTP verification state
   const [registerStep, setRegisterStep] = useState<'form' | 'verify'>('form');
+  const [otpSource, setOtpSource] = useState<'login' | 'register'>('register');
   const [registerForm, setRegisterForm] = useState({
     name: '',
     phone: '',
@@ -100,6 +101,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (isOpen) {
       setTab(tokenStorage.getUser()?.mustChangePassword ? 'change' : initialTab);
       setRegisterStep('form');
+      setOtpSource('register');
       setRegisterOtp('');
       setForgotStep(1);
       setForgotOtp('');
@@ -185,10 +187,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       soundEffects.playErrorBeep();
       if (err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED') {
         const unverifiedEmail = String(err.data?.email || loginIdentifier.trim().toLowerCase());
+        setCurrentPassword(loginPassword);
+        setOtpSource('login');
         setPendingVerifyEmail(unverifiedEmail);
         setRegisterOtp('');
+        setRegisterCooldown(Number(err.data?.retryAfterSeconds ?? 60));
         setTab('register');
         setRegisterStep('verify');
+        setSuccessMsg(null);
         setAuthError(err.message || 'Email chưa được xác thực. Vui lòng nhập mã OTP đã gửi về email.');
         return;
       }
@@ -260,6 +266,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
 
       soundEffects.playSuccessBeep();
+      setOtpSource('register');
       setPendingVerifyEmail(res.email || registerForm.email.trim().toLowerCase());
       setRegisterOtp('');
       setRegisterCooldown(60);
@@ -297,7 +304,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
 
       soundEffects.playSuccessBeep();
-      setSuccessMsg('Xác thực email & đăng ký thành công!');
+      if (data.user.mustChangePassword) {
+        setTab('change');
+        setRegisterStep('form');
+        setSuccessMsg('Xác thực OTP thành công! Vui lòng đổi mật khẩu tạm thời để tiếp tục.');
+        return;
+      }
+
+      setSuccessMsg(
+        otpSource === 'login'
+          ? 'Xác thực email & đăng nhập thành công!'
+          : 'Xác thực email & đăng ký thành công!'
+      );
       const frontendUser = mapBackendUserToFrontend(data.user);
       setTimeout(() => {
         onLoginSuccess(frontendUser);
@@ -871,6 +889,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    if (otpSource === 'login') {
+                      setTab('login');
+                    }
                     setRegisterStep('form');
                     setAuthError(null);
                     setSuccessMsg(null);

@@ -1,12 +1,21 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import QRCode from 'qrcode';
 import { createUserNotification } from './notification.service.js';
 import { grantPtCredit, releasePtCredit } from './ptWallet.service.js';
-import { closePtChatRoom, emitCoachScheduleChanged } from '../sockets/ptChat.socket.js';
+import { sendWalkInNotificationEmail, type WalkInEmailResult } from './email.service.js';
+import { closePtChatRoom, emitCoachScheduleChanged, emitPayosStatusUpdated } from '../sockets/ptChat.socket.js';
 import { lockGymMember } from './gymMembershipLock.service.js';
 import { reconcileGymMembershipStates } from './membership.service.js';
 import { isLockedAccountStatus } from '../middlewares/auth.middleware.js';
+import {
+  generateOrderCode,
+  getPayOS,
+  getPayOSRedirectUrls,
+  markPaymentFailed,
+  markPaymentPaid,
+} from './payment.service.js';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
@@ -863,59 +872,17 @@ export class StaffService {
   // GIAI ĐOẠN 3: HỖ TRỢ THANH TOÁN TẠI QUẦY (Offline POS Fallback)
   // =========================================================================
 
-  static async createMemberAccount(params: { fullName: string; phone: string; email?: string; staffId: number }) {
-    const fullName = params.fullName.trim();
-    const raw = params.phone.trim();
-    const digits = raw.replace(/\D/g, '');
-    const phone = digits.startsWith('84') && digits.length === 11 ? `0${digits.slice(2)}` : digits;
-    const email = params.email?.trim().toLowerCase() || `walkin_${phone.replace(/\D/g, '')}@gymfitness.local`;
-    if (fullName.length < 2) {
-      throw new Error('Vui lòng nhập họ tên và số điện thoại hợp lệ.');
-    }
-    const [phoneOwner, emailOwner] = await Promise.all([
-      prisma.user.findFirst({ where: { phone: { in: [phone, params.phone.trim()] } }, select: { id: true } }),
-      prisma.user.findUnique({ where: { email }, select: { id: true } })
-    ]);
-    if (phoneOwner || emailOwner) {
-      throw new Error('Số điện thoại hoặc email đã có tài khoản. Không tạo trùng hoặc đặt lại mật khẩu.');
-    }
-
-    const password = await bcrypt.hash('123456', 10);
-    const member = await prisma.$transaction(async tx => {
-      const created = await tx.user.create({ data: {
-        fullName, phone, email, password,
-        mustChangePassword: true, role: 'MEMBER', status: 'ACTIVE'
-      } });
-      await tx.actionLog.create({ data: {
-        userId: params.staffId,
-        action: 'STAFF_CREATE_MEMBER_ACCOUNT',
-        details: `Lễ tân ID ${params.staffId} tạo tài khoản hội viên ${created.fullName} (${created.phone}).`
-      } });
-      return created;
-    });
-
-    return {
-      success: true,
-      message: 'Tạo tài khoản hội viên thành công.',
-      data: {
-        member: { id: member.id, fullName: member.fullName, phone: member.phone, email: member.email },
-        account: { created: true, loginEmail: member.email, temporaryPassword: '123456', mustChangePassword: true }
-      }
-    };
-  }
-
   /**
-   * Tạo và kích hoạt nhanh cho khách Walk-in chưa tải App
+   * Tạo và kích hoạt nhanh cho khách Walk-in (CASH hoặc chuyển khoản PayOS QR)
    */
   static async processWalkInCustomer(params: {
     fullName: string;
     phone: string;
-    email?: string;
+    email: string;
     packageId: number;
     consultantStaffId?: number;
-    paymentMethod: 'CASH' | 'POS';
+    paymentMethod: 'CASH' | 'PAYOS';
     amountPaid?: number;
-    traceRefNo?: string;
     staffId: number;
     shiftId: number;
   }) {
@@ -927,10 +894,20 @@ export class StaffService {
       consultantStaffId,
       paymentMethod,
       amountPaid,
-      traceRefNo,
       staffId,
       shiftId
     } = params;
+
+    const rawEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    if (!rawEmail || !/^\S+@\S+\.\S+$/.test(rawEmail) || rawEmail.endsWith('@gymfitness.local')) {
+      throw new Error('Email liên hệ là bắt buộc và phải là địa chỉ email hợp lệ.');
+    }
+    const rawPhone = phone.trim();
+    const digits = rawPhone.replace(/\D/g, '');
+    const normalizedPhone = digits.startsWith('84') && digits.length === 11 ? `0${digits.slice(2)}` : (digits || rawPhone);
+    if (fullName.trim().length < 2 || digits.length < 8 || digits.length > 15) {
+      throw new Error('Họ tên và số điện thoại khách hàng không hợp lệ.');
+    }
 
     // 1. Kiểm tra gói tập
     const pkg = await prisma.package.findUnique({
@@ -945,8 +922,8 @@ export class StaffService {
     const packagePrice = Number(pkg.price);
 
     // 2. Validate thanh toán
-    if (paymentMethod === 'POS' && (!traceRefNo || traceRefNo.trim() === '')) {
-      throw new Error('Thanh toán qua POS quẹt thẻ ngân hàng bắt buộc phải nhập Mã chuẩn chi (Trace / Ref No.).');
+    if (!['CASH', 'PAYOS'].includes(paymentMethod)) {
+      throw new Error('Hình thức thu tiền chỉ hỗ trợ CASH (tiền mặt) hoặc PAYOS (chuyển khoản QR).');
     }
 
     let cashReceived = null;
@@ -959,43 +936,174 @@ export class StaffService {
         );
       }
       cashChange = cashReceived - packagePrice;
+    } else {
+      if (!Number.isSafeInteger(packagePrice) || packagePrice <= 0) {
+        throw new Error('Giá gói tập không hợp lệ để tạo mã QR PayOS.');
+      }
+      if (!getPayOS()) {
+        throw new Error('Cổng thanh toán PayOS chưa được cấu hình trên máy chủ.');
+      }
     }
 
-    // 3. Tìm hoặc tạo tài khoản Member
-    const normalizedPhone = phone.trim();
-    let member = await prisma.user.findFirst({
-      where: { phone: normalizedPhone }
-    });
+    const WALK_IN_TEMP_PASSWORD = 'Gym@123456';
+    const hashedDefaultPassword = await bcrypt.hash(WALK_IN_TEMP_PASSWORD, 10);
 
-    if (!member) {
-      const generatedEmail = email?.trim() || `walkin_${normalizedPhone}@gymfitness.local`;
-      const defaultPassword = await bcrypt.hash('Gym@123456', 10);
+    const resolveOrCreateWalkInMember = async (tx: any) => {
+      const [byPhone, byEmail] = await Promise.all([
+        tx.user.findFirst({ where: { phone: { in: [normalizedPhone, rawPhone] } } }),
+        tx.user.findUnique({ where: { email: rawEmail } }),
+      ]);
 
-      member = await prisma.user.create({
+      if (byPhone && byEmail && byPhone.id !== byEmail.id) {
+        throw new Error('Số điện thoại và Email đang thuộc về 2 tài khoản khác nhau. Vui lòng kiểm tra lại.');
+      }
+      if (!byPhone && byEmail) {
+        throw new Error(`Email ${rawEmail} đã được đăng ký cho tài khoản khác.`);
+      }
+
+      if (byPhone) {
+        if (byPhone.email.toLowerCase() !== rawEmail) {
+          if (byPhone.email.toLowerCase().endsWith('@gymfitness.local')) {
+            const updatedMember = await tx.user.update({
+              where: { id: byPhone.id },
+              data: { email: rawEmail, emailVerified: false },
+            });
+            return { member: updatedMember, accountCreated: false };
+          }
+          throw new Error(`Số điện thoại này đã gắn với email ${byPhone.email}. Vui lòng nhập đúng email của khách.`);
+        }
+        return { member: byPhone, accountCreated: false };
+      }
+
+      const created = await tx.user.create({
         data: {
           fullName: fullName.trim(),
           phone: normalizedPhone,
-          email: generatedEmail,
-          password: defaultPassword,
+          email: rawEmail,
+          password: hashedDefaultPassword,
+          mustChangePassword: true,
+          emailVerified: false,
           role: 'MEMBER',
-          status: 'ACTIVE'
-        }
+          status: 'ACTIVE',
+        },
       });
+      return { member: created, accountCreated: true };
+    };
+
+    // Nhánh A: Chuyển khoản PayOS QR
+    if (paymentMethod === 'PAYOS') {
+      const payos = getPayOS()!;
+      const orderCodeNum = generateOrderCode();
+      const orderCodeBigInt = BigInt(orderCodeNum);
+
+      const pendingCreated = await prisma.$transaction(async (tx) => {
+        const { member, accountCreated } = await resolveOrCreateWalkInMember(tx);
+        await lockGymMember(tx, member.id);
+
+        const now = new Date();
+        const endDate = new Date(now.getTime() + pkg.durationDays * 86400000);
+        const membership = await tx.membership.create({
+          data: {
+            userId: member.id,
+            packageId: pkg.id,
+            startDate: now,
+            endDate,
+            remainingSessions: pkg.type === 'MEMBERSHIP' ? pkg.trialPtSessions : null,
+            status: 'PENDING',
+            isGymMembership: pkg.type === 'MEMBERSHIP',
+            coachId: consultantStaffId || null,
+          },
+        });
+
+        const payment = await tx.payment.create({
+          data: {
+            userId: member.id,
+            membershipId: membership.id,
+            amount: pkg.price,
+            method: 'PAYOS',
+            status: 'PENDING',
+            orderCode: orderCodeBigInt,
+            transactionNo: `TXN-${orderCodeNum}`,
+            staffId,
+            shiftId,
+            consultantId: consultantStaffId || null,
+            note: `Đăng ký gói Walk-in PayOS [${pkg.name}]`,
+          },
+        });
+
+        await tx.actionLog.create({
+          data: {
+            userId: staffId,
+            action: 'WALK_IN_PAYOS_INIT',
+            details: JSON.stringify({
+              orderCode: String(orderCodeNum),
+              paymentId: payment.id,
+              userId: member.id,
+              accountCreated,
+              packageName: pkg.name,
+              staffId,
+              shiftId,
+            }),
+          },
+        });
+
+        return { member, accountCreated, membership, payment };
+      });
+
+      const description = `Walkin ${pkg.name}`
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9 ]/g, '')
+        .slice(0, 25) || `Walkin ${orderCodeNum}`.slice(0, 25);
+
+      try {
+        const link = await payos.createPaymentLink({
+          orderCode: orderCodeNum,
+          amount: packagePrice,
+          description,
+          ...getPayOSRedirectUrls(),
+        });
+        const qrCodeImage = link.qrCode ? await QRCode.toDataURL(link.qrCode) : null;
+
+        return {
+          success: true,
+          message: 'Đã tạo mã QR PayOS. Vui lòng quét mã để hoàn tất thanh toán.',
+          data: {
+            paymentPending: true,
+            orderCode: orderCodeNum,
+            checkoutUrl: link.checkoutUrl,
+            qrCode: link.qrCode,
+            qrCodeImage,
+            amount: packagePrice,
+            packageName: pkg.name,
+            accountCreated: pendingCreated.accountCreated,
+            member: {
+              id: pendingCreated.member.id,
+              fullName: pendingCreated.member.fullName,
+              phone: pendingCreated.member.phone,
+              email: pendingCreated.member.email,
+            },
+          },
+        };
+      } catch (err: any) {
+        await StaffService.cancelWalkInPayosOrder(orderCodeBigInt).catch(() => undefined);
+        throw new Error(err?.message || 'Không thể khởi tạo mã QR PayOS.');
+      }
     }
 
-    // 4. Ghi nhận giao dịch Payment & Kích hoạt/Xếp hàng Membership
-    const generatedOrderCode = BigInt(Date.now() + Math.floor(Math.random() * 1000));
-    const transactionNo = paymentMethod === 'POS'
-      ? traceRefNo!.trim()
-      : `CASH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    // Nhánh B: Tiền mặt tại quầy (CASH)
+    const generatedOrderCode = BigInt(generateOrderCode());
+    const transactionNo = `CASH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
 
-    const { membership, payment, isQueued } = await prisma.$transaction(async tx => {
+    const { member, accountCreated, membership, payment, isQueued } = await prisma.$transaction(async tx => {
+      const { member, accountCreated } = await resolveOrCreateWalkInMember(tx);
+
       // 4a. Khóa an toàn đồng thời cho user
-      await lockGymMember(tx, member!.id);
+      await lockGymMember(tx, member.id);
 
       // 4b. Đồng bộ trạng thái các gói tập gym hiện tại
       const now = new Date();
-      await reconcileGymMembershipStates(tx, member!.id, now);
+      await reconcileGymMembershipStates(tx, member.id, now);
 
       // 4c. Tính toán xếp hàng PENDING_ACTIVATION nếu khách đã có gói active hoặc bảo lưu
       const isGym = pkg.type === 'MEMBERSHIP';
@@ -1007,14 +1115,14 @@ export class StaffService {
 
       if (isGym) {
         const lastOrder = await tx.membership.aggregate({
-          where: { userId: member!.id, isGymMembership: true },
+          where: { userId: member.id, isGymMembership: true },
           _max: { activationOrder: true },
         });
         activationOrder = (lastOrder._max.activationOrder ?? 0) + 1;
 
         const existingGymMemberships = await tx.membership.findMany({
           where: {
-            userId: member!.id,
+            userId: member.id,
             package: { type: 'MEMBERSHIP' },
             status: { in: ['ACTIVE', 'PENDING_ACTIVATION', 'FROZEN'] },
             endDate: { gte: now },
@@ -1036,7 +1144,7 @@ export class StaffService {
       // 4d. Tạo bản ghi Membership
       const membership = await tx.membership.create({
         data: {
-          userId: member!.id,
+          userId: member.id,
           packageId: pkg.id,
           startDate,
           endDate,
@@ -1052,17 +1160,17 @@ export class StaffService {
       // 4e. Tạo bản ghi Payment
       const payment = await tx.payment.create({
         data: {
-          userId: member!.id,
+          userId: member.id,
           membershipId: membership.id,
           amount: pkg.price,
-          method: paymentMethod === 'CASH' ? 'CASH' : 'POS_CARD',
+          method: 'CASH',
           status: 'COMPLETED',
           orderCode: generatedOrderCode,
           transactionNo,
           staffId,
           shiftId,
           consultantId: consultantStaffId || null,
-          traceRefNo: paymentMethod === 'POS' ? traceRefNo!.trim() : null,
+          traceRefNo: null,
           cashReceived: cashReceived ? cashReceived : null,
           cashChange: cashChange > 0 ? cashChange : null,
           note: `Đăng ký gói Walk-in tại quầy [${pkg.name}]`,
@@ -1072,7 +1180,7 @@ export class StaffService {
       // 4f. Tặng Trial PT sessions nếu gói có quyền lợi
       if (pkg.trialPtSessions > 0) {
         await grantPtCredit(tx, {
-          memberId: member!.id,
+          memberId: member.id,
           level: 'TRIAL',
           source: 'MEMBERSHIP_GIFT',
           count: pkg.trialPtSessions,
@@ -1084,27 +1192,38 @@ export class StaffService {
       }
 
       // 4g. Ghi nhận tiền mặt vào quỹ ca
-      if (paymentMethod === 'CASH') {
-        await tx.staffShift.update({
-          where: { id: shiftId },
-          data: { systemCashAmount: { increment: pkg.price } }
-        });
-      }
+      await tx.staffShift.update({
+        where: { id: shiftId },
+        data: { systemCashAmount: { increment: pkg.price } }
+      });
 
       // 4h. Ghi action log
       await tx.actionLog.create({
         data: {
           userId: staffId,
           action: 'WALK_IN_REGISTRATION',
-          details: `Lễ tân ID ${staffId} đăng ký gói [${pkg.name}] cho khách Walk-in ${member!.fullName} (${member!.phone}). Trạng thái: ${status}${isQueued ? ' (Xếp hàng chờ kích hoạt)' : ''}. Hình thức: ${paymentMethod}. Số tiền: ${packagePrice.toLocaleString('vi-VN')} đ.`,
+          details: `Lễ tân ID ${staffId} đăng ký gói [${pkg.name}] cho khách Walk-in ${member.fullName} (${member.phone}). Trạng thái: ${status}${isQueued ? ' (Xếp hàng chờ kích hoạt)' : ''}. Hình thức: CASH. Số tiền: ${packagePrice.toLocaleString('vi-VN')} đ.`,
         }
       });
 
-      return { membership, payment, isQueued };
+      return { member, accountCreated, membership, payment, isQueued };
     });
 
-    // 5. Sinh link SMS hướng dẫn tải App
-    const smsLink = `https://gymfitness.app/download?phone=${encodeURIComponent(normalizedPhone)}&welcome=1`;
+    // 5. Gửi thông báo kích hoạt gói & thông tin đăng nhập qua Email (không dùng SMS)
+    const emailNotification = await sendWalkInNotificationEmail({
+      to: member.email,
+      fullName: member.fullName,
+      packageName: pkg.name,
+      startDate: membership.startDate,
+      endDate: membership.endDate,
+      isQueued,
+      amount: Number(payment.amount),
+      paymentMethod: payment.method,
+      transactionNo: payment.transactionNo || '',
+      accountCreated,
+      temporaryPassword: accountCreated ? WALK_IN_TEMP_PASSWORD : null,
+      mustChangePassword: member.mustChangePassword,
+    });
 
     const successMessage = isQueued
       ? `Đăng ký gói Walk-in [${pkg.name}] thành công! Do khách đã có gói tập đang hoạt động, gói mới được xếp hàng chờ kích hoạt từ ngày ${new Date(membership.startDate).toLocaleDateString('vi-VN')}.`
@@ -1114,11 +1233,18 @@ export class StaffService {
       success: true,
       message: successMessage,
       data: {
+        paymentPending: false,
         member: {
           id: member.id,
           fullName: member.fullName,
           phone: member.phone,
           email: member.email
+        },
+        account: {
+          created: accountCreated,
+          loginEmail: member.email,
+          temporaryPassword: accountCreated ? WALK_IN_TEMP_PASSWORD : null,
+          mustChangePassword: member.mustChangePassword
         },
         membership: {
           id: membership.id,
@@ -1136,11 +1262,315 @@ export class StaffService {
           cashReceived,
           cashChange
         },
-        smsInvitation: {
-          messageText: `Chuc mung ${member.fullName} da tro thanh hoi vien cua Gym Fitness! Tai app tai day de check-in vao phong: ${smsLink}. Mat khau tam thoi: Gym@123456`,
-          smsLink
+        emailNotification
+      }
+    };
+  }
+
+  /**
+   * Hoàn tất thông báo & ghi log (idempotent) cho đơn Walk-in PayOS sau khi đã PAID
+   */
+  static async finalizeWalkInPayosPayment(orderCodeBigInt: bigint) {
+    const WALK_IN_TEMP_PASSWORD = 'Gym@123456';
+    const orderText = orderCodeBigInt.toString();
+
+    const finalized = await prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.findUnique({
+        where: { orderCode: orderCodeBigInt },
+        include: {
+          user: true,
+          membership: { include: { package: true } },
+        },
+      });
+      if (!payment || payment.staffId === null || !payment.membership) {
+        return null;
+      }
+
+      await lockGymMember(tx, payment.userId);
+
+      const initLog = await tx.actionLog.findFirst({
+        where: {
+          action: 'WALK_IN_PAYOS_INIT',
+          details: { contains: `"orderCode":"${orderText}"` },
+        },
+      });
+      let accountCreated = false;
+      if (initLog?.details) {
+        try {
+          accountCreated = Boolean(JSON.parse(initLog.details)?.accountCreated);
+        } catch {
+          accountCreated = false;
         }
       }
+
+      const existingDone = await tx.actionLog.findFirst({
+        where: {
+          action: 'WALK_IN_REGISTRATION',
+          details: { contains: `Order #${orderText}` },
+        },
+      });
+
+      const isQueued = payment.membership.status === 'PENDING_ACTIVATION';
+      const pkgName = payment.membership.package.name;
+      let shouldSendEmail = false;
+
+      if (!existingDone && payment.status === 'PAID') {
+        await tx.actionLog.create({
+          data: {
+            userId: payment.staffId,
+            action: 'WALK_IN_REGISTRATION',
+            details: `Lễ tân ID ${payment.staffId} đăng ký gói [${pkgName}] cho khách Walk-in ${payment.user.fullName} (${payment.user.phone}). Trạng thái: ${payment.membership.status}${isQueued ? ' (Xếp hàng chờ kích hoạt)' : ''}. Hình thức: PAYOS (Order #${orderText}). Số tiền: ${Number(payment.amount).toLocaleString('vi-VN')} đ.`,
+          },
+        });
+        shouldSendEmail = true;
+      }
+
+      return { payment, member: payment.user, membership: payment.membership, pkgName, isQueued, accountCreated, shouldSendEmail };
+    });
+
+    if (!finalized) return null;
+
+    let emailNotification: WalkInEmailResult;
+    if (finalized.shouldSendEmail) {
+      emailNotification = await sendWalkInNotificationEmail({
+        to: finalized.member.email,
+        fullName: finalized.member.fullName,
+        packageName: finalized.pkgName,
+        startDate: finalized.membership.startDate,
+        endDate: finalized.membership.endDate,
+        isQueued: finalized.isQueued,
+        amount: Number(finalized.payment.amount),
+        paymentMethod: 'PAYOS',
+        transactionNo: finalized.payment.transactionNo || '',
+        accountCreated: finalized.accountCreated,
+        temporaryPassword: finalized.accountCreated ? WALK_IN_TEMP_PASSWORD : null,
+        mustChangePassword: finalized.member.mustChangePassword,
+      });
+    } else {
+      emailNotification = {
+        to: finalized.member.email,
+        sent: true,
+        delivery: 'smtp',
+      };
+    }
+
+    const successMessage = finalized.isQueued
+      ? `Thanh toán PayOS thành công! Gói Walk-in [${finalized.pkgName}] được xếp hàng chờ kích hoạt từ ngày ${new Date(finalized.membership.startDate).toLocaleDateString('vi-VN')}.`
+      : `Thanh toán PayOS & kích hoạt gói Walk-in [${finalized.pkgName}] thành công!`;
+
+    const responseData = {
+      paymentPending: false,
+      paid: true,
+      status: 'PAID',
+      orderCode: orderText,
+      member: {
+        id: finalized.member.id,
+        fullName: finalized.member.fullName,
+        phone: finalized.member.phone,
+        email: finalized.member.email,
+      },
+      account: {
+        created: finalized.accountCreated,
+        loginEmail: finalized.member.email,
+        temporaryPassword: finalized.accountCreated ? WALK_IN_TEMP_PASSWORD : null,
+        mustChangePassword: finalized.member.mustChangePassword,
+      },
+      membership: {
+        id: finalized.membership.id,
+        packageName: finalized.pkgName,
+        startDate: finalized.membership.startDate,
+        endDate: finalized.membership.endDate,
+        status: finalized.membership.status,
+        isQueued: finalized.isQueued,
+      },
+      payment: {
+        id: finalized.payment.id,
+        amount: Number(finalized.payment.amount),
+        method: finalized.payment.method,
+        transactionNo: finalized.payment.transactionNo,
+        cashReceived: null,
+        cashChange: 0,
+      },
+      emailNotification,
+    };
+
+    if (finalized.shouldSendEmail) {
+      emitPayosStatusUpdated(orderText, {
+        orderCode: orderText,
+        status: 'PAID',
+        paid: true,
+        message: successMessage,
+        staffId: finalized.payment.staffId,
+        userId: finalized.member.id,
+        data: responseData,
+      });
+    }
+
+    return {
+      success: true,
+      status: 'PAID',
+      paid: true,
+      message: successMessage,
+      data: responseData,
+    };
+  }
+
+  /**
+   * Kiểm tra trạng thái đơn Walk-in PayOS (hỗ trợ cả polling, Socket.IO và nút Reload)
+   */
+  static async checkWalkInPayosStatus(orderCodeNum: number) {
+    const orderCodeBigInt = BigInt(orderCodeNum);
+    const orderText = orderCodeBigInt.toString();
+    const payment = await prisma.payment.findUnique({
+      where: { orderCode: orderCodeBigInt },
+      select: { id: true, userId: true, status: true, method: true, staffId: true, amount: true },
+    });
+    if (!payment || payment.staffId === null || payment.method !== 'PAYOS') {
+      throw new Error('Không tìm thấy đơn chuyển khoản Walk-in này.');
+    }
+
+    if (payment.status === 'PENDING') {
+      const payos = getPayOS();
+      if (!payos) {
+        throw new Error('Cổng thanh toán PayOS chưa được cấu hình.');
+      }
+      const info = await payos.getPaymentLinkInformation(orderCodeNum);
+      const paidByAmount = Number(info.amountPaid || 0) >= Number(payment.amount) && Number(info.amountRemaining ?? 0) === 0;
+      if (info.status === 'PAID' || paidByAmount) {
+        const markResult = await markPaymentPaid(orderCodeBigInt, Number(info.amountPaid || info.amount || payment.amount));
+        if (markResult.result === 'AMOUNT_MISMATCH' || markResult.result === 'PAID_REVIEW' || markResult.result === 'ALREADY_PAID_REVIEW') {
+          const reviewMsg = 'Số tiền hoặc trạng thái đơn cần bộ phận hỗ trợ kiểm tra lại.';
+          emitPayosStatusUpdated(orderText, {
+            orderCode: orderText,
+            status: 'PAID_REVIEW',
+            paid: false,
+            message: reviewMsg,
+            staffId: payment.staffId,
+            userId: payment.userId,
+          });
+          return {
+            success: false,
+            status: 'PAID_REVIEW',
+            paid: false,
+            message: reviewMsg,
+            data: { paid: false, status: 'PAID_REVIEW' },
+          };
+        }
+      } else if (info.status === 'CANCELLED' || info.status === 'EXPIRED') {
+        await StaffService.cancelWalkInPayosOrder(orderCodeBigInt);
+        const cancelMsg = info.status === 'EXPIRED' ? 'Mã QR đã hết hạn thanh toán.' : 'Giao dịch đã bị hủy trên PayOS.';
+        return {
+          success: false,
+          status: info.status,
+          paid: false,
+          message: cancelMsg,
+          data: { paid: false, status: info.status },
+        };
+      } else {
+        return {
+          success: false,
+          status: info.status || 'PENDING',
+          paid: false,
+          message: 'Đang chờ khách hàng quét mã chuyển khoản...',
+          data: { paid: false, status: info.status || 'PENDING' },
+        };
+      }
+    }
+
+    const latest = await prisma.payment.findUnique({
+      where: { orderCode: orderCodeBigInt },
+      select: { status: true },
+    });
+    if (latest?.status === 'PAID') {
+      const completed = await StaffService.finalizeWalkInPayosPayment(orderCodeBigInt);
+      if (!completed) throw new Error('Không thể hoàn tất dữ liệu đơn Walk-in.');
+      return completed;
+    }
+
+    const statusMsg = latest?.status === 'PAID_REVIEW'
+      ? 'Giao dịch cần hỗ trợ đối soát.'
+      : 'Giao dịch chưa được thanh toán hoặc đã hủy.';
+    return {
+      success: false,
+      status: latest?.status || payment.status,
+      paid: false,
+      message: statusMsg,
+      data: { paid: false, status: latest?.status || payment.status },
+    };
+  }
+
+  /**
+   * Hủy đơn Walk-in PayOS đang chờ để khách đổi phương thức thanh toán
+   */
+  static async cancelWalkInPayosOrder(orderCodeBigInt: bigint) {
+    const orderText = orderCodeBigInt.toString();
+    const payment = await prisma.payment.findUnique({
+      where: { orderCode: orderCodeBigInt },
+      select: { id: true, userId: true, status: true, method: true, staffId: true },
+    });
+    if (!payment || payment.staffId === null || payment.method !== 'PAYOS') {
+      throw new Error('Không tìm thấy đơn chuyển khoản Walk-in này.');
+    }
+    if (payment.status === 'PAID' || payment.status === 'PAID_REVIEW') {
+      throw new Error('Giao dịch này đã được thanh toán, không thể hủy.');
+    }
+
+    const payos = getPayOS();
+    if (payos) {
+      await payos.cancelPaymentLink(Number(orderCodeBigInt), 'Khach doi phuong thuc thanh toan tai quay').catch(() => undefined);
+    }
+
+    await markPaymentFailed(orderCodeBigInt);
+
+    await prisma.$transaction(async (tx) => {
+      await lockGymMember(tx, payment.userId);
+      const initLog = await tx.actionLog.findFirst({
+        where: {
+          action: 'WALK_IN_PAYOS_INIT',
+          details: { contains: `"orderCode":"${orderText}"` },
+        },
+      });
+      let accountCreated = false;
+      if (initLog?.details) {
+        try {
+          accountCreated = Boolean(JSON.parse(initLog.details)?.accountCreated);
+        } catch {
+          accountCreated = false;
+        }
+      }
+
+      if (accountCreated) {
+        const [otherActiveMemberships, otherPayments, bookings, groupBookings] = await Promise.all([
+          tx.membership.count({ where: { userId: payment.userId, status: { not: 'CANCELLED' } } }),
+          tx.payment.count({ where: { userId: payment.userId, status: { in: ['PAID', 'COMPLETED', 'PAID_REVIEW'] } } }),
+          tx.booking.count({ where: { memberId: payment.userId } }),
+          tx.groupClassBooking.count({ where: { userId: payment.userId } }),
+        ]);
+
+        if (otherActiveMemberships === 0 && otherPayments === 0 && bookings === 0 && groupBookings === 0) {
+          await tx.payment.deleteMany({ where: { userId: payment.userId } });
+          await tx.membership.deleteMany({ where: { userId: payment.userId } });
+          await tx.user.deleteMany({ where: { id: payment.userId } });
+        }
+      }
+
+      if (initLog) {
+        await tx.actionLog.deleteMany({ where: { id: initLog.id } });
+      }
+    });
+
+    emitPayosStatusUpdated(orderText, {
+      orderCode: orderText,
+      status: 'CANCELLED',
+      paid: false,
+      message: 'Đơn chuyển khoản PayOS đã bị hủy.',
+      staffId: payment.staffId,
+      userId: payment.userId,
+    });
+
+    return {
+      success: true,
+      message: 'Đã hủy đơn chuyển khoản PayOS. Bạn có thể chọn phương thức thanh toán khác.',
     };
   }
 

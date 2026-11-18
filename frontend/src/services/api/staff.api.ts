@@ -116,10 +116,10 @@ export interface LookupMemberResponse {
 export interface WalkInCustomerInput {
   fullName: string;
   phone: string;
-  email?: string;
+  email: string;
   packageId: number;
   consultantStaffId?: number;
-  paymentMethod: 'CASH' | 'POS';
+  paymentMethod: 'CASH' | 'PAYOS';
   amountPaid?: number;
   traceRefNo?: string;
 }
@@ -273,17 +273,19 @@ export const staffApi = {
       body: JSON.stringify(data)
     }),
 
-  // GIAI ĐOẠN 3: HỖ TRỢ THANH TOÁN TẠI QUẦY (Offline POS Fallback)
-  createMemberAccount: (data: { fullName: string; phone: string; email?: string }) =>
-    request<{ success: boolean; message: string; data: { member: { id: number; fullName: string; phone: string; email: string }; account: { created: boolean; loginEmail: string; temporaryPassword: string; mustChangePassword: boolean } } }>('/staff/members', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    }),
-
+  // GIAI ĐOẠN 3: ĐĂNG KÝ NHANH KHÁCH WALK-IN (TIỀN MẶT HOẶC PAYOS QR)
   walkInRegistration: (data: WalkInCustomerInput) =>
     request<{ success: boolean; message: string; data: any }>('/staff/pos/walk-in', {
       method: 'POST',
       body: JSON.stringify(data)
+    }),
+
+  getWalkInPayosStatus: (orderCode: string | number) =>
+    request<{ success: boolean; status?: string; paid?: boolean; message?: string; data: any }>(`/staff/pos/walk-in/${orderCode}/status`),
+
+  cancelWalkInPayos: (orderCode: string | number) =>
+    request<{ success: boolean; message?: string; data: any }>(`/staff/pos/walk-in/${orderCode}/cancel`, {
+      method: 'POST'
     }),
 
   getPendingPayments: (phone: string) =>

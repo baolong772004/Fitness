@@ -17,6 +17,7 @@ import {
   Save
 } from 'lucide-react';
 import { ApiSubscription } from '../../services/api';
+import { subscribePayosOrder } from '../../services/socket';
 import { MemberFitnessPanel } from './MemberFitnessPanel';
 
 interface SettingsPageProps {
@@ -55,6 +56,22 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   });
 
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [pendingRenewOrderCode, setPendingRenewOrderCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingRenewOrderCode) return;
+    return subscribePayosOrder(pendingRenewOrderCode, (payload) => {
+      const nextStatus = String(payload.status || '').toUpperCase();
+      if (payload.paid || nextStatus === 'PAID') {
+        soundEffects.playSuccessBeep();
+        setSaveSuccessMsg(payload.message || 'Thanh toán gia hạn PayOS thành công!');
+        setPendingRenewOrderCode(null);
+        api.subscriptions.getMySubscriptions().then(subs => setMySubscriptions(subs || [])).catch(() => undefined);
+      } else if (nextStatus === 'CANCELLED' || nextStatus === 'EXPIRED' || nextStatus === 'FAILED') {
+        setPendingRenewOrderCode(null);
+      }
+    });
+  }, [pendingRenewOrderCode]);
 
   // 3 mục "Gói tập & thẻ hội viên", "Lịch tập của tôi", "PT & Tiến độ" CHỈ hiển thị với role member
   const isMember = (() => {
@@ -138,6 +155,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const renewSubscription = async (subscriptionId: number, packageId: number) => {
     try {
       const result = await api.subscriptions.renewSubscription({ subscriptionId, packageId });
+      if (result.data?.orderCode) {
+        setPendingRenewOrderCode(String(result.data.orderCode));
+      }
       if (result.data.checkoutUrl) window.open(result.data.checkoutUrl, '_blank');
       else alert(`Đã tạo yêu cầu gia hạn #${result.data.orderCode}.`);
     } catch (err: any) {

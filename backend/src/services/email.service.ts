@@ -119,3 +119,121 @@ export async function sendOtpEmail(payload: OtpEmailPayload): Promise<{ delivery
 
   return { delivery: 'smtp' };
 }
+
+export interface WalkInEmailPayload {
+  to: string;
+  fullName: string;
+  packageName: string;
+  startDate: Date;
+  endDate: Date;
+  isQueued: boolean;
+  amount: number;
+  paymentMethod: string;
+  transactionNo: string;
+  accountCreated: boolean;
+  temporaryPassword?: string | null;
+  mustChangePassword?: boolean;
+}
+
+export interface WalkInEmailResult {
+  to: string;
+  sent: boolean;
+  delivery: 'smtp' | 'console' | 'skipped' | 'failed';
+  reason?: string;
+}
+
+export async function sendWalkInNotificationEmail(payload: WalkInEmailPayload): Promise<WalkInEmailResult> {
+  const to = payload.to.trim().toLowerCase();
+  if (!to || to.endsWith('@gymfitness.local') || to.endsWith('.invalid')) {
+    return {
+      to,
+      sent: false,
+      delivery: 'skipped',
+      reason: 'Email không phải địa chỉ nhận thư thực tế.',
+    };
+  }
+
+  const startStr = payload.startDate.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  const endStr = payload.endDate.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  const amountStr = `${Number(payload.amount).toLocaleString('vi-VN')} đ`;
+  const subject = `[Aura Fitness] Xác nhận đăng ký gói ${payload.packageName}`;
+
+  const accountLineText = payload.accountCreated && payload.temporaryPassword
+    ? `Tài khoản đăng nhập: ${to}\nMật khẩu tạm thời: ${payload.temporaryPassword}\nLưu ý đăng nhập lần đầu (Web hoặc Mobile App): Bạn cần xác thực mã OTP gửi về email, sau đó bắt buộc đổi mật khẩu mới.`
+    : payload.mustChangePassword
+      ? `Email đăng nhập: ${to} (vui lòng hoàn tất xác thực OTP và đổi mật khẩu mới khi đăng nhập)`
+      : `Email đăng nhập: ${to} (sử dụng mật khẩu hiện tại của bạn)`;
+
+  const text = [
+    `Xin chào ${payload.fullName},`,
+    '',
+    `Cảm ơn bạn đã đăng ký gói tập [${payload.packageName}] tại Aura Fitness Club.`,
+    `Trạng thái gói: ${payload.isQueued ? 'Đang xếp hàng chờ kích hoạt' : 'Đã kích hoạt (ACTIVE)'}`,
+    `Thời hạn sử dụng: ${startStr} – ${endStr}`,
+    `Thanh toán: ${amountStr} (${payload.paymentMethod}) · Mã giao dịch: ${payload.transactionNo}`,
+    '',
+    accountLineText,
+    '',
+    'Hẹn gặp lại bạn tại phòng tập!',
+    'Aura Fitness Club',
+  ].join('\n');
+
+  const accountHtml = payload.accountCreated && payload.temporaryPassword
+    ? `
+      <p style="margin: 0 0 6px; font-size: 13px;"><strong>Email đăng nhập:</strong> ${escapeHtml(to)}</p>
+      <p style="margin: 0 0 6px; font-size: 13px;"><strong>Mật khẩu tạm thời:</strong> <span style="font-family: monospace; font-size: 15px; font-weight: bold;">${escapeHtml(payload.temporaryPassword)}</span></p>
+      <p style="margin: 0; font-size: 12px; color: #9c4a2e;">* Ở lần đăng nhập đầu tiên (trên Web hoặc Mobile App), bạn bắt buộc phải <strong>xác thực OTP qua email này</strong> và <strong>đổi mật khẩu mới</strong>.</p>
+    `
+    : `<p style="margin: 0; font-size: 13px;"><strong>Email đăng nhập:</strong> ${escapeHtml(to)} (${payload.mustChangePassword ? 'vui lòng hoàn tất xác thực OTP và đổi mật khẩu khi đăng nhập' : 'sử dụng mật khẩu hiện tại của bạn'}).</p>`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #eadfd7; border-radius: 14px; background: #fffdfb; color: #2b211b;">
+      <p style="margin: 0 0 8px; font-size: 11px; letter-spacing: 2px; font-weight: bold; color: #9c6b4e;">AURA FITNESS CLUB</p>
+      <h2 style="margin: 0 0 14px; font-size: 20px; color: #2b211b;">Chào mừng ${escapeHtml(payload.fullName)}!</h2>
+      <p style="margin: 0 0 14px; font-size: 14px; line-height: 1.5;">Gói tập <strong>${escapeHtml(payload.packageName)}</strong> của bạn đã được ghi nhận tại quầy lễ tân.</p>
+      <div style="margin: 16px 0; padding: 14px 16px; background: #f8f1eb; border-radius: 10px; font-size: 13px; line-height: 1.7;">
+        <div><strong>Trạng thái:</strong> ${payload.isQueued ? 'Chờ kích hoạt (nối tiếp gói hiện tại)' : 'Đang hoạt động (ACTIVE)'}</div>
+        <div><strong>Thời hạn:</strong> ${escapeHtml(startStr)} – ${escapeHtml(endStr)}</div>
+        <div><strong>Thanh toán:</strong> ${escapeHtml(amountStr)} (${escapeHtml(payload.paymentMethod)}) · Mã GD: ${escapeHtml(payload.transactionNo)}</div>
+      </div>
+      <div style="margin: 16px 0; padding: 14px 16px; border: 1px dashed #c89f84; border-radius: 10px; background: #ffffff;">
+        ${accountHtml}
+      </div>
+      <p style="margin: 0; font-size: 12px; color: #8c7a70;">Chúc bạn có những buổi tập hiệu quả tại Aura Fitness Club.</p>
+    </div>
+  `;
+
+  if (!isSmtpConfigured()) {
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        to,
+        sent: false,
+        delivery: 'failed',
+        reason: 'Dịch vụ gửi email (SMTP) chưa được cấu hình trên máy chủ.',
+      };
+    }
+    console.info(`[DEV WALK-IN EMAIL] To: ${to} | Package: ${payload.packageName} | TempPassword: ${payload.temporaryPassword ?? '(existing)'}`);
+    return { to, sent: true, delivery: 'console' };
+  }
+
+  try {
+    const from = process.env.SMTP_FROM || `"Aura Fitness" <${process.env.SMTP_USER}>`;
+    const transporter = getTransporter();
+    await transporter.sendMail({
+      from,
+      to,
+      subject,
+      text,
+      html,
+    });
+    return { to, sent: true, delivery: 'smtp' };
+  } catch (error: any) {
+    console.error('Lỗi gửi email thông báo Walk-in:', error);
+    return {
+      to,
+      sent: false,
+      delivery: 'failed',
+      reason: error?.message || 'Không thể gửi email qua máy chủ SMTP.',
+    };
+  }
+}

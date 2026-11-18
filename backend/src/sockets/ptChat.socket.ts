@@ -9,6 +9,7 @@ let chatIo: Server | null = null;
 
 export const ptChatRoom = (bookingId: number) => `pt-booking:${bookingId}`;
 const ptChatPairRoom = (memberId: number, coachId: number) => `pt-pair:${memberId}:${coachId}`;
+export const payosOrderRoom = (orderCode: string | bigint | number) => `payos:order:${String(orderCode)}`;
 
 export function configurePtChatSocket(httpServer: HttpServer) {
   const io = new Server(httpServer, { cors: { origin: '*' } });
@@ -22,10 +23,11 @@ export function configurePtChatSocket(httpServer: HttpServer) {
       if (!Number.isSafeInteger(payload.userId) || !payload.userId) throw new Error('Token không hợp lệ.');
       const user = await prisma.user.findUnique({
         where: { id: payload.userId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, role: true },
       });
       if (!user || user.status !== 'ACTIVE') throw new Error('Tài khoản không còn hoạt động.');
       socket.data.userId = user.id;
+      socket.data.role = user.role;
       next();
     } catch {
       next(new Error('Phiên đăng nhập không hợp lệ.'));
@@ -85,9 +87,61 @@ export function configurePtChatSocket(httpServer: HttpServer) {
         socket.leave(ptChatPairRoom(memberId, coachId));
       }
     });
+
+    socket.on('payos:join', async (orderCode: unknown, acknowledge?: (result: { ok: boolean; error?: string }) => void) => {
+      try {
+        const raw = String(orderCode ?? '').trim();
+        if (!/^\d+$/.test(raw)) throw new Error('Mã đơn PayOS không hợp lệ.');
+        const payment = await prisma.payment.findUnique({
+          where: { orderCode: BigInt(raw) },
+          select: { userId: true, staffId: true },
+        });
+        if (!payment) throw new Error('Không tìm thấy đơn thanh toán.');
+        const isStaffOrAdmin = ['ADMIN', 'STAFF'].includes(String(socket.data.role || ''));
+        if (!isStaffOrAdmin && payment.userId !== socket.data.userId && payment.staffId !== socket.data.userId) {
+          throw new Error('Không có quyền theo dõi đơn thanh toán này.');
+        }
+        await socket.join(payosOrderRoom(raw));
+        acknowledge?.({ ok: true });
+      } catch (error) {
+        acknowledge?.({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Không thể theo dõi đơn thanh toán.',
+        });
+      }
+    });
+
+    socket.on('payos:leave', (orderCode: unknown) => {
+      const raw = String(orderCode ?? '').trim();
+      if (/^\d+$/.test(raw)) {
+        socket.leave(payosOrderRoom(raw));
+      }
+    });
   });
 
   return io;
+}
+
+export function emitPayosStatusUpdated(
+  orderCode: string | bigint | number,
+  payload: {
+    orderCode: string;
+    status: string;
+    paid: boolean;
+    message?: string;
+    userId?: number | null;
+    staffId?: number | null;
+    data?: unknown;
+  }
+) {
+  const room = payosOrderRoom(orderCode);
+  chatIo?.to(room).emit('payos:status', payload);
+  if (payload.staffId) {
+    chatIo?.to(`user:${payload.staffId}`).emit('payos:status', payload);
+  }
+  if (payload.userId) {
+    chatIo?.to(`user:${payload.userId}`).emit('payos:status', payload);
+  }
 }
 
 export function emitPtChatMessage(memberId: number, coachId: number, message: unknown) {

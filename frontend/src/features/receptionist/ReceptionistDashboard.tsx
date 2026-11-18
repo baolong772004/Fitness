@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Member, PackagePlan, Coach } from '../../types';
 import { api, tokenStorage, EquipmentItem, OperationalNoteItem, ShiftSummaryData } from '../../services/api';
+import { createAuthorizedSocket, PayosStatusEvent, subscribePayosOrder } from '../../services/socket';
 import { soundEffects } from '../../services/audioService';
 import { toast } from '@/components/common/ToastNotification';
 import { WebcamQrScanner } from '@/components/common/WebcamQrScanner';
@@ -51,6 +52,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
 import { StatCard, StaffPage, Field, PageHeader } from '@/components/staff/StaffKit';
 
 interface ReceptionistDashboardProps {
@@ -107,15 +116,20 @@ interface StaffConsultant {
     email: '',
     packageId: 0,
     consultantStaffId: 0,
-    paymentMethod: 'CASH' as 'CASH' | 'POS',
+    paymentMethod: 'CASH' as 'CASH' | 'PAYOS',
     amountPaid: '' as string,
     traceRefNo: ''
   });
   const [walkInSuccessData, setWalkInSuccessData] = useState<any | null>(null);
   const [walkInSubmitting, setWalkInSubmitting] = useState(false);
-  const [memberAccountForm, setMemberAccountForm] = useState({ fullName: '', phone: '', email: '' });
-  const [memberAccountResult, setMemberAccountResult] = useState<{ member: { fullName: string; phone: string }; account: { loginEmail: string; temporaryPassword: string } } | null>(null);
-  const [memberAccountSubmitting, setMemberAccountSubmitting] = useState(false);
+  const [walkInPayOsPending, setWalkInPayOsPending] = useState<{
+    orderCode: string;
+    amount: number;
+    qrCodeImage: string | null;
+    checkoutUrl: string;
+  } | null>(null);
+  const [walkInPayOsChecking, setWalkInPayOsChecking] = useState(false);
+  const [walkInPayOsCancelling, setWalkInPayOsCancelling] = useState(false);
 
   // 3.2 Hóa đơn chờ
   const [pendingPhoneSearch, setPendingPhoneSearch] = useState('');
@@ -469,31 +483,143 @@ interface StaffConsultant {
   // =========================================================================
 
   // 3.1 Khách Walk-in
-  const handleCreateMemberAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (memberAccountSubmitting) return;
-    setMemberAccountSubmitting(true);
-    setMemberAccountResult(null);
+  const applyWalkInPayOsPaid = async (paidData: any) => {
+    setWalkInPayOsPending(null);
+    soundEffects.playSuccessBeep();
+    setWalkInSuccessData(paidData);
+    toast.success('Thanh toán PayOS thành công! Gói Walk-in đã được kích hoạt.', 'Walk-in POS');
+    const shiftRes = await api.staff.getCurrentShift();
+    if (shiftRes?.data) setShiftSummary(shiftRes.data);
+  };
+
+  const isWalkInStatusPaid = (statusRes: any): boolean => {
+    const status = String(statusRes?.status || statusRes?.data?.status || '').toUpperCase();
+    return Boolean(
+      statusRes?.paid ||
+      statusRes?.data?.paid ||
+      status === 'PAID' ||
+      (statusRes?.success && statusRes?.data?.membership)
+    );
+  };
+
+  useEffect(() => {
+    if (!walkInPayOsPending?.orderCode) return;
+    let active = true;
+    let handled = false;
+    const orderCode = walkInPayOsPending.orderCode;
+
+    const finalizePaidOnce = async (paidData: any) => {
+      if (!active || handled) return;
+      handled = true;
+      await applyWalkInPayOsPaid(paidData);
+    };
+
+    const unsubscribeSocket = subscribePayosOrder(orderCode, async (payload: PayosStatusEvent) => {
+      if (!active || handled) return;
+      const nextStatus = String(payload?.status || '').toUpperCase();
+      if (payload?.paid || nextStatus === 'PAID') {
+        if (payload.data?.membership) {
+          await finalizePaidOnce(payload.data);
+          return;
+        }
+        try {
+          const latest = await api.staff.getWalkInPayosStatus(orderCode);
+          if (isWalkInStatusPaid(latest)) {
+            await finalizePaidOnce(latest.data);
+          }
+        } catch {
+          // Polling dự phòng sẽ thử lại ngay sau đó
+        }
+        return;
+      }
+      if (nextStatus === 'CANCELLED' || nextStatus === 'FAILED' || nextStatus === 'EXPIRED') {
+        handled = true;
+        setWalkInPayOsPending(null);
+        toast.warning(payload?.message || 'Giao dịch QR PayOS đã bị hủy hoặc hết hạn.');
+        return;
+      }
+      if (nextStatus === 'PAID_REVIEW') {
+        handled = true;
+        setWalkInPayOsPending(null);
+        toast.warning(payload?.message || 'Giao dịch cần hỗ trợ kiểm tra đối soát.');
+      }
+    });
+
+    const timer = window.setInterval(async () => {
+      try {
+        const statusRes = await api.staff.getWalkInPayosStatus(orderCode);
+        if (!active || handled) return;
+        const status = String(statusRes?.status || statusRes?.data?.status || '').toUpperCase();
+        if (isWalkInStatusPaid(statusRes)) {
+          await finalizePaidOnce(statusRes.data);
+        } else if (status === 'CANCELLED' || status === 'FAILED' || status === 'EXPIRED') {
+          handled = true;
+          setWalkInPayOsPending(null);
+          toast.warning(statusRes?.message || 'Giao dịch QR PayOS đã bị hủy hoặc hết hạn.');
+        } else if (status === 'PAID_REVIEW') {
+          handled = true;
+          setWalkInPayOsPending(null);
+          toast.warning(statusRes?.message || 'Giao dịch cần hỗ trợ kiểm tra đối soát.');
+        }
+      } catch {
+        // Bỏ qua lỗi tạm thời khi tự động polling
+      }
+    }, 4000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      unsubscribeSocket();
+    };
+  }, [walkInPayOsPending?.orderCode]);
+
+  const handleReloadWalkInPayos = async () => {
+    if (!walkInPayOsPending?.orderCode || walkInPayOsChecking) return;
+    setWalkInPayOsChecking(true);
     try {
-      const res = await api.staff.createMemberAccount({
-        fullName: memberAccountForm.fullName.trim(),
-        phone: memberAccountForm.phone.trim(),
-        email: memberAccountForm.email.trim() || undefined
-      });
-      setMemberAccountResult(res.data);
-      setWalkInForm(current => ({ ...current, fullName: res.data.member.fullName, phone: res.data.member.phone, email: res.data.account.loginEmail }));
-      toast.success('Đã tạo tài khoản mới. Hãy bàn giao thông tin đăng nhập cho khách.', 'Tài khoản hội viên');
+      const statusRes = await api.staff.getWalkInPayosStatus(walkInPayOsPending.orderCode);
+      const status = String(statusRes?.status || statusRes?.data?.status || '').toUpperCase();
+      if (isWalkInStatusPaid(statusRes)) {
+        await applyWalkInPayOsPaid(statusRes.data);
+      } else if (status === 'CANCELLED' || status === 'FAILED' || status === 'EXPIRED') {
+        setWalkInPayOsPending(null);
+        toast.warning(statusRes?.message || 'Giao dịch PayOS đã bị hủy hoặc hết hạn.');
+      } else if (status === 'PAID_REVIEW') {
+        setWalkInPayOsPending(null);
+        toast.warning(statusRes?.message || 'Giao dịch cần hỗ trợ kiểm tra đối soát.');
+      } else {
+        toast.info(statusRes?.message || 'Chưa nhận được thanh toán. Vui lòng đợi khách quét mã rồi bấm Reload lại.');
+      }
     } catch (err: any) {
-      toast.error(err.message, 'Không thể tạo tài khoản');
+      toast.error(err.message || 'Không thể kiểm tra trạng thái PayOS.');
     } finally {
-      setMemberAccountSubmitting(false);
+      setWalkInPayOsChecking(false);
+    }
+  };
+
+  const handleCancelWalkInPayos = async () => {
+    if (!walkInPayOsPending?.orderCode || walkInPayOsCancelling) return;
+    setWalkInPayOsCancelling(true);
+    try {
+      await api.staff.cancelWalkInPayos(walkInPayOsPending.orderCode);
+      setWalkInPayOsPending(null);
+      toast.info('Đã hủy đơn QR PayOS. Bạn có thể chọn lại phương thức thanh toán.');
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể hủy đơn PayOS.');
+    } finally {
+      setWalkInPayOsCancelling(false);
     }
   };
 
   const handleWalkInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walkInForm.fullName || !walkInForm.phone || !walkInForm.packageId) {
-      toast.warning('Vui lòng điền đầy đủ Họ tên, SĐT và Gói tập.');
+    const trimmedEmail = walkInForm.email.trim().toLowerCase();
+    if (!walkInForm.fullName.trim() || !walkInForm.phone.trim() || !trimmedEmail || !walkInForm.packageId) {
+      toast.warning('Vui lòng điền đầy đủ Họ tên, SĐT, Email và Gói tập.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      toast.warning('Email liên hệ không đúng định dạng.');
       return;
     }
 
@@ -502,15 +628,26 @@ interface StaffConsultant {
     setWalkInSuccessData(null);
     try {
       const res = await api.staff.walkInRegistration({
-        fullName: walkInForm.fullName,
-        phone: walkInForm.phone,
-        email: walkInForm.email || undefined,
+        fullName: walkInForm.fullName.trim(),
+        phone: walkInForm.phone.trim(),
+        email: trimmedEmail,
         packageId: Number(walkInForm.packageId),
         consultantStaffId: walkInForm.consultantStaffId ? Number(walkInForm.consultantStaffId) : undefined,
         paymentMethod: walkInForm.paymentMethod,
-        amountPaid: walkInForm.amountPaid ? Number(walkInForm.amountPaid) : undefined,
+        amountPaid: walkInForm.paymentMethod === 'CASH' && walkInForm.amountPaid ? Number(walkInForm.amountPaid) : undefined,
         traceRefNo: walkInForm.traceRefNo || undefined
       });
+
+      if (res.data?.paymentPending) {
+        setWalkInPayOsPending({
+          orderCode: String(res.data.orderCode),
+          amount: Number(res.data.amount || walkInPkgPrice),
+          qrCodeImage: res.data.qrCodeImage || null,
+          checkoutUrl: res.data.checkoutUrl || ''
+        });
+        toast.info('Đã tạo mã QR PayOS. Vui lòng đưa khách hàng quét mã để thanh toán.', 'Thanh toán PayOS');
+        return;
+      }
 
       soundEffects.playSuccessBeep();
       setWalkInSuccessData(res.data);
@@ -1376,20 +1513,18 @@ interface StaffConsultant {
                       </Field>
                     </div>
 
-                    <Field label="Email liên hệ (Tùy chọn, tự sinh nếu để trống)">
+                    <Field label="Email liên hệ *">
                       <Input
                         type="email"
+                        required
                         placeholder="nguyenvana@gmail.com"
                         value={walkInForm.email}
                         onChange={(e) => setWalkInForm({ ...walkInForm, email: e.target.value })}
                       />
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        Mật khẩu tạm (<strong className="text-foreground">Gym@123456</strong>) và xác nhận gói tập sẽ gửi về Email này sau khi thanh toán.
+                      </p>
                     </Field>
-
-                    <div className="rounded-xl border border-primary/25 bg-primary/5 p-3 text-sm">
-                      <div className="flex items-center gap-2 font-bold text-primary"><Lock className="size-4" /> Tài khoản đăng nhập cho khách mới</div>
-                      <p className="mt-1 text-muted-foreground">Nếu số điện thoại chưa có tài khoản, hệ thống sẽ tạo tài khoản mới với mật khẩu tạm <strong>123456</strong>. Khách phải đổi mật khẩu ngay sau lần đăng nhập đầu. Nếu đã có tài khoản, mật khẩu hiện tại được giữ nguyên.</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Nên nhập email thật để khách dễ đăng nhập và khôi phục mật khẩu; nếu bỏ trống, email đăng nhập sẽ được tự sinh và hiển thị sau khi tạo.</p>
-                    </div>
 
                     {/* Chọn gói tập - Riêng 1 dòng đầy đủ không gian */}
                     <Field label="Chọn gói tập (Membership / PT) *">
@@ -1469,24 +1604,60 @@ interface StaffConsultant {
 
                     <div className="grid sm:grid-cols-2 gap-4 items-end">
                       <Field label="Hình thức thu tiền *">
-                        <div className="flex h-9 items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 text-sm font-semibold text-primary">
-                          <DollarSign className="size-4 shrink-0" />
-                          <span>Tiền mặt tại quầy (Cash)</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setWalkInForm({ ...walkInForm, paymentMethod: 'CASH' })}
+                            className={`flex h-9 items-center justify-center rounded-md border px-2.5 text-xs font-semibold transition cursor-pointer ${
+                              walkInForm.paymentMethod === 'CASH'
+                                ? 'border-primary bg-primary/15 text-primary'
+                                : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                            }`}
+                          >
+                            <span>Tiền mặt</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setWalkInForm({ ...walkInForm, paymentMethod: 'PAYOS', amountPaid: '' })}
+                            className={`flex h-9 items-center justify-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition cursor-pointer ${
+                              walkInForm.paymentMethod === 'PAYOS'
+                                ? 'border-primary bg-primary/15 text-primary'
+                                : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                            }`}
+                          >
+                            <QrCode className="size-4 shrink-0" />
+                            <span>Chuyển khoản QR</span>
+                          </button>
                         </div>
                       </Field>
 
-                      <Field label="Số tiền khách đưa (đ)">
-                        <Input
-                          type="number"
-                          placeholder={walkInPkgPrice ? String(walkInPkgPrice) : '600000'}
-                          value={walkInForm.amountPaid}
-                          onChange={(e) => setWalkInForm({ ...walkInForm, amountPaid: e.target.value })}
-                        />
-                      </Field>
+                      {walkInForm.paymentMethod === 'CASH' ? (
+                        <Field label="Số tiền khách đưa (đ)">
+                          <Input
+                            type="number"
+                            placeholder={walkInPkgPrice ? String(walkInPkgPrice) : '600000'}
+                            value={walkInForm.amountPaid}
+                            onChange={(e) => setWalkInForm({ ...walkInForm, amountPaid: e.target.value })}
+                          />
+                        </Field>
+                      ) : (
+                        <div className="flex h-9 items-center gap-2 rounded-md border border-primary/25 bg-primary/5 px-3 text-xs font-medium text-primary">
+                          <QrCode className="size-4 shrink-0" />
+                          <span>Hệ thống sẽ hiển thị mã QR PayOS để khách quét</span>
+                        </div>
+                      )}
                     </div>
 
                     <Button type="submit" size="lg" disabled={walkInSubmitting} className="w-full font-bold bg-primary text-primary-foreground mt-2 cursor-pointer">
-                      <Check className="size-5" /> {walkInSubmitting ? 'Đang xử lý...' : 'Tạo Tài Khoản Nếu Chưa Có & Kích Hoạt Gói'}
+                      {walkInForm.paymentMethod === 'PAYOS' ? (
+                        <>
+                          <QrCode className="size-5" /> {walkInSubmitting ? 'Đang tạo mã QR...' : 'Tạo Mã QR Thanh Toán PayOS'}
+                        </>
+                      ) : (
+                        <>
+                          <Check className="size-5" /> {walkInSubmitting ? 'Đang xử lý...' : 'Xác Nhận Thu Tiền & Kích Hoạt Gói'}
+                        </>
+                      )}
                     </Button>
                   </form>
                 </CardContent>
@@ -1494,28 +1665,6 @@ interface StaffConsultant {
 
               {/* Tóm tắt phiếu thu Walk-in */}
               <div className="grid content-start gap-4">
-                <Card className="border-primary/30">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2"><UserPlus className="size-4 text-primary" /> Tạo tài khoản hội viên riêng</CardTitle>
-                    <CardDescription>Dùng khi khách chưa có tài khoản và chưa cần mua gói tập ngay.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <form onSubmit={handleCreateMemberAccount} className="grid gap-3">
-                      <Field label="Họ và tên *"><Input required value={memberAccountForm.fullName} onChange={e => { setMemberAccountResult(null); setMemberAccountForm({ ...memberAccountForm, fullName: e.target.value }); }} /></Field>
-                      <Field label="Số điện thoại *"><Input required type="tel" value={memberAccountForm.phone} onChange={e => { setMemberAccountResult(null); setMemberAccountForm({ ...memberAccountForm, phone: e.target.value }); }} /></Field>
-                      <Field label="Email (tùy chọn)"><Input type="email" value={memberAccountForm.email} onChange={e => { setMemberAccountResult(null); setMemberAccountForm({ ...memberAccountForm, email: e.target.value }); }} /></Field>
-                      <p className="text-xs text-muted-foreground">Mật khẩu tạm: <strong>123456</strong>. Tài khoản mới phải đổi mật khẩu khi đăng nhập. Không thay đổi tài khoản đã tồn tại.</p>
-                      <Button type="submit" disabled={memberAccountSubmitting} className="w-full cursor-pointer">{memberAccountSubmitting ? 'Đang tạo...' : 'Tạo tài khoản mới'}</Button>
-                    </form>
-                    {memberAccountResult && <div className="mt-4 rounded-lg border border-success/50 bg-success/10 p-3 text-xs">
-                      <strong className="block mb-1">Đã tạo cho {memberAccountResult.member.fullName}</strong>
-                      <p>Email đăng nhập: <span className="font-mono break-all">{memberAccountResult.account.loginEmail}</span></p>
-                      <p>Mật khẩu tạm: <strong className="font-mono">{memberAccountResult.account.temporaryPassword}</strong></p>
-                      <p>Hãy hướng dẫn khách đổi mật khẩu ngay sau khi đăng nhập.</p>
-                    </div>}
-                  </CardContent>
-                </Card>
-
                 <Card className="border-primary/30 bg-muted/10">
                   <CardHeader className="pb-3 border-b">
                     <CardTitle className="text-sm flex items-center gap-2">
@@ -1543,22 +1692,101 @@ interface StaffConsultant {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Hình thức:</span>
-                      <Badge variant="outline" className="border-primary/40 text-primary font-medium">Tiền mặt tại quầy</Badge>
+                      <Badge variant="outline" className="border-primary/40 text-primary font-medium">
+                        {walkInForm.paymentMethod === 'PAYOS' ? 'Chuyển khoản PayOS QR' : 'Tiền mặt tại quầy'}
+                      </Badge>
                     </div>
 
-                    <div className="flex justify-between pt-2 border-t">
-                      <span className="text-muted-foreground">Tiền khách đưa:</span>
-                      <span className="font-mono font-semibold">{walkInCashGiven.toLocaleString('vi-VN')} đ</span>
-                    </div>
-                    <div className="flex justify-between items-center bg-primary/10 p-2.5 rounded-lg border border-primary/20">
-                      <span className="font-bold text-primary">Tiền thừa thối khách:</span>
-                      <strong className="font-bold text-primary text-base font-mono">{walkInChange.toLocaleString('vi-VN')} đ</strong>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      * Doanh thu {walkInPkgPrice.toLocaleString('vi-VN')} đ sẽ được tự động ghi nhận vào quỹ tiền mặt ca trực hiện tại.
-                    </p>
+                    {walkInForm.paymentMethod === 'CASH' ? (
+                      <>
+                        <div className="flex justify-between pt-2 border-t">
+                          <span className="text-muted-foreground">Tiền khách đưa:</span>
+                          <span className="font-mono font-semibold">{walkInCashGiven.toLocaleString('vi-VN')} đ</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-primary/10 p-2.5 rounded-lg border border-primary/20">
+                          <span className="font-bold text-primary">Tiền thừa thối khách:</span>
+                          <strong className="font-bold text-primary text-base font-mono">{walkInChange.toLocaleString('vi-VN')} đ</strong>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          * Doanh thu {walkInPkgPrice.toLocaleString('vi-VN')} đ sẽ được tự động ghi nhận vào quỹ tiền mặt ca trực hiện tại.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground pt-2 border-t">
+                        * Sau khi khách hoàn tất quét QR PayOS, gói tập sẽ tự động kích hoạt và gửi thông tin tài khoản qua Email.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
+
+                {/* Form QR-only PayOS cho khách Walk-in */}
+                <Dialog
+                  open={Boolean(walkInPayOsPending)}
+                  onOpenChange={() => {
+                    // Chỉ đóng qua nút Hủy hoặc khi thanh toán thành công
+                  }}
+                >
+                  <DialogContent
+                    showCloseButton={false}
+                    onInteractOutside={(e) => e.preventDefault()}
+                    onEscapeKeyDown={(e) => e.preventDefault()}
+                    className="sm:max-w-sm text-center"
+                  >
+                    <DialogHeader className="items-center text-center sm:text-center">
+                      <DialogTitle className="flex items-center gap-2 text-base">
+                        <QrCode className="size-5 text-primary" /> Quét Mã QR PayOS
+                      </DialogTitle>
+                      <DialogDescription className="text-xs">
+                        {walkInPayOsPending
+                          ? `Số tiền: ${walkInPayOsPending.amount.toLocaleString('vi-VN')} đ · Mã đơn #${walkInPayOsPending.orderCode}`
+                          : ''}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    {walkInPayOsPending?.qrCodeImage ? (
+                      <div className="flex flex-col items-center justify-center rounded-xl border bg-white p-4">
+                        <img
+                          src={walkInPayOsPending.qrCodeImage}
+                          alt="PayOS QR Code"
+                          className="h-64 w-64 object-contain"
+                        />
+                      </div>
+                    ) : walkInPayOsPending?.checkoutUrl ? (
+                      <div className="rounded-xl border bg-muted/20 p-4 text-xs">
+                        <p className="text-muted-foreground mb-2">Không tạo được ảnh QR trực tiếp, vui lòng mở link thanh toán PayOS:</p>
+                        <a
+                          href={walkInPayOsPending.checkoutUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-semibold text-primary underline break-all"
+                        >
+                          Mở cổng thanh toán PayOS
+                        </a>
+                      </div>
+                    ) : null}
+
+                    <DialogFooter className="grid grid-cols-2 gap-2 sm:justify-stretch">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={walkInPayOsCancelling || walkInPayOsChecking}
+                        onClick={handleCancelWalkInPayos}
+                        className="w-full cursor-pointer border-destructive/40 text-destructive hover:bg-destructive/10"
+                      >
+                        <X className="size-4" /> {walkInPayOsCancelling ? 'Đang hủy...' : 'Hủy'}
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={walkInPayOsChecking || walkInPayOsCancelling}
+                        onClick={handleReloadWalkInPayos}
+                        className="w-full cursor-pointer font-semibold"
+                      >
+                        <RefreshCw className={`size-4 ${walkInPayOsChecking ? 'animate-spin' : ''}`} />{' '}
+                        {walkInPayOsChecking ? 'Đang kiểm tra...' : 'Reload'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
                 {walkInSuccessData && (
                   <Card className="border-success/50 bg-success/10 animate-in fade-in-50">
@@ -1574,12 +1802,22 @@ interface StaffConsultant {
                         <strong className="block mb-1">{walkInSuccessData.account?.created ? 'Tài khoản mới đã tạo' : 'Khách đã có tài khoản'}</strong>
                         <p>Email đăng nhập: <span className="font-mono break-all">{walkInSuccessData.account?.loginEmail || walkInSuccessData.member.email}</span></p>
                         {walkInSuccessData.account?.created
-                          ? <p>Mật khẩu tạm: <strong className="font-mono">123456</strong> · Bắt buộc đổi khi đăng nhập lần đầu.</p>
+                          ? <p>Mật khẩu tạm: <strong className="font-mono">{walkInSuccessData.account.temporaryPassword || 'Gym@123456'}</strong> · Bắt buộc đổi khi đăng nhập lần đầu.</p>
                           : <p>{walkInSuccessData.account?.mustChangePassword ? 'Tài khoản đã được tạo trước đó và vẫn cần đổi mật khẩu tạm.' : 'Mật khẩu của khách được giữ nguyên.'}</p>}
                       </div>
                       <div className="mt-2 p-2.5 rounded-lg bg-background border">
-                        <span className="font-bold block mb-1">Nội dung SMS để gửi hội viên:</span>
-                        <code className="text-[11px] text-primary block break-all">{walkInSuccessData.smsInvitation.messageText}</code>
+                        <span className="font-bold block mb-1">Thông báo qua Email:</span>
+                        {walkInSuccessData.emailNotification?.sent ? (
+                          <p className="text-success font-medium">
+                            Đã gửi email xác nhận &amp; thông tin tài khoản tới{' '}
+                            <span className="font-mono break-all">{walkInSuccessData.emailNotification.to}</span>
+                            {walkInSuccessData.emailNotification.delivery === 'console' ? ' (chế độ dev log)' : ''}.
+                          </p>
+                        ) : (
+                          <p className="text-muted-foreground">
+                            Chưa gửi email ({walkInSuccessData.emailNotification?.reason || 'Khách chưa cung cấp email hợp lệ'}). Vui lòng bàn giao trực tiếp thông tin đăng nhập cho khách.
+                          </p>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

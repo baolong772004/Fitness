@@ -13,6 +13,8 @@ import { reconcileGymMembershipStates, refreshGymMembershipStates } from '../ser
 import { lockGymMember } from '../services/gymMembershipLock.service.js';
 import { ptRenewalError, ptRenewalOptionMatchesBatch } from '../services/ptRenewal.service.js';
 import { activePaidGymMembershipWhere } from '../services/gymEntitlement.service.js';
+import { emitPayosStatusUpdated } from '../sockets/ptChat.socket.js';
+import { StaffService } from '../services/staff.service.js';
 
 
 export class PaymentController {
@@ -450,11 +452,13 @@ export class PaymentController {
         const result = await markPaymentPaid(orderCodeBigInt, paymentLinkInfo.amountPaid);
         if (result.result === 'AMOUNT_MISMATCH') {
           console.error(`PayOS amount mismatch for order ${orderCode}`);
+          emitPayosStatusUpdated(orderCode, { orderCode, status: 'PAID_REVIEW', paid: false, userId: payment.userId, staffId: payment.staffId, message: 'Số tiền PayOS xác nhận không khớp đơn hàng.' });
           return res.status(200).json({ success: false, status: 'PAID_REVIEW', message: 'Số tiền PayOS xác nhận không khớp đơn hàng. Đơn cần hỗ trợ xử lý; chưa cấp quyền gói.' });
         }
         if (result.result === 'NOT_FOUND') return res.status(404).json({ message: 'Không tìm thấy đơn thanh toán' });
 
         if (result.result === 'PAID_REVIEW' || result.result === 'ALREADY_PAID_REVIEW') {
+          emitPayosStatusUpdated(orderCode, { orderCode, status: 'PAID_REVIEW', paid: false, userId: payment.userId, staffId: payment.staffId, message: 'Đã nhận tiền nhưng đơn cần được kiểm tra.' });
           return res.status(200).json({
             success: false,
             status: 'PAID_REVIEW',
@@ -462,6 +466,7 @@ export class PaymentController {
           });
         }
 
+        emitPayosStatusUpdated(orderCode, { orderCode, status: 'PAID', paid: true, userId: payment.userId, staffId: payment.staffId, message: 'Thanh toán thành công' });
         return res.status(200).json({
           success: true,
           status: 'PAID',
@@ -471,6 +476,7 @@ export class PaymentController {
 
       if (paymentLinkInfo.status === 'CANCELLED' || paymentLinkInfo.status === 'EXPIRED') {
         await markPaymentFailed(orderCodeBigInt);
+        emitPayosStatusUpdated(orderCode, { orderCode, status: paymentLinkInfo.status, paid: false, userId: payment.userId, staffId: payment.staffId, message: 'Đơn hàng đã bị hủy hoặc hết hạn' });
       }
 
       return res.status(200).json({
@@ -511,21 +517,57 @@ export class PaymentController {
             return res.status(400).json({ success: false, message: 'Dữ liệu webhook không hợp lệ' });
           }
 
+          const orderCodeStr = String(webhookData.orderCode);
+          const paymentOwner = await prisma.payment.findUnique({
+            where: { orderCode: BigInt(webhookData.orderCode) },
+            select: { userId: true, staffId: true },
+          });
+
           const result = await markPaymentPaid(BigInt(webhookData.orderCode), webhookData.amount);
           if (result.result === 'AMOUNT_MISMATCH') {
             console.error(`PayOS webhook amount mismatch for order ${webhookData.orderCode}`);
+            emitPayosStatusUpdated(orderCodeStr, { orderCode: orderCodeStr, status: 'PAID_REVIEW', paid: false, userId: paymentOwner?.userId, staffId: paymentOwner?.staffId, message: 'Số tiền không khớp' });
             return res.status(200).json({ success: true, message: 'Đơn đã chuyển PAID_REVIEW do số tiền không khớp; chưa cấp quyền gói.' });
           }
           if (result.result === 'NOT_FOUND') {
             return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
           }
-          if (result.result === 'PAID_REVIEW') {
+          if (result.result === 'PAID_REVIEW' || result.result === 'ALREADY_PAID_REVIEW') {
             console.error(`Paid Gym renewal requires refund review for order ${webhookData.orderCode}`);
+            emitPayosStatusUpdated(orderCodeStr, { orderCode: orderCodeStr, status: 'PAID_REVIEW', paid: false, userId: paymentOwner?.userId, staffId: paymentOwner?.staffId, message: 'Đơn cần hỗ trợ kiểm tra' });
+          } else if (result.result === 'PAID' || result.result === 'ALREADY_PAID') {
+            const walkInResult = await StaffService.finalizeWalkInPayosPayment(BigInt(webhookData.orderCode)).catch((err) => {
+              console.error(`Walk-in PayOS email finalization error for order ${webhookData.orderCode}:`, err);
+              return null;
+            });
+            if (!walkInResult) {
+              emitPayosStatusUpdated(orderCodeStr, {
+                orderCode: orderCodeStr,
+                status: 'PAID',
+                paid: true,
+                userId: paymentOwner?.userId,
+                staffId: paymentOwner?.staffId,
+                message: 'Thanh toán PayOS thành công',
+              });
+            }
           }
         } else if (webhookData && (req.body.code !== '00' || req.body.success === false || req.body.desc === 'CANCELLED')) {
           // Bắt sự kiện người dùng hủy thanh toán hoặc thanh toán thất bại từ PayOS Webhook
           if (Number.isSafeInteger(webhookData.orderCode)) {
+            const orderCodeStr = String(webhookData.orderCode);
+            const paymentOwner = await prisma.payment.findUnique({
+              where: { orderCode: BigInt(webhookData.orderCode) },
+              select: { userId: true, staffId: true },
+            });
             await markPaymentFailed(BigInt(webhookData.orderCode));
+            emitPayosStatusUpdated(orderCodeStr, {
+              orderCode: orderCodeStr,
+              status: 'CANCELLED',
+              paid: false,
+              userId: paymentOwner?.userId,
+              staffId: paymentOwner?.staffId,
+              message: 'Giao dịch đã bị hủy hoặc thất bại',
+            });
             console.log(`PayOS webhook ghi nhận hủy/thất bại và đã giải phóng đơn hàng ${webhookData.orderCode}`);
           }
         }

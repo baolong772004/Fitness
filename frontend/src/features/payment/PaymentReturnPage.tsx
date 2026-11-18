@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
+import { subscribePayosOrder } from '../../services/socket';
 
 const terminalStatuses = new Set(['PAID', 'PAID_REVIEW', 'CANCELLED', 'EXPIRED', 'FAILED']);
 
@@ -16,6 +17,18 @@ export function PaymentReturnPage() {
 
     let active = true;
     let timer: number | undefined;
+
+    const unsubscribeSocket = subscribePayosOrder(orderCode, (payload) => {
+      if (!active) return;
+      const nextStatus = String(payload.status || '').toUpperCase();
+      if (!nextStatus) return;
+      setStatus(nextStatus);
+      setError(nextStatus === 'PAID_REVIEW' ? (payload.message || '') : '');
+      if (terminalStatuses.has(nextStatus) && timer !== undefined) {
+        window.clearInterval(timer);
+      }
+    });
+
     const check = async () => {
       try {
         const result = await api.payments.checkPaymentStatus(orderCode);
@@ -29,7 +42,11 @@ export function PaymentReturnPage() {
     };
     void check();
     timer = window.setInterval(() => { void check(); }, 5000);
-    return () => { active = false; if (timer !== undefined) window.clearInterval(timer); };
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearInterval(timer);
+      unsubscribeSocket();
+    };
   }, [orderCode]);
 
   const message = status === 'PAID'
