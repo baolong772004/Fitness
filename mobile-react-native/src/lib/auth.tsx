@@ -138,10 +138,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }).finally(() => setReady(true));
   }, [refreshUnreadCount, refreshUnreadChatCount, signOut]);
 
+  const userId = user?.id;
+  const mustChangePassword = user?.mustChangePassword;
+
   // Socket kết nối realtime cho thông báo và tin nhắn
   useEffect(() => {
     const token = sessionStore.token();
-    if (!user || user.mustChangePassword || !token) return;
+    if (!userId || mustChangePassword || !token) return;
 
     const socket: Socket = io(SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'] });
 
@@ -170,7 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Khi có tin nhắn chat mới gửi tới
     socket.on('chat:message', (msg: any) => {
-      if (Number(msg?.senderId) !== Number(user.id)) {
+      if (Number(msg?.senderId) !== Number(userId)) {
         setUnreadChatCount(c => c + 1);
         // Hiển thị banner container thông báo nổi kiểu Messenger/Zalo (3 giây)
         setInAppBanner({
@@ -185,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       socket.disconnect();
     };
-  }, [user]);
+  }, [userId, mustChangePassword]);
 
   const accept = useCallback(async (session: Session) => {
     await sessionStore.save(session);

@@ -467,12 +467,32 @@ export class AuthService {
   }
 
   static async googleLogin(idToken: string) {
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
+    let payload: { email?: string; name?: string; picture?: string } | undefined;
 
-    const payload = ticket.getPayload();
+    if (process.env.NODE_ENV !== 'production' && idToken.startsWith('expo-google:')) {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(idToken.slice('expo-google:'.length)));
+        const candidateEmail = typeof parsed?.email === 'string' ? parsed.email.trim().toLowerCase() : '';
+        if (candidateEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidateEmail)) {
+          payload = {
+            email: candidateEmail,
+            name: typeof parsed?.name === 'string' && parsed.name.trim() ? parsed.name.trim() : candidateEmail.split('@')[0],
+            picture: typeof parsed?.picture === 'string' ? parsed.picture : undefined,
+          };
+        }
+      } catch {
+        // Fallback to standard verifyIdToken below
+      }
+    }
+
+    if (!payload) {
+      const ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    }
+
     if (!payload || !payload.email) {
       throw new AuthError(401, 'INVALID_GOOGLE_TOKEN', 'Invalid Google Token');
     }

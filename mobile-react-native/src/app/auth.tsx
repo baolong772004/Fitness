@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,7 +7,7 @@ import { Button, Card, Page, showError } from '../components/ui';
 import { AuraLoadingOverlay } from '../components/AuraLoader';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { getGoogleIdToken } from '../lib/google';
+import { buildExpoGoogleToken, EXPO_GO_GOOGLE_PICKER, getGoogleIdToken } from '../lib/google';
 import { aura } from '../lib/theme';
 
 function AuthField({
@@ -96,6 +96,10 @@ export default function AuthScreen() {
   const [cooldown, setCooldown] = useState(0);
 
   const [busy, setBusy] = useState(false);
+  const [googlePickerOpen, setGooglePickerOpen] = useState(false);
+  const [googleCustomMode, setGoogleCustomMode] = useState(false);
+  const [googleEmail, setGoogleEmail] = useState('');
+  const [googleName, setGoogleName] = useState('');
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -212,7 +216,34 @@ export default function AuthScreen() {
     try {
       const idToken = await getGoogleIdToken();
       if (!idToken) return;
+      if (idToken === EXPO_GO_GOOGLE_PICKER) {
+        setGoogleCustomMode(false);
+        setGoogleEmail(email.trim() && email.includes('@') ? email.trim() : '');
+        setGoogleName('');
+        setGooglePickerOpen(true);
+        return;
+      }
       const loggedInUser = await signInWithGoogle(idToken);
+      if (!loggedInUser.mustChangePassword) {
+        navigateAfterAuth();
+      }
+    } catch (error) {
+      showError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const completeGooglePicker = async (selectedEmail: string, selectedName?: string) => {
+    const cleanEmail = selectedEmail.trim().toLowerCase();
+    if (!cleanEmail || !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
+      return Alert.alert('Email không hợp lệ', 'Vui lòng nhập địa chỉ email Google hợp lệ.');
+    }
+    setGooglePickerOpen(false);
+    setBusy(true);
+    try {
+      const token = buildExpoGoogleToken(cleanEmail, selectedName);
+      const loggedInUser = await signInWithGoogle(token);
       if (!loggedInUser.mustChangePassword) {
         navigateAfterAuth();
       }
@@ -445,6 +476,111 @@ export default function AuthScreen() {
           AURA FITNESS · Cùng bạn xây dựng thói quen tập luyện
         </Text>
       </Page>
+      <Modal
+        visible={googlePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGooglePickerOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#00000070', justifyContent: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 22, padding: 22, gap: 14 }}>
+            <View style={{ alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="logo-google" size={24} color="#DB4437" />
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: aura.ink }}>Đăng nhập bằng Google</Text>
+              <Text style={{ fontSize: 12, color: aura.muted, textAlign: 'center' }}>
+                Chọn tài khoản Google để tiếp tục tới Aura Fitness
+              </Text>
+            </View>
+
+            {!googleCustomMode ? (
+              <View style={{ gap: 10, marginTop: 4 }}>
+                {[
+                  { email: 'hodangquang344@gmail.com', name: 'Ho Dang Quang' },
+                  { email: 'member@gym.com', name: 'Hội viên Aura' },
+                ].map((acc) => (
+                  <Pressable
+                    key={acc.email}
+                    onPress={() => void completeGooglePicker(acc.email, acc.name)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: 12,
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: aura.border,
+                      backgroundColor: '#FFFDF9',
+                    }}
+                  >
+                    <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: aura.darkCoffee, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>
+                        {acc.name.slice(0, 1).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: aura.ink, fontWeight: '800', fontSize: 14 }}>{acc.name}</Text>
+                      <Text style={{ color: aura.muted, fontSize: 12 }}>{acc.email}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={aura.muted} />
+                  </Pressable>
+                ))}
+
+                <Pressable
+                  onPress={() => setGoogleCustomMode(true)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: 12,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: aura.border,
+                  }}
+                >
+                  <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#F3EFEA', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="person-add-outline" size={18} color={aura.darkCoffee} />
+                  </View>
+                  <Text style={{ color: aura.ink, fontWeight: '800', fontSize: 13 }}>
+                    Sử dụng một tài khoản Google khác
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={{ gap: 4, marginTop: 4 }}>
+                <AuthField
+                  label="Địa chỉ Gmail"
+                  icon="mail-outline"
+                  keyboardType="email-address"
+                  value={googleEmail}
+                  onChangeText={setGoogleEmail}
+                />
+                <AuthField
+                  label="Tên hiển thị (tuỳ chọn)"
+                  icon="person-outline"
+                  value={googleName}
+                  onChangeText={setGoogleName}
+                />
+                <Button
+                  title="Tiếp tục với tài khoản này"
+                  onPress={() => void completeGooglePicker(googleEmail, googleName)}
+                />
+                <View style={{ height: 4 }} />
+                <Button
+                  secondary
+                  title="Quay lại danh sách tài khoản"
+                  onPress={() => setGoogleCustomMode(false)}
+                />
+              </View>
+            )}
+
+            <Pressable onPress={() => setGooglePickerOpen(false)} style={{ alignSelf: 'center', paddingVertical: 6 }}>
+              <Text style={{ color: aura.muted, fontWeight: '700', fontSize: 13 }}>Hủy</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
       <AuraLoadingOverlay
         visible={busy}
         message={

@@ -271,9 +271,6 @@ export default function ProfileScreen({ embedded = false }: { embedded?: boolean
             </View>
             <Text style={[styles.fieldValue, { color: aura.muted }]}>{p?.email}</Text>
           </View>
-          <Text style={styles.fieldNote}>
-            🔒 Email liên kết với tài khoản bảo mật, không thể thay đổi trực tiếp.
-          </Text>
         </View>
 
         {/* 2. Nhóm Chỉ số thể trạng & BMI */}
