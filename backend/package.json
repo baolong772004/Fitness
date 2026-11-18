@@ -8,6 +8,7 @@
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push --skip-generate",
     "db:migrate": "prisma migrate deploy",
+    "seed:display-members": "node scripts/seedDisplayOnlyMembers.js",
     "start": "tsx src/server.js"
   },
   "dependencies": {
