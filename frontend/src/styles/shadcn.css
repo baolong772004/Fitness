@@ -90,4 +90,8 @@
   body.staff-ui [role="button"]:not([aria-disabled="true"]) {
     cursor: pointer;
   }
+  /* Prevent CSS Grid children (cards, tables, charts) from expanding past 1fr and getting clipped when the sidebar opens */
+  body.staff-ui .grid > * {
+    min-width: 0;
+  }
 }

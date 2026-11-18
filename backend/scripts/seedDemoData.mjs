@@ -1369,7 +1369,7 @@ async function main() {
 
   // Past booking for Tuan with PENDING_ADMIN PtAttendanceReview (for Admin PT Operations)
   const tuanReviewBooking = await createPtBooking({
-    member: members.tuan, coach: coachKhang, batch: null, dayOffset: -1, startHour: 17, status: 'CONFIRMED',
+    member: members.tuan, coach: coachKhang, batch: tuanAdv.batch, dayOffset: -1, startHour: 17, status: 'CONFIRMED',
   });
   if (prisma.ptAttendanceReview) {
     const rev = await prisma.ptAttendanceReview.create({

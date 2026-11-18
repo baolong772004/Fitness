@@ -53,16 +53,16 @@ interface PageHeaderProps {
 
 export function PageHeader({ icon: Icon, title, description, actions }: PageHeaderProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {Icon && (
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Icon className="size-5" />
           </div>
         )}
-        <div>
-          <h2 className="text-lg font-semibold leading-tight tracking-tight text-foreground">{title}</h2>
-          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold leading-tight tracking-tight text-foreground break-words">{title}</h2>
+          {description && <p className="text-sm text-muted-foreground break-words">{description}</p>}
         </div>
       </div>
       {actions}
@@ -81,5 +81,5 @@ export function Field({ label, children, className }: { label: string; children:
 
 /** Wrapper that gives every staff dashboard the same page padding / width. */
 export function StaffPage({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 p-6 min-w-0">{children}</div>
+  return <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 p-4 sm:p-6 min-w-0 [&>*]:min-w-0 [&>*]:max-w-full">{children}</div>
 }

@@ -3355,14 +3355,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {groupClass.name}
                             <span className="text-xs text-muted-foreground ml-1.5 font-normal">#{groupClass.id}</span>
                           </TableCell>
-                          <TableCell>{groupClass.durationMin} phút</TableCell>
-                          <TableCell className="max-w-md truncate text-muted-foreground text-xs">{groupClass.description || '—'}</TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="whitespace-nowrap">{groupClass.durationMin} phút</TableCell>
+                          <TableCell className="max-w-[280px] text-muted-foreground text-xs leading-relaxed">{groupClass.description || '—'}</TableCell>
+                          <TableCell className="text-center whitespace-nowrap">
                             <Badge variant="secondary" className="text-xs font-semibold">
                               {scheduleCount} ca tập
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right whitespace-nowrap">
                             <Button
                               size="sm"
                               variant="outline"
@@ -3443,16 +3443,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </div>
                           </TableCell>
                           <TableCell>{sch.room?.name || 'Phòng Chung'}</TableCell>
-                          <TableCell className="font-mono text-xs">{startTimeStr} - {endTimeStr}</TableCell>
-                          <TableCell>
+                          <TableCell className="font-mono text-xs whitespace-nowrap">{startTimeStr} - {endTimeStr}</TableCell>
+                          <TableCell className="whitespace-nowrap">
                             <span className="font-bold text-primary">{sch.bookedCount || 0}</span> / {sch.capacity}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="whitespace-nowrap">
                             <Badge variant={sch.status === 'OPEN' ? 'success' : sch.status === 'CANCELLED' ? 'destructive' : 'secondary'}>
                               {sch.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right whitespace-nowrap">
                             {canManageSchedule ? (
                               <div className="flex items-center justify-end gap-1.5">
                                 <Button

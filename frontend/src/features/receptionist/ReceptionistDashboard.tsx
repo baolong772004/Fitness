@@ -1948,7 +1948,7 @@ interface StaffConsultant {
             </CardHeader>
 
             <CardContent className="p-0 min-w-0">
-              <div className="w-full overflow-hidden">
+              <div className="w-full overflow-x-auto">
                 <table className="w-full table-fixed border-collapse text-xs">
                   <colgroup>
                     <col className="w-[14%]" />

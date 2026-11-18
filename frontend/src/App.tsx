@@ -230,7 +230,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'row', backgroundColor: 'var(--bg-app)' }}>
+    <div style={{ minHeight: '100vh', width: '100%', maxWidth: '100vw', display: 'flex', flexDirection: 'row', overflowX: 'clip', backgroundColor: 'var(--bg-app)' }}>
       {/* Aura Fitness Vertical Sidebar Navbar */}
       <Navbar
         currentRole={currentRole}
@@ -255,7 +255,7 @@ export default function App() {
       />
 
       {/* Main Content Column */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minWidth: 0, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
         <header
           style={{
             position: 'sticky',
@@ -306,7 +306,7 @@ export default function App() {
             onLogout={handleLogout}
           />
         </header>
-        <main style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }}>
+        <main style={{ flex: 1, minWidth: 0, width: '100%', maxWidth: '100%', overflowX: 'clip' }}>
         {viewMode === 'settings' ? (
           <SettingsPage
             currentUser={currentUser}
